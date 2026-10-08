@@ -147,21 +147,35 @@ powershell -ExecutionPolicy Bypass -File .\build.ps1
 
 ### 每次构建自动运行
 
-| 测试 | 断言数 | 检查内容 |
-|---|---|---|
-| **P1 原则检查** | — | 源码可执行逻辑中无任何具体工具名 |
-| **命令行形状测试** | 24 | 只输出用户表达的值；预览不含 conda 包装；按需加引号 |
-| **用法行提取测试** | 23 | 参数只写在用法行时也能捕获；方括号歧义；不重复 |
-| **候选值识别测试** | 33 | 13 种措辞、5 种散文反例，不依赖关键词清单 |
-| **噪声过滤测试** | 147 | 147 个真实观察到的名字，工具与依赖的区分 |
-| **类型推断测试** | 48 | 五种真实 help 格式下的类型判定、候选值抓取、默认值 |
-| **修正记忆测试** | 30 | 持久化、作用域、规则泛化、过度泛化防护、容错 |
-| **空状态测试** | 33 | 无 WSL / 无 conda / 无工具 / 畸形输入下的行为 |
-| **框架自测** | — | 真实发现环境、探测 help、统计 schema 覆盖率 |
-| **UI 冒烟测试** | — | 无头实例化，覆盖普通/多级/不可解析/分组 |
-| **验收测试** | — | 对打包后 JAR 反射加载，校验结构与接口 |
+门禁覆盖 `bioenv\test\` 下**全部 64 个测试类**，每个都打印自己的断言数。
+构建输出形如：
 
-合计 **338 条断言**。
+```
+PASS  bioenv.test.NoiseFilterTest  (passed: 180   failed: 0)
+PASS  bioenv.test.TypeInferenceTest  (passed: 47   failed: 0)
+...
+Regression: 64 passed, 0 failed
+```
+
+**不在这里手抄断言总数**——手抄的表会和代码脱节（这份 README 曾经写"338 条"，
+而实际数字早已不同）。以构建输出为准。
+
+测试大致分这几类：
+
+| 类别 | 代表 | 检查内容 |
+|---|---|---|
+| **原则检查** | `SelfTest` | 源码可执行逻辑中无任何具体工具名（DESIGN.md P1） |
+| **命令行组装** | `CommandLineTest`、`TypedValueReachesCommandTest` | 只输出用户表达的值；预览不含 conda 包装；开关写成裸 flag |
+| **help 解析** | `UsageLineTest`、`HelpFormatTest`、`ExampleSectionTest` | 五种参数位置、方括号歧义、示例段落不误抓 |
+| **噪声过滤** | `NoiseFilterTest` | 真实观察到的工具名与依赖名的区分 |
+| **类型推断** | `TypeInferenceTest`、`KindChooserTest` | 判定类型、抓候选值、认默认值 |
+| **修正记忆** | `CorrectionStoreTest` | 持久化、作用域、规则泛化、过度泛化防护 |
+| **界面** | `LayoutTest`、`MainLayoutTest`、`UiSmokeTest` | 分隔条数量与位置、组件树、无头实例化 |
+| **打包验收** | 构建脚本内的门禁 | 类文件 major=55、产品类全部入 JAR、测试与 tools 不泄漏 |
+
+两个测试在缺少所需条件时**打印 SKIP 并 exit 0**（构建汇总里会列出），
+而不是失败：`OptionsWindowTest` 要显示器，`AutoCopyInputsTest` 要可用的 WSL。
+它们在有条件的机器上照常做真事。
 
 ---
 
@@ -317,16 +331,80 @@ D:\TBtoolsDir\.Plugin\BioEnv Caller\
 
 ---
 
-## 实测数据（参考机器，30 个 conda 环境）
+## 实测数据（开发机，30 个 conda 环境）
 
-| 指标 | 值 |
+下面每个数字都可用 `bioenv.tools` 里的探针复跑，不是估的：
+
+| 指标 | 值 | 复跑方式 |
+|---|---|---|
+| conda 环境 | 30 | `RealRegistry` |
+| `bin/` 条目总数 | 2721 | `RealScan` |
+| 注册表扫描的候选命令 | 652 | `RealRegistry` |
+| **保留为可用命令** | **389** | `RealRegistry` |
+| 作为依赖被过滤 | 258 | `RealRegistry` |
+| 作为依赖被过滤的包 | 61 | `RealRegistry` |
+| 无安装记录、退回扫 `bin/` 的环境 | 3 | `RealRegistry` |
+| 扫描耗时 | 约 27 秒 | `RealRegistry` |
+| **schema 覆盖率** | **约 93%**（30 个真工具抽样，28 成功） | `RealSchema 30 <env...>` |
+| 多级命令识别 | 正确（`easel` 识别出 4 个子命令） | `RealSchema` |
+
+> "候选命令 652" 是注册表在筛掉依赖**之前**手里有多少条；它不等于 `RealScan`
+> 的 1237，因为两者的起点不同（注册表走 conda 清单，`RealScan` 走 `bin/` 目录）。
+> 详见下面「三个数字口径不同」。
+
+```powershell
+# 复跑（需在装了 WSL + conda 的机器上）
+& 'D:\TBtools\jre\bin\java.exe' -cp 'build\classes;build\vmadapt-classes' bioenv.tools.RealRegistry
+& 'D:\TBtools\jre\bin\java.exe' -cp 'build\classes;build\vmadapt-classes' bioenv.tools.RealSchema 30 mafft_env hmmer_env trimal_env
+```
+
+### 三个数字口径不同，别混起来看
+
+`2721 → 652 → 389` 不是同一件事的三次统计，而是三道不同的关口：
+
+| 口径 | 数 | 由谁得出 | 含义 |
+|---|---|---|---|
+| `bin/` 条目 | 2721 | `RealScan` | 所有环境 `bin/` 下的文件总数（**含包装脚本与依赖**） |
+| 简单规则下"像工具" | 1237 | `RealScan` | 只按命名结构过滤后的数——**这是参考值，不是插件显示的** |
+| 注册表实际纳入 | **389** | `RealRegistry` | `ToolRegistry` 只认**该环境 conda 清单里声明要装的包**，652 是它在筛之前手里的候选数 |
+
+`RealScan` 与 `RealRegistry` 的差额（1237 vs 389）正是插件设计的核心：
+**它不靠扫 `bin/` 猜，而是读每个环境的 `conda-meta/*.json`**，只把"你要求装进来的包"
+当作工具。这是 DESIGN.md P2「只认 conda」的落地，也解释了为什么最终数字比
+`bin/` 条目少一个量级。
+
+> 想自己核对时**以 `RealRegistry` 为准**——它跑的就是面板点"Detect conda
+> environments"时的那条路径。`RealScan` 只是用来看物理上有多少东西。
+
+### 覆盖率说明
+
+93% 指"成功解析出参数表"的比例，样本是 11 个环境里抽的 **30 个真工具**（28 成功）。
+抽样的两个失败项都不是解析缺陷：`easel` 与 `esl-mixdchlet` 是多级/派发型工具，
+前者正确地识别出 4 个子命令，后者只认 `-h` 不认 `--help`。
+
+**这个数字高度依赖你装了什么**：
+
+- `mafft` / `raxml` / `trimal` / `dos2unix` / `seqkit` / `hmmer` 这类规范 CLI → 接近 100%
+- **PAML 系列 → 0%**：它从 `.ctl` 读参数，任何命令行参数都被当成文件名
+  （`codeml --help` 的回应是 `error when opening file --help`）。属已知限制，走纯命令行模式仍可用
+- **EMBOSS 的部分命令**：环境里是壳脚本，指向的二进制不在，本身就没有 help 可读
+
+所以覆盖率不是插件的固定属性，而是"你的工具集里规范 CLI 占比"的函数。
+
+---
+
+## 这些数字是怎么来的
+
+`build.ps1` 的门禁跑的是**喂人造数据**的单元测试（64 个类），它保证逻辑正确，
+但**回答不了"在真机上能不能用"**。真机路径由三个只读探针覆盖，在 `bioenv\tools` 下：
+
+| 探针 | 做什么 |
 |---|---|
-| 扫描可执行文件 | 2721 |
-| 保留为可用命令 | 209 |
-| 过滤为依赖/系统工具 | 2349 |
-| **schema 覆盖率** | **约 60–78%** |
-| 多级命令识别 | 正确（如 `bedtools` → 44 个子命令） |
-| 全部测试断言 | 236 条，全通过 |
+| `RealScan` | 数环境、数 `bin/` 条目、按简单规则算保留/过滤 |
+| `RealRegistry` | 跑 `ToolRegistry.scan()`，**即面板真正调用的那条路径** |
+| `RealSchema` | 对真工具跑 help 并建 schema，统计覆盖率 |
 
-覆盖率指"成功解析出参数表的比例"。剩下约 1/4 大多是控制文件型工具
-（命令行本就不接受参数），它们仍可通过纯命令行模式使用。
+探针**不往 WSL 写任何东西**，但 `RealSchema` 会**真的执行**工具来读 help
+（这正是插件点命令时的行为）。控制文件型工具可能因此在**当前工作目录**留下文件——
+PAML 就会。**请在临时目录里跑它，别在源码目录里跑。**
+
