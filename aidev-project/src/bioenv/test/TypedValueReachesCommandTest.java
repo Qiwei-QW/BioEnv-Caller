@@ -4,6 +4,7 @@ import java.awt.Component;
 import java.awt.Container;
 import java.util.Map;
 
+import javax.swing.JCheckBox;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
 
@@ -23,14 +24,20 @@ import bioenv.ui.SchemaFormPanel;
  *
  * <p>First, {@link ParamValue#contributes()} required the literal text
  * {@code true} for a switch, a rule left over from when a switch was a tick box.
- * Every parameter is a text field now, so typing anything else into a
- * switch-shaped option was silently discarded.
+ * Whether a switch is a tick box or a text field, whatever the user puts in must
+ * count as intent, so typing anything else into a switch-shaped option was
+ * silently discarded.
  *
  * <p>Second, the parser read {@code -o, --out-file string} as taking no value at
  * all: the lower-case type name did not match the convention that a placeholder is
  * upper case or bracketed, so it was taken for the start of the description. An
  * option that appears to take no value then has its typed value dropped by the
  * first fault, so the two compounded.
+ *
+ * <p>The end-to-end block also pins the shape of a switch on the command line. A
+ * tick box reports its tick as the text {@code "true"}, and that text must not be
+ * written after the flag: an inferred switch stays a switch through
+ * {@code collect()}, so {@code CommandBuilder} writes the bare flag.
  *
  * <p>Run: {@code java -Djava.awt.headless=true -cp &lt;classes&gt; bioenv.test.TypedValueReachesCommandTest}
  */
@@ -115,10 +122,25 @@ public final class TypedValueReachesCommandTest {
                 prose.option("--mode") != null && prose.option("--mode").arg.isEmpty());
         line("");
 
-        line("[end to end: type into the field, read the command]");
+        line("[end to end: fill the control, read the command]");
+        // Each row is driven by the control its kind calls for: a path option is
+        // a text field, so its value is typed; a switch is a tick box, so its
+        // value is its ticked state. Ticking is what the user does, and it is
+        // what puts the bare flag on the command line.
+        //
+        // Historical note: this block used to cast both rows to JTextField and
+        // setText("x") on the switch, because every row was a text field when the
+        // two underlying faults were fixed. The parser now infers SWITCH for a
+        // flag that takes no value, and SchemaFormPanel.kindOf() honours it, so
+        // the switch is rendered as a JCheckBox. The intent of the check is
+        // unchanged - the user's input must reach the command - so it now
+        // expresses that intent through the control the user actually gets.
+        // (ParamValue.contributes() still accepts typed text for a switch; the
+        // [a switch-shaped option keeps what was typed] block above covers that.)
         final SchemaFormPanel[] formRef = new SchemaFormPanel[1];
         final Schema[] schemaRef = new Schema[1];
         final String[] command = new String[1];
+        final boolean[] controlsFound = new boolean[2];
         SwingUtilities.invokeAndWait(new Runnable() {
             @Override
             public void run() {
@@ -136,13 +158,15 @@ public final class TypedValueReachesCommandTest {
                 layout(form);
                 formRef[0] = form;
 
-                JTextField out = (JTextField) findNamed(form, "--out-file");
-                JTextField rev = (JTextField) findNamed(form, "--reverse");
-                if (out != null) {
-                    out.setText("C:\\Users\\14231\\Desktop\\111\\222.fasta");
+                Component outC = findNamed(form, "--out-file");
+                Component revC = findNamed(form, "--reverse");
+                controlsFound[0] = outC instanceof JTextField;
+                controlsFound[1] = revC instanceof JCheckBox;
+                if (outC instanceof JTextField) {
+                    ((JTextField) outC).setText("C:\\Users\\14231\\Desktop\\111\\222.fasta");
                 }
-                if (rev != null) {
-                    rev.setText("x");
+                if (revC instanceof JCheckBox) {
+                    ((JCheckBox) revC).setSelected(true);
                 }
                 layout(form);
 
@@ -151,9 +175,17 @@ public final class TypedValueReachesCommandTest {
             }
         });
         System.out.println("      command: " + command[0]);
+        check("the path option is a field to type in", controlsFound[0]);
+        check("the switch is a tick box to tick", controlsFound[1]);
         check("the output path is on the command line",
                 command[0].contains("222.fasta"));
         check("the switch is on the command line", command[0].contains("--reverse"));
+        // A tick box reports its tick as the text "true" (see readInto). That text
+        // must not follow the flag onto the command line: seqkit seq would read
+        // "true" as an input filename. The flag must stand alone.
+        check("the ticked switch is written bare, with no value after it",
+                !command[0].contains("--reverse true")
+                        && !command[0].contains("--reverse  true"));
         check("the path is not lost", !command[0].endsWith("seq"));
         line("");
 

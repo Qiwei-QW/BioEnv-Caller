@@ -2861,13 +2861,13 @@ public final class SchemaFormPanel extends JPanel {
      * value is read, the shape is brought into line with the control that will
      * supply it.
      *
-     * <p>Only where the two actually disagree in a way that matters. Every option is
-     * shown as a text field unless the user has said otherwise, so a parameter the
-     * help gave a type is displayed as a field while still being a number: treating
-     * the displayed control as the truth would flatten every parsed type to text.
-     * What has to be reconciled is the case where the option takes no value but is
-     * shown as a field — typing into it must then mean something — and the reverse,
-     * where the user has stated a kind.
+     * <p>Only where the two actually disagree in a way that matters. An option the
+     * help gave a type is shown with the control that type calls for — a SWITCH is
+     * a tick box, a NUMBER is a spinner — and each of those still takes no value
+     * from a text field, so it must keep the shape the parser gave it. What has to
+     * be reconciled is the case where the option takes no value but is shown as a
+     * text field: typing into it must then mean something, so it stops being a
+     * switch and the typed text becomes its value.
      */
     private void applyChosenKind(Schema.Option o) {
         Schema.Option.Kind chosen = chosenKind.get(scopedKey(o));
@@ -2877,11 +2877,19 @@ public final class SchemaFormPanel extends JPanel {
             o.isSwitch = chosen == Schema.Option.Kind.SWITCH;
             return;
         }
-        // No statement from the user, so the control shown is what the value was
-        // read from. Only a bare flag needs reconciling: it is shown as a field, so
-        // whatever is typed there is the value, and the option must stop being a
-        // switch or the value would be dropped.
-        if (o.kind == Schema.Option.Kind.SWITCH && o.isSwitch) {
+        // No statement from the user. Reconcile only when the option is a bare flag
+        // that is NOT presented as a tick box.
+        //
+        // The control decides, because the value is read from the control: a tick
+        // box reports its tick as the text "true" (see readInto), and that text must
+        // not end up on the command line after the flag. An inferred SWITCH is shown
+        // as a tick box by kindOf(), so it keeps isSwitch=true and CommandBuilder
+        // writes the bare flag. Downgrading it to TEXT here — which this used to do
+        // unconditionally, on the now-stale assumption that a bare flag is always
+        // shown as a text field — turned a ticked --reverse into "--reverse true",
+        // and seqkit would then read "true" as an input filename.
+        if (o.kind == Schema.Option.Kind.SWITCH && o.isSwitch
+                && !(editors.get(key(o)) instanceof JCheckBox)) {
             o.kind = Schema.Option.Kind.TEXT;
             o.isSwitch = false;
         }

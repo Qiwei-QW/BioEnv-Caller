@@ -182,7 +182,7 @@ try {
         # never listed here, so nothing ran them. They were found by running
         # every test class in the package and keeping the ones that pass
         # repeatably (3 consecutive runs each, to rule out flakiness).
-        # Registering them costs nothing and takes the gate from 33 to 54.
+        # Registering them costs nothing and takes the gate from 33 to 55.
         #
         # Deliberately NOT listed, and why:
         #   - 9 classes need a real display and die with HeadlessException
@@ -190,12 +190,17 @@ try {
         #     OptionAccessTest, OptionsWindowTest, ParameterEditorTest,
         #     SubcommandLayoutTest, SubcommandNavTest, SubcommandReloadTest,
         #     AutoCopyInputsTest, UsageLineDescriptionTest.
-        #   - TypedValueReachesCommandTest fails on a stale contract, like
-        #     KindChooserTest did: it casts a row to JTextField where the
-        #     form now honours an inferred kind. Needs the same repair.
         #   - 10 files are survey/debug tools, not tests (no assertions):
         #     *Survey, ShowParse, ShowChoices, ExplainOne, ParameterAudit,
         #     SpeedTest. They belong in tools\, not in the gate.
+        #
+        # Known flake: HotPathClassLoadTest asserts that setStatus loads no new
+        # classes after warm-up, by comparing ClassLoadingMXBean counts. That
+        # counter is JVM-wide, so a Swing class lazily loaded by another thread
+        # between the two reads can bump it and fail the check. Observed once
+        # in ~10 full-suite runs and never in 12 isolated runs. If it fails,
+        # re-run before believing it; the flake is in the measurement, not in
+        # the hot path it guards.
         'bioenv.test.AnsiTextTest',
         'bioenv.test.BuilderFixesTest',
         'bioenv.test.CacheDistroTest',
@@ -216,6 +221,7 @@ try {
         'bioenv.test.StopRunTest',
         'bioenv.test.ToolVsDependencyTest',
         'bioenv.test.TypedCommandTest',
+        'bioenv.test.TypedValueReachesCommandTest',
         'bioenv.test.WslWorkdirTest'
     )
 
