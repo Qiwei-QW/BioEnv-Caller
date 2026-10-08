@@ -9,6 +9,8 @@ import javax.swing.SwingUtilities;
 
 import bioenv.core.Schema;
 import bioenv.core.Tool;
+import bioenv.i18n.I18n;
+import bioenv.i18n.Strings;
 import bioenv.ui.SchemaFormPanel;
 
 /**
@@ -88,7 +90,7 @@ public final class SubcommandReloadTest {
         check("the selector still shows the chosen subcommand",
                 "fasta".equals(String.valueOf(findBox().getSelectedItem())));
         check("the panel is not back on the top level",
-                !String.valueOf(findBox().getSelectedItem()).contains("top level"));
+                !String.valueOf(findBox().getSelectedItem()).contains(topLevel()));
         check("the subcommand's own option is on screen", hasOptionField("-fasta"));
         line("");
 
@@ -106,13 +108,14 @@ public final class SubcommandReloadTest {
         SwingUtilities.invokeAndWait(new Runnable() {
             @Override
             public void run() {
-                findBox().setSelectedItem("(top level)");
+                // Select the top-level entry by the label the box actually holds.
+                findBox().setSelectedItem(topLevel());
                 layout(form);
             }
         });
         settle();
         check("the selector is on the top level",
-                String.valueOf(findBox().getSelectedItem()).contains("top level"));
+                String.valueOf(findBox().getSelectedItem()).contains(topLevel()));
         line("");
 
         line("=== results ===");
@@ -185,6 +188,18 @@ public final class SubcommandReloadTest {
         return null;
     }
 
+    /**
+     * The selector's wording for the top-level entry.
+     *
+     * <p>Asked of I18n rather than written out in English: the default language is
+     * Chinese, so an English literal only ever matched when English was forced in
+     * by hand, which is why this class was never in the build.
+     */
+    private static String topLevel() {
+        I18n.loadOnce();
+        return I18n.t(Strings.FORM_TOP_LEVEL);
+    }
+
     private static JComboBox<?> findBox() {
         return findBox(form);
     }
@@ -228,3 +243,4 @@ public final class SubcommandReloadTest {
         System.out.println(s);
     }
 }
+

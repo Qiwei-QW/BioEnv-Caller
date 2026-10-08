@@ -11,6 +11,8 @@ import javax.swing.border.TitledBorder;
 
 import bioenv.core.Schema;
 import bioenv.core.Tool;
+import bioenv.i18n.I18n;
+import bioenv.i18n.Strings;
 import bioenv.ui.SchemaFormPanel;
 
 /**
@@ -66,10 +68,16 @@ public final class SubcommandLayoutTest {
         form.setSize(900, 700);
         layout(form);
 
-        Component workdir = findTooltip(form, "Directory the command runs in");
+        // Look the controls up through the strings the panel actually uses. The
+        // default language is Chinese, so matching on the English wording only ever
+        // worked when a test forced an English language file in by hand - which is
+        // why this class was never in the build. Asking I18n for the text makes the
+        // lookup independent of which language is in force.
+        I18n.loadOnce();
+        Component workdir = findTooltip(form, I18n.t(Strings.FORM_WORKDIR_TIP));
         Component box = findName(form, "bioenv.subcommand");
-        JButton up = findButton(form, "Back to top level");
-        Component options = findTitled(form, "Options");
+        JButton up = findButton(form, I18n.t(Strings.FORM_BACK_TO_TOP));
+        Component options = findTitled(form, I18n.t(Strings.FORM_OPTIONS_TITLE));
 
         line("[all the parts are present]");
         check("the working-dir field", workdir != null);

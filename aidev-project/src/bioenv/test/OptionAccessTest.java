@@ -39,17 +39,20 @@ public final class OptionAccessTest {
     static SchemaFormPanel form;
 
     public static void main(String[] args) throws Exception {
+        // Laid out headless by hand. The frame this used to build was only a host —
+        // nothing here asserts that anything is visible — and a frame cannot be shown
+        // without a display, which is why this class was never in the build.
         SwingUtilities.invokeAndWait(new Runnable() {
             @Override
             public void run() {
-                frame = new JFrame("access");
+                bioenv.i18n.I18n.loadOnce();
                 panel = new MainPanel();
-                frame.setContentPane(panel);
-                frame.setSize(1600, 900);
-                frame.setVisible(true);
+                panel.setSize(1600, 900);
+                panel.doLayout();
+                layoutRecursively(panel);
+                panel.doLayout();
             }
         });
-        Thread.sleep(900);
 
         SwingUtilities.invokeAndWait(new Runnable() {
             @Override
@@ -110,12 +113,6 @@ public final class OptionAccessTest {
         line("=== results ===");
         line("  passed: " + pass);
         line("  failed: " + fail);
-        SwingUtilities.invokeAndWait(new Runnable() {
-            @Override
-            public void run() {
-                frame.dispose();
-            }
-        });
         if (fail > 0) {
             line("");
             line("FAILURES PRESENT");
@@ -130,12 +127,40 @@ public final class OptionAccessTest {
                 if (form != null) {
                     form.showTool(bigTool(n));
                 }
+                // Re-lay out after the form is rebuilt, and deliver the resize the
+                // panel sizes its dividers from. Headless there is no frame to show,
+                // so nothing dispatches it for us and the option pane would measure
+                // zero height against a layout that is in fact correct.
+                panel.setSize(1600, 900);
+                panel.doLayout();
+                layoutRecursively(panel);
+                panel.doLayout();
+                notifyResized(panel);
+                layoutRecursively(panel);
+                panel.doLayout();
             }
         });
     }
 
+    /** Fires componentResized on every split pane, as showing a frame would. */
+    private static void notifyResized(Container c) {
+        for (Component ch : c.getComponents()) {
+            if (ch instanceof javax.swing.JSplitPane) {
+                javax.swing.JSplitPane s = (javax.swing.JSplitPane) ch;
+                java.awt.event.ComponentEvent e = new java.awt.event.ComponentEvent(
+                        s, java.awt.event.ComponentEvent.COMPONENT_RESIZED);
+                for (java.awt.event.ComponentListener l : s.getComponentListeners()) {
+                    l.componentResized(e);
+                }
+            }
+            if (ch instanceof Container) {
+                notifyResized((Container) ch);
+            }
+        }
+    }
+
     private static int visibleOptionsHeight() {
-        JScrollPane sp = scrollWithTitle(panel, "Options");
+        JScrollPane sp = scrollWithTitle(panel, bioenv.i18n.I18n.t(bioenv.i18n.Strings.FORM_OPTIONS_TITLE));
         if (sp == null) {
             return 0;
         }
@@ -144,22 +169,26 @@ public final class OptionAccessTest {
     }
 
     private static CollapsiblePanel previewSection() {
-        for (Component c : flatten(panel)) {
-            if (c instanceof CollapsiblePanel) {
-                String t = headingOf((CollapsiblePanel) c);
-                if (t != null && t.toLowerCase().contains("command preview")) {
-                    return (CollapsiblePanel) c;
-                }
-            }
-        }
-        return null;
+        return sectionTitled(bioenv.i18n.I18n.t(bioenv.i18n.Strings.TITLE_PREVIEW));
     }
 
     private static CollapsiblePanel extrasSection() {
+        return sectionTitled(bioenv.i18n.I18n.t(bioenv.i18n.Strings.FORM_EXTRA_ARGS));
+    }
+
+    /**
+     * A foldable section whose heading carries this text.
+     *
+     * <p>Looked up through the catalogue rather than as an English literal. That
+     * matters for more than tidiness here: the checks using this assert that no such
+     * section exists, so a search which never matches would report "not foldable"
+     * whatever the panel actually did.
+     */
+    private static CollapsiblePanel sectionTitled(String title) {
         for (Component c : flatten(panel)) {
             if (c instanceof CollapsiblePanel) {
                 String t = headingOf((CollapsiblePanel) c);
-                if (t != null && t.toLowerCase().contains("additional")) {
+                if (t != null && t.contains(title)) {
                     return (CollapsiblePanel) c;
                 }
             }
@@ -190,10 +219,14 @@ public final class OptionAccessTest {
     }
 
     private static boolean hasOpenButton(Container c) {
+        // The button's label comes from the catalogue; matching an English literal
+        // only ever worked with English forced in by hand, which is why this class
+        // was never in the build.
+        String label = bioenv.i18n.I18n.t(bioenv.i18n.Strings.FORM_OPEN_WINDOW);
         for (Component ch : c.getComponents()) {
             if (ch instanceof JButton) {
                 String t = ((JButton) ch).getText();
-                if (t != null && t.toLowerCase().contains("window")) {
+                if (t != null && t.contains(label)) {
                     return true;
                 }
             }
@@ -202,6 +235,17 @@ public final class OptionAccessTest {
             }
         }
         return false;
+    }
+
+    /** Lays the whole tree out, top down then bottom up. */
+    private static void layoutRecursively(Container c) {
+        c.doLayout();
+        for (Component ch : c.getComponents()) {
+            if (ch instanceof Container) {
+                layoutRecursively((Container) ch);
+            }
+        }
+        c.doLayout();
     }
 
     private static Tool bigTool(int n) {

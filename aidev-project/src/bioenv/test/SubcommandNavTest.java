@@ -9,6 +9,8 @@ import javax.swing.SwingUtilities;
 
 import bioenv.core.Schema;
 import bioenv.core.Tool;
+import bioenv.i18n.I18n;
+import bioenv.i18n.Strings;
 import bioenv.ui.SchemaFormPanel;
 
 /**
@@ -86,8 +88,15 @@ public final class SubcommandNavTest {
         check("one entry per subcommand, plus the top level",
                 box.getItemCount() == 4);
         check("no internal marker is shown", !containsAt(box));
+        // The entry must read as words the user can understand, rather than the
+        // internal @top token. Ask I18n for the text instead of matching the English
+        // wording: the default language is Chinese, so an English literal only ever
+        // matched when English was forced in by hand, which is why this class was
+        // never in the build.
+        I18n.loadOnce();
+        String topLevel = I18n.t(Strings.FORM_TOP_LEVEL);
         check("the first entry names the top level",
-                String.valueOf(box.getItemAt(0)).toLowerCase().contains("top level"));
+                String.valueOf(box.getItemAt(0)).contains(topLevel));
         check("the subcommands follow in order",
                 "search".equals(box.getItemAt(1))
                         && "fetch".equals(box.getItemAt(2))
@@ -97,8 +106,10 @@ public final class SubcommandNavTest {
         line("[the way back is one press]");
         JButton up = findUpButton(form);
         check("the button is present", up != null);
+        // The button is labelled with its own string, not the selector's top-level
+        // entry: "Back to top level" versus "(top level)".
         check("it says what it does",
-                up != null && up.getText().toLowerCase().contains("top level"));
+                up != null && up.getText().contains(I18n.t(Strings.FORM_BACK_TO_TOP)));
         check("at the top level it is idle", up != null && !up.isEnabled());
         line("");
 
@@ -116,7 +127,7 @@ public final class SubcommandNavTest {
         layout(form);
         JComboBox<?> box2 = findBox(form);
         check("the selector is back on the top level", box2 != null
-                && String.valueOf(box2.getSelectedItem()).toLowerCase().contains("top level"));
+                && String.valueOf(box2.getSelectedItem()).contains(topLevel));
         JButton up3 = findUpButton(form);
         check("the button is idle again", up3 != null && !up3.isEnabled());
         line("");
@@ -196,11 +207,15 @@ public final class SubcommandNavTest {
         return null;
     }
 
+    /** The button that goes back to the top level, found by the text it shows. */
     private static JButton findUpButton(Container c) {
+        // Matched on the localised label, for the same reason the checks above ask
+        // I18n: the default language is Chinese.
+        String label = I18n.t(Strings.FORM_BACK_TO_TOP);
         for (Component ch : c.getComponents()) {
             if (ch instanceof JButton) {
                 String t = ((JButton) ch).getText();
-                if (t != null && t.toLowerCase().contains("top level")) {
+                if (t != null && t.contains(label)) {
                     return (JButton) ch;
                 }
             }

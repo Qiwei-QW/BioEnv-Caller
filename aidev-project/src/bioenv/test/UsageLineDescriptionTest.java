@@ -131,7 +131,11 @@ public final class UsageLineDescriptionTest {
         layout(form);
         // The field carries the description as a grey hint, which is how the option
         // list shows what a parameter does.
-        JTextField inForm = (JTextField) findByName(form, "-dir");
+        //
+        // -dir is a directory, so its row is a panel holding the field and a "..." 
+        // button; the panel carries the same name as the field inside it. Look for
+        // the field itself, not the wrapper findByName() happens to reach first.
+        JTextField inForm = fieldByName(form, "-dir");
         check("the row is in the form", inForm != null);
         check("and the description is shown as its hint",
                 inForm != null && "the directory to scan".equals(hintOf(inForm)));
@@ -197,6 +201,29 @@ public final class UsageLineDescriptionTest {
             }
             if (ch instanceof Container) {
                 Component r = findByName((Container) ch, name);
+                if (r != null) {
+                    return r;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * The text field carrying this name, wherever it sits.
+     *
+     * <p>A row whose kind wants a browse button — a path or a directory — is a
+     * panel with the field and the button inside it, and the panel is given the
+     * same name as the field. {@link #findByName} can therefore return the wrapper,
+     * which is not what a test that wants to read the hint is after.
+     */
+    private static JTextField fieldByName(Container c, String name) {
+        for (Component ch : c.getComponents()) {
+            if (ch instanceof JTextField && name.equals(ch.getName())) {
+                return (JTextField) ch;
+            }
+            if (ch instanceof Container) {
+                JTextField r = fieldByName((Container) ch, name);
                 if (r != null) {
                     return r;
                 }

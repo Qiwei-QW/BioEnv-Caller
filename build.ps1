@@ -182,14 +182,16 @@ try {
         # never listed here, so nothing ran them. They were found by running
         # every test class in the package and keeping the ones that pass
         # repeatably (3 consecutive runs each, to rule out flakiness).
-        # Registering them costs nothing and takes the gate from 33 to 55.
+        # Registering them costs nothing and takes the gate from 33 to 62.
         #
         # Deliberately NOT listed, and why:
-        #   - 9 classes need a real display and die with HeadlessException
-        #     under this script's -Djava.awt.headless=true: MainLayoutTest,
-        #     OptionAccessTest, OptionsWindowTest, ParameterEditorTest,
-        #     SubcommandLayoutTest, SubcommandNavTest, SubcommandReloadTest,
-        #     AutoCopyInputsTest, UsageLineDescriptionTest.
+        #   - OptionsWindowTest opens real windows and asserts that they are
+        #     visible and that closing disposes of them. That is the thing it
+        #     tests, so it cannot run headless; run it by hand with a display.
+        #   - AutoCopyInputsTest finishes with a real WSL round trip: it makes a
+        #     work directory, copies a file in, and reads the content back. It
+        #     passes on a machine with WSL (11/11 verified) and cannot pass
+        #     where WSL is unavailable, so it is not a safe gate entry.
         #   - 10 files are survey/debug tools, not tests (no assertions):
         #     *Survey, ShowParse, ShowChoices, ExplainOne, ParameterAudit,
         #     SpeedTest. They belong in tools\, not in the gate.
@@ -222,7 +224,30 @@ try {
         'bioenv.test.ToolVsDependencyTest',
         'bioenv.test.TypedCommandTest',
         'bioenv.test.TypedValueReachesCommandTest',
-        'bioenv.test.WslWorkdirTest'
+        'bioenv.test.WslWorkdirTest',
+
+        # --- repaired: were headless-hostile or matched English UI text ------
+        # Each of these wrote its own JFrame and called setVisible(true), which
+        # needs a display, and identified components by English labels, which
+        # only matches when English has been forced in by hand - the default
+        # language is Chinese. Repaired two ways:
+        #
+        #   * laid out by hand and headless, the way LayoutTest already did it;
+        #     where a divider is positioned from a componentResized listener,
+        #     that event is delivered directly, since a frame used to do it.
+        #   * labels looked up through I18n, so the lookup does not depend on
+        #     which language is active.
+        #
+        # MainLayoutTest also needed a tool opened before it asserted on the
+        # form/output column: the panel shows an empty state until then, where
+        # the only split is the toolbar/tree one.
+        'bioenv.test.MainLayoutTest',
+        'bioenv.test.OptionAccessTest',
+        'bioenv.test.ParameterEditorTest',
+        'bioenv.test.SubcommandLayoutTest',
+        'bioenv.test.SubcommandNavTest',
+        'bioenv.test.SubcommandReloadTest',
+        'bioenv.test.UsageLineDescriptionTest'
     )
 
     foreach ($t in $regression) {

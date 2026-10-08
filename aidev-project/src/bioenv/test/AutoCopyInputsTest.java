@@ -85,7 +85,8 @@ public final class AutoCopyInputsTest {
         check("the path is left exactly as typed",
                 input != null && "C:\\data\\pep.fa".equals(input.getText()));
         check("and the user is told what to do first",
-                status.toString().contains("In WSL"));
+                status.toString().contains(
+                        bioenv.i18n.I18n.t(bioenv.i18n.Strings.FORM_NOTE_COPYDIR)));
         // Nothing was invented: the plugin does not choose a destination.
         check("no copy was attempted", form.wslInputDirForTest() == null);
         line("");

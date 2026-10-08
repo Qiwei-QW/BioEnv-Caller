@@ -15,6 +15,8 @@ import javax.swing.SwingUtilities;
 import bioenv.core.CustomOptionStore;
 import bioenv.core.HelpParser;
 import bioenv.core.Schema;
+import bioenv.i18n.I18n;
+import bioenv.i18n.Strings;
 import bioenv.ui.ParameterEditorPanel;
 
 /**
@@ -51,6 +53,7 @@ public final class ParameterEditorTest {
     }
 
     private static void body() {
+        I18n.loadOnce();
         line("=== Correcting a tool's parameter list ===");
         line("");
 
@@ -151,7 +154,11 @@ public final class ParameterEditorTest {
         String what = editor.applyChanges();
         System.out.println("      reported: " + what);
         check("the removal is recorded", store.hiddenFor("probe").contains("-d"));
-        check("the result says what happened", what.contains("removed"));
+        // The report is built from PED_CHANGED_REMOVED, which is Chinese by default.
+        // Asserting the English word only ever passed with English forced in by hand,
+        // which is why this class was never in the build.
+        check("the result says what happened",
+                what.contains(I18n.t(Strings.PED_CHANGED_REMOVED, Integer.valueOf(1))));
         store.applyTo(s, "probe");
         check("and the schema no longer has it", s.option("-d") == null);
         check("the others survived",
