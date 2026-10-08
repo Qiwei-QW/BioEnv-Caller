@@ -396,15 +396,47 @@ D:\TBtoolsDir\.Plugin\BioEnv Caller\
 ## 这些数字是怎么来的
 
 `build.ps1` 的门禁跑的是**喂人造数据**的单元测试（64 个类），它保证逻辑正确，
-但**回答不了"在真机上能不能用"**。真机路径由三个只读探针覆盖，在 `bioenv\tools` 下：
+但**回答不了"在真机上能不能用"**。真机路径由四个探针覆盖，在 `bioenv\tools` 下：
 
-| 探针 | 做什么 |
-|---|---|
-| `RealScan` | 数环境、数 `bin/` 条目、按简单规则算保留/过滤 |
-| `RealRegistry` | 跑 `ToolRegistry.scan()`，**即面板真正调用的那条路径** |
-| `RealSchema` | 对真工具跑 help 并建 schema，统计覆盖率 |
+| 探针 | 做什么 | 是否会写 |
+|---|---|---|
+| `RealScan` | 数环境、数 `bin/` 条目、按简单规则算保留/过滤 | 否 |
+| `RealRegistry` | 跑 `ToolRegistry.scan()`，**即面板真正调用的那条路径** | 否 |
+| `RealSchema` | 对真工具跑 help 并建 schema，统计覆盖率 | 否（但会执行工具） |
+| `RealEndToEnd` | **完整链路**：扫描 → 解析 → 组装命令 → 执行 → 验证工具真的干了活 | 写 WSL 临时目录 |
 
-探针**不往 WSL 写任何东西**，但 `RealSchema` 会**真的执行**工具来读 help
-（这正是插件点命令时的行为）。控制文件型工具可能因此在**当前工作目录**留下文件——
-PAML 就会。**请在临时目录里跑它，别在源码目录里跑。**
+### 端到端验证
+
+`RealEndToEnd` 会真的把命令跑起来，然后检查**工具产出**，而不是检查命令行"看起来对不对"：
+
+```
+seqkit seq --line-width 20   序列被重新折成 <=20 字符的行
+mafft                        两条序列对齐返回，且带对齐引入的空位
+trimal -in                   读入比对并输出 FASTA
+dos2unix                     CR 字符确实被去掉
+unix2dos                     CR 字符确实被加回
+```
+
+开发机上 **5/5 通过**。复跑：
+
+```powershell
+& 'D:\TBtools\jre\bin\java.exe' -cp 'build\classes;build\vmadapt-classes' bioenv.tools.RealEndToEnd
+```
+
+### 跑探针前请注意
+
+- `RealSchema` / `RealEndToEnd` 会**真的执行**工具（这正是插件点命令时的行为）。
+- 控制文件型工具可能在**当前工作目录**留下文件——PAML 就会。
+  **请在临时目录里跑，别在源码目录里跑。**
+- `RealEndToEnd` 会在 WSL 的 home 下建一个 `bioenv-e2e-<时间戳>` 临时目录，
+  **结束时自动删除**；加参数 `keep` 可以保留它看内容。
+
+### 一个真机才会遇到的坑：mafft 与 `/dev/stderr`
+
+`mafft` 把 `progressfile` 设成 `/dev/stderr` 并**当文件反复写**。当 stderr 是管道
+（任何被捕获来读取的输出都是），该描述符无法重新打开，mafft 会报
+`Permission denied`，conda 随即把这次运行标成失败——**但 stdout 上的对齐结果是完整正确的**。
+
+实测确认：`mafft file.fa 2>/dev/null | grep -c '^>'` 返回 2。
+这是工具在非 tty stderr 下的行为，**不是插件包装的问题**。
 
