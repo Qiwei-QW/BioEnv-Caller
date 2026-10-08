@@ -269,7 +269,15 @@ try {
         # write that list with every schema null - replacing the entry that held
         # the parameter tables. On the next start no tool had one, so a tool's
         # parameters appeared only after the editor was opened and confirmed.
-        'bioenv.test.CacheKeepsSchemasTest'
+        'bioenv.test.CacheKeepsSchemasTest',
+
+        # --- removed kinds must not break an existing store -------------------
+        # Three TBtools kinds were offered and did nothing their simpler cousins
+        # did not: PasteAsInFilePath, TextAsOutFilePath, FilePathListInFile. A
+        # correction file written before their removal can name them, so this
+        # checks the stale entry is dropped while the file's other entries and
+        # the parameter itself survive.
+        'bioenv.test.RemovedKindStillLoadsTest'
     )
 
     foreach ($t in $regression) {

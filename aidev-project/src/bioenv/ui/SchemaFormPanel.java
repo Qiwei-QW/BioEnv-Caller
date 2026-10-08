@@ -1902,16 +1902,10 @@ public final class SchemaFormPanel extends JPanel {
                 return "None";
             case INPUT_PATH:
                 return "InFilePath";
-            case PASTE_IN_PATH:
-                return "PasteAsInFilePath";
             case OUTPUT_PATH:
                 return "OutFilePath";
-            case TEXT_OUT_PATH:
-                return "TextAsOutFilePath";
             case PATH_LIST:
                 return "FilePathList";
-            case PATH_LIST_FILE:
-                return "FilePathListInFile";
             case DIRECTORY_PATH:
                 return "DirectoryPath";
             case TEXT:
@@ -2060,11 +2054,8 @@ public final class SchemaFormPanel extends JPanel {
                 return sp;
             }
             case INPUT_PATH:
-            case PASTE_IN_PATH:
             case OUTPUT_PATH:
-            case TEXT_OUT_PATH:
             case PATH_LIST:
-            case PATH_LIST_FILE:
             case DIRECTORY_PATH: {
                 // One shape for every path kind: a field the user can type in, with a
                 // chooser beside it. They differ in what the chooser offers and how a
@@ -2122,8 +2113,7 @@ public final class SchemaFormPanel extends JPanel {
                 final boolean directory = kind == Schema.Option.Kind.DIRECTORY_PATH;
                 final boolean multi = kind == Schema.Option.Kind.PATH_LIST;
                 // Whether the chooser offers to create a name rather than open one.
-                final boolean save = kind == Schema.Option.Kind.OUTPUT_PATH
-                        || kind == Schema.Option.Kind.TEXT_OUT_PATH;
+                final boolean save = kind == Schema.Option.Kind.OUTPUT_PATH;
 
                 JButton browse = new JButton("...");
                 browse.setMargin(new Insets(0, 6, 0, 6));
@@ -2296,9 +2286,7 @@ public final class SchemaFormPanel extends JPanel {
     /** True when a kind names something to be read, so it is worth moving across. */
     private static boolean isInputKind(Schema.Option.Kind k) {
         return k == Schema.Option.Kind.INPUT_PATH
-                || k == Schema.Option.Kind.PASTE_IN_PATH
                 || k == Schema.Option.Kind.PATH_LIST
-                || k == Schema.Option.Kind.PATH_LIST_FILE
                 || k == Schema.Option.Kind.DIRECTORY_PATH;
     }
 
@@ -2587,9 +2575,7 @@ public final class SchemaFormPanel extends JPanel {
             // tool could not open it.
             Schema.Option.Kind k = kindOf(o);
             if (k != Schema.Option.Kind.INPUT_PATH
-                    && k != Schema.Option.Kind.PASTE_IN_PATH
                     && k != Schema.Option.Kind.PATH_LIST
-                    && k != Schema.Option.Kind.PATH_LIST_FILE
                     && k != Schema.Option.Kind.DIRECTORY_PATH) {
                 continue;
             }
