@@ -262,7 +262,14 @@ try {
         # instead of failing. They are still worth gating: on a machine that
         # has it, they do the real work.
         'bioenv.test.AutoCopyInputsTest',
-        'bioenv.test.OptionsWindowTest'
+        'bioenv.test.OptionsWindowTest',
+
+        # --- regression for a reported bug -----------------------------------
+        # A scan lists tools without reading any help, and saveCache() used to
+        # write that list with every schema null - replacing the entry that held
+        # the parameter tables. On the next start no tool had one, so a tool's
+        # parameters appeared only after the editor was opened and confirmed.
+        'bioenv.test.CacheKeepsSchemasTest'
     )
 
     foreach ($t in $regression) {
