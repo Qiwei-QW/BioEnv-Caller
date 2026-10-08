@@ -63,15 +63,25 @@ public final class KindChooserTest {
         form.setSize(900, 600);
         layout(form);
 
-        line("[every row starts as a plain field]");
-        // The plugin does not guess a control from a value's shape, so a row a user
-        // has said nothing about is a text field whatever the help implies.
-        check("the path option starts as a field",
-                findEditor(form, "-i") instanceof JTextField);
-        check("the numeric option starts as a field",
-                findEditor(form, "-n") instanceof JTextField);
-        check("the switch option starts as a field",
-                findEditor(form, "-q") instanceof JTextField);
+        line("[an inferred kind is honoured, and nothing is guessed from the value]");
+        // The parser reads the type out of the help text (placeholder shape first),
+        // and the form shows the control that type calls for. A row the parser
+        // could not type stays a plain field, which is the safety net: a wrong
+        // guess about a value's *shape* never turns into a wrong control.
+        //
+        // Historical note: this block used to assert that every row was a plain
+        // text field, on the reasoning that "the plugin does not guess a control
+        // from a value's shape". That reasoning still holds for the shape of a
+        // typed value, but the parser genuinely does know these three types —
+        // <file> is a path, <int> is a number, and a flag that takes no value is a
+        // switch — so text-by-default was hiding types the help had already stated.
+        // SchemaFormPanel.kindOf() now applies the inferred kind; see its comment.
+        check("the path option offers a text field inside its control",
+                fieldInside(findEditor(form, "-i")) != null);
+        check("the numeric option becomes a spinner",
+                findEditor(form, "-n") instanceof JSpinner);
+        check("the switch option becomes a tick box",
+                findEditor(form, "-q") instanceof JCheckBox);
         check("no kind chooser is drawn beside a row",
                 countChoosers(form) == 0);
         line("");
