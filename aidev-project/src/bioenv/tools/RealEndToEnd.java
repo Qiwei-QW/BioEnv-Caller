@@ -296,16 +296,22 @@ public final class RealEndToEnd {
     /**
      * Runs a command line with stderr discarded.
      *
-     * <p>For tools that write progress to {@code /dev/stderr} as a file rather than
-     * as a stream. mafft does: it sets {@code progressfile="/dev/stderr"} and writes
-     * to that path repeatedly, and when stderr is a pipe - which it is whenever the
-     * output is captured - the descriptor cannot be reopened, so mafft reports
-     * "Permission denied" and conda marks the run failed, even though the alignment
-     * on stdout is complete and correct. Verified directly: with stderr merged the
-     * failure appears, and {@code mafft file.fa 2>/dev/null | grep -c '^>'} returns 2.
+     * <p>Kept because the mafft case once failed with
+     * {@code /dev/stderr: Permission denied} in its stderr, and the alignment it
+     * wanted was on stdout all along - mafft sets {@code progressfile="/dev/stderr"}
+     * and writes to that path, so its progress reporting can carry a "failed" line
+     * from conda that says nothing about the result.
      *
-     * <p>This is the tool's handling of a non-tty stderr, not the plugin's wrapper,
-     * so the probe isolates stdout to read the result it actually wants to check.
+     * <p>That failure could not be reproduced afterwards. Five wirings were tried -
+     * stderr merged, on its own pipe, to a file, discarded, and on a pty - and all
+     * behaved identically: no denial, two sequences returned, exit 0. Path
+     * normalisation, PATH quoting, and {@code bash -lc} versus {@code bash -s} were
+     * ruled out the same way. So the trigger is unknown, and nothing here claims to
+     * have found it.
+     *
+     * <p>Reading stdout alone is still the right way to check this case: the claim
+     * is "the alignment came back", and mafft's progress chatter is not part of it.
+     * Should the denial reappear, the README records what to capture.
      */
     private static String execQuiet(WslBridge bridge, String commandLine, String condaRoot) {
         return exec(bridge, commandLine + " 2>/dev/null", condaRoot);

@@ -431,12 +431,35 @@ unix2dos                     CR 字符确实被加回
 - `RealEndToEnd` 会在 WSL 的 home 下建一个 `bioenv-e2e-<时间戳>` 临时目录，
   **结束时自动删除**；加参数 `keep` 可以保留它看内容。
 
-### 一个真机才会遇到的坑：mafft 与 `/dev/stderr`
+### 待观察：mafft 的 `/dev/stderr` 报错（**未能复现**）
 
-`mafft` 把 `progressfile` 设成 `/dev/stderr` 并**当文件反复写**。当 stderr 是管道
-（任何被捕获来读取的输出都是），该描述符无法重新打开，mafft 会报
-`Permission denied`，conda 随即把这次运行标成失败——**但 stdout 上的对齐结果是完整正确的**。
+开发过程中曾**观察到一次**：
 
-实测确认：`mafft file.fa 2>/dev/null | grep -c '^>'` 返回 2。
-这是工具在非 tty stderr 下的行为，**不是插件包装的问题**。
+```
+mafft: line 2673: /dev/stderr: Permission denied
+ERROR conda.cli.main_run:execute(148): `conda run mafft ...` failed.
+```
+
+而 mafft 脚本第 217 行确实是 `progressfile="/dev/stderr"`，所以这条报错本身是真实的。
+
+**但此后无法复现。** 为定位触发条件，逐一试过下列构造，**全部正常**
+（`Permission denied` 计数均为 0，两条序列均正确返回，退出码均为 0）：
+
+| 构造 | 结果 |
+|---|---|
+| stderr 合并进 stdout（`2>&1`） | 正常 |
+| stderr 独立管道 | 正常 |
+| stderr 重定向到文件 | 正常 |
+| stderr 丢弃（`2>/dev/null`） | 正常 |
+| stderr 接到 PTY（`script -qec`） | 正常 |
+
+同样排除的变量：路径是否规范化（`/home/qw/x.fa` 与 `.../miniconda3/../x.fa` 都正常）、
+`PATH` 是否被单引号包住、`bash -lc` 与 `bash -s` 的差别。
+
+**因此触发条件未知。** 唯一确定的是：**结果不受影响**——
+那次报错的同一批运行中，stdout 上的对齐结果完整正确，
+`mafft file.fa 2>/dev/null | grep -c '^>'` 返回 2。
+
+> 若你再次遇到这条报错，请记录**完整命令行与上下文**再反馈。
+> 在此之前不应据此改动代码：现象复现不了，就没有可修的对象。
 
