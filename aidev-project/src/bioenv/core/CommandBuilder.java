@@ -450,11 +450,8 @@ public final class CommandBuilder {
         }
         switch (kind) {
             case INPUT_PATH:
-            case PASTE_IN_PATH:
             case OUTPUT_PATH:
-            case TEXT_OUT_PATH:
             case PATH_LIST:
-            case PATH_LIST_FILE:
             case DIRECTORY_PATH:
                 return true;
             default:
@@ -557,7 +554,6 @@ public final class CommandBuilder {
      */
     public static boolean declaresOutput(Schema.Option.Kind kind) {
         return kind == Schema.Option.Kind.OUTPUT_PATH
-                || kind == Schema.Option.Kind.TEXT_OUT_PATH
                 || kind == Schema.Option.Kind.PATH_LIST;
     }
 

@@ -28,6 +28,21 @@ public final class Schema {
          *
          * <p>The plugin states no kind by default — every parameter starts as text —
          * so these exist to be chosen, not inferred.
+         *
+         * <h2>Three TBtools kinds are deliberately absent</h2>
+         *
+         * <p>{@code PasteAsInFilePath}, {@code TextAsOutFilePath} and
+         * {@code FilePathListInFile} were offered and did not do what their names
+         * promise. Their whole point in TBtools is the difference between a path and
+         * the text that goes in the file; here, all three rendered and behaved exactly
+         * as a plain input or output path, so choosing one changed nothing except the
+         * label. Offering a choice that does nothing is worse than not offering it, so
+         * they are gone and the remaining kinds are the ones with a real effect.
+         *
+         * <p>Removing them is safe for existing records:
+         * {@link CorrectionStore} skips a stored name it no longer recognises rather
+         * than failing, so a saved {@code PASTE_IN_PATH} is ignored and the parameter
+         * simply keeps whatever {@link #kind} the parser gave it.
          */
         public enum Kind {
             /** No control: the parameter is not offered in the form. */
@@ -42,14 +57,8 @@ public final class Schema {
             INPUT_PATH,
             /** A path that will be created. TBtools: OutFilePath. */
             OUTPUT_PATH,
-            /** A path, or text used as the file's contents. TBtools: PasteAsInFilePath. */
-            PASTE_IN_PATH,
-            /** A path, or text written as the file's contents. TBtools: TextAsOutFilePath. */
-            TEXT_OUT_PATH,
             /** Several paths as one comma-separated argument. TBtools: FilePathList. */
             PATH_LIST,
-            /** A file listing paths, one per line. TBtools: FilePathListInFile. */
-            PATH_LIST_FILE,
             /** A directory. TBtools: DirectoryPath. */
             DIRECTORY_PATH,
             /** One of a small set of literal values. TBtools: Choice. */

@@ -61,11 +61,8 @@ public final class KindCatalogueTest {
                 new LinkedHashMap<Schema.Option.Kind, String>();
         expected.put(Schema.Option.Kind.NONE, "None");
         expected.put(Schema.Option.Kind.INPUT_PATH, "InFilePath");
-        expected.put(Schema.Option.Kind.PASTE_IN_PATH, "PasteAsInFilePath");
         expected.put(Schema.Option.Kind.OUTPUT_PATH, "OutFilePath");
-        expected.put(Schema.Option.Kind.TEXT_OUT_PATH, "TextAsOutFilePath");
         expected.put(Schema.Option.Kind.PATH_LIST, "FilePathList");
-        expected.put(Schema.Option.Kind.PATH_LIST_FILE, "FilePathListInFile");
         expected.put(Schema.Option.Kind.DIRECTORY_PATH, "DirectoryPath");
         expected.put(Schema.Option.Kind.TEXT, "Text");
         expected.put(Schema.Option.Kind.CHOICE, "Choice");
@@ -96,11 +93,8 @@ public final class KindCatalogueTest {
                 "OPTIONS:\n"
                 + " --none <t>     a parameter with no control\n"
                 + " --in <f>       an input path\n"
-                + " --paste <f>    a path or pasted text\n"
                 + " --out <f>      an output path\n"
-                + " --textout <f>  an output path or pasted text\n"
                 + " --list <f>     several paths\n"
-                + " --listfile <f> a file of paths\n"
                 + " --dir <d>      a directory\n"
                 + " --text <t>     free text\n"
                 + " --pick <t>     a choice\n"
@@ -118,11 +112,8 @@ public final class KindCatalogueTest {
                 new LinkedHashMap<String, Schema.Option.Kind>();
         kinds.put("--none", Schema.Option.Kind.NONE);
         kinds.put("--in", Schema.Option.Kind.INPUT_PATH);
-        kinds.put("--paste", Schema.Option.Kind.PASTE_IN_PATH);
         kinds.put("--out", Schema.Option.Kind.OUTPUT_PATH);
-        kinds.put("--textout", Schema.Option.Kind.TEXT_OUT_PATH);
         kinds.put("--list", Schema.Option.Kind.PATH_LIST);
-        kinds.put("--listfile", Schema.Option.Kind.PATH_LIST_FILE);
         kinds.put("--dir", Schema.Option.Kind.DIRECTORY_PATH);
         kinds.put("--text", Schema.Option.Kind.TEXT);
         kinds.put("--pick", Schema.Option.Kind.CHOICE);
@@ -134,11 +125,8 @@ public final class KindCatalogueTest {
         check("None produces no field",
                 findByName(form, "--none") instanceof JLabel);
         check("InFilePath produces a field", fieldFor(form, "--in") != null);
-        check("PasteAsInFilePath produces a field", fieldFor(form, "--paste") != null);
         check("OutFilePath produces a field", fieldFor(form, "--out") != null);
-        check("TextAsOutFilePath produces a field", fieldFor(form, "--textout") != null);
         check("FilePathList produces a field", fieldFor(form, "--list") != null);
-        check("FilePathListInFile produces a field", fieldFor(form, "--listfile") != null);
         check("DirectoryPath produces a field", fieldFor(form, "--dir") != null);
         check("Text produces a field", fieldFor(form, "--text") != null);
         check("CheckBox produces a tick box",
@@ -152,8 +140,7 @@ public final class KindCatalogueTest {
         line("");
 
         line("[every path kind gets a chooser button]");
-        for (String flag : new String[]{"--in", "--paste", "--out", "--textout",
-                "--list", "--listfile", "--dir"}) {
+        for (String flag : new String[]{"--in", "--out", "--list", "--dir"}) {
             Component c = findByName(form, flag);
             check(flag + " has a ... button",
                     c instanceof Container && containsButton((Container) c));
@@ -170,7 +157,6 @@ public final class KindCatalogueTest {
         setText(form, "--list", "C:\\a\\x.txt,C:\\b\\y.txt");
         setText(form, "--dir", "C:\\data");
         setText(form, "--text", "plain words");
-        setText(form, "--listfile", "/home/qw/list.txt");
         tick(form, "--flag");
         Map<String, ParamValue> vals = form.collect();
         String command = bioenv.core.CommandBuilder.preview(
@@ -193,14 +179,38 @@ public final class KindCatalogueTest {
         line("[the output kinds are the ones whose folders get made]");
         check("OutFilePath counts", bioenv.core.CommandBuilder.declaresOutput(
                 Schema.Option.Kind.OUTPUT_PATH));
-        check("TextAsOutFilePath counts", bioenv.core.CommandBuilder.declaresOutput(
-                Schema.Option.Kind.TEXT_OUT_PATH));
         check("a list of outputs counts", bioenv.core.CommandBuilder.declaresOutput(
                 Schema.Option.Kind.PATH_LIST));
         check("an input does not", !bioenv.core.CommandBuilder.declaresOutput(
                 Schema.Option.Kind.INPUT_PATH));
         check("a directory does not", !bioenv.core.CommandBuilder.declaresOutput(
                 Schema.Option.Kind.DIRECTORY_PATH));
+        line("");
+
+        line("[the three kinds that did nothing are gone]");
+        // PasteAsInFilePath, TextAsOutFilePath and FilePathListInFile were offered
+        // and behaved exactly as a plain input or output path: their point in
+        // TBtools is the path-versus-contents distinction, which nothing here
+        // implemented. A choice that changes only its own label is worse than no
+        // choice, so they are removed. Both halves are checked - the enum name,
+        // which is what a stored correction is read back through, and the label,
+        // which is what the chooser lists - because either one surviving would put
+        // the entry back in front of the user.
+        for (String gone : new String[]{"PASTE_IN_PATH", "TEXT_OUT_PATH",
+                "PATH_LIST_FILE"}) {
+            boolean nameGone = true;
+            for (Schema.Option.Kind k : Schema.Option.Kind.values()) {
+                if (k.name().equals(gone)) {
+                    nameGone = false;
+                }
+            }
+            check(gone + " is no longer a kind", nameGone);
+        }
+        for (String label : new String[]{"PasteAsInFilePath", "TextAsOutFilePath",
+                "FilePathListInFile"}) {
+            check(label + " is no longer offered",
+                    SchemaFormPanel.kindFor(label) == null);
+        }
         line("");
 
         line("[the excluded TBtools controls are not offered]");
