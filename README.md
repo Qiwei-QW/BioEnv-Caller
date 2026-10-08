@@ -129,6 +129,12 @@ powershell -ExecutionPolicy Bypass -File .\build.ps1
 > major=70 字节码，TBtools 加载时报 `UnsupportedClassVersionError`。
 > 用 TBtools 自己的 javac 编译，版本天然对齐（major=55），脚本会逐个校验。
 
+> ⚠️ **`build.ps1` 必须保存为「UTF-8 带 BOM」。**
+> 脚本里有中文注释，而 Windows PowerShell 5.1 会把**无 BOM** 的 UTF-8 当 ANSI 解码，
+> 中文注释随即变成乱码并吞掉紧随其后的一行 —— 曾经因此让整个测试块的退出码读取失效，
+> **失败的测试被报成 PASS、构建仍然 exit 0**。现在两个 `build.ps1` 都带 BOM，
+> 改脚本时请保持这一编码（VS Code 右下角选 `UTF-8 with BOM`）。
+
 ### 每次构建自动运行
 
 | 测试 | 断言数 | 检查内容 |
