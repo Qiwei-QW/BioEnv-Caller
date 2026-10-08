@@ -175,7 +175,48 @@ try {
         'bioenv.test.AutoLoadTest',
         'bioenv.test.WorkdirUiTest',
         'bioenv.test.ReinstallClassLossTest',
-        'bioenv.test.HotPathClassLoadTest'
+        'bioenv.test.HotPathClassLoadTest',
+
+        # --- newly registered -------------------------------------------
+        # These already lived in bioenv\test\ and already passed, but were
+        # never listed here, so nothing ran them. They were found by running
+        # every test class in the package and keeping the ones that pass
+        # repeatably (3 consecutive runs each, to rule out flakiness).
+        # Registering them costs nothing and takes the gate from 33 to 54.
+        #
+        # Deliberately NOT listed, and why:
+        #   - 9 classes need a real display and die with HeadlessException
+        #     under this script's -Djava.awt.headless=true: MainLayoutTest,
+        #     OptionAccessTest, OptionsWindowTest, ParameterEditorTest,
+        #     SubcommandLayoutTest, SubcommandNavTest, SubcommandReloadTest,
+        #     AutoCopyInputsTest, UsageLineDescriptionTest.
+        #   - TypedValueReachesCommandTest fails on a stale contract, like
+        #     KindChooserTest did: it casts a row to JTextField where the
+        #     form now honours an inferred kind. Needs the same repair.
+        #   - 10 files are survey/debug tools, not tests (no assertions):
+        #     *Survey, ShowParse, ShowChoices, ExplainOne, ParameterAudit,
+        #     SpeedTest. They belong in tools\, not in the gate.
+        'bioenv.test.AnsiTextTest',
+        'bioenv.test.BuilderFixesTest',
+        'bioenv.test.CacheDistroTest',
+        'bioenv.test.ChoiceHintTest',
+        'bioenv.test.CustomOptionTest',
+        'bioenv.test.CustomSwitchTest',
+        'bioenv.test.DistroFilterTest',
+        'bioenv.test.EditorEndToEndTest',
+        'bioenv.test.EditorFixesTest',
+        'bioenv.test.EditorSyncTest',
+        'bioenv.test.KindCatalogueTest',
+        'bioenv.test.ParameterDragTest',
+        'bioenv.test.ParameterPurgeTest',
+        'bioenv.test.ParameterRenameTest',
+        'bioenv.test.PositionalParamTest',
+        'bioenv.test.PrefixedListTest',
+        'bioenv.test.RebuildKeepsStateTest',
+        'bioenv.test.StopRunTest',
+        'bioenv.test.ToolVsDependencyTest',
+        'bioenv.test.TypedCommandTest',
+        'bioenv.test.WslWorkdirTest'
     )
 
     foreach ($t in $regression) {
