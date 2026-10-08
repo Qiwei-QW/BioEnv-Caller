@@ -1,4 +1,4 @@
-package bioenv.test;
+package bioenv.tools;
 
 import java.io.File;
 import java.nio.charset.Charset;
@@ -24,7 +24,7 @@ import bioenv.core.Schema;
  *
  * <p>Counting these quantifies the problem instead of judging it from one example.
  *
- * <p>Run: {@code java -cp <classes> bioenv.test.FalseParamSurvey}
+ * <p>Run: {@code java -cp <classes> bioenv.tools.FalseParamSurvey}
  */
 public final class FalseParamSurvey {
 
@@ -181,3 +181,5 @@ public final class FalseParamSurvey {
         System.out.println(s);
     }
 }
+
+

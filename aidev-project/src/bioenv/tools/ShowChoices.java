@@ -1,4 +1,4 @@
-package bioenv.test;
+package bioenv.tools;
 
 import java.io.File;
 import java.nio.charset.Charset;
@@ -18,7 +18,7 @@ import bioenv.core.Schema;
  * exists to check the other half of that trade: not that the false ones are gone,
  * but that the real ones are still there.
  *
- * <p>Run: {@code java -cp <classes> bioenv.test.ShowChoices}
+ * <p>Run: {@code java -cp <classes> bioenv.tools.ShowChoices}
  */
 public final class ShowChoices {
 
@@ -69,3 +69,5 @@ public final class ShowChoices {
         System.out.println(s);
     }
 }
+
+

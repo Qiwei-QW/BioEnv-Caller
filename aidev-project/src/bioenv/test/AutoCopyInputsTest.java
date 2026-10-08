@@ -129,7 +129,16 @@ public final class AutoCopyInputsTest {
         line("");
 
         line("[the copy itself, run for real]");
-        if (!realCopyWorks()) {
+        // This step makes a work directory in WSL and copies a file into it, so it
+        // needs a working WSL. Where there is none - a CI box, a sandboxed shell, or
+        // a machine without WSL - it reports a skip instead of a failure, because the
+        // copy is not broken there, it is unavailable. The checks above still ran and
+        // still assert; only this last step is conditional. A skip is printed rather
+        // than passed silently, so a green run does not claim the copy was exercised.
+        if (!wslAvailable()) {
+            line("  SKIP  no WSL here, so the copy could not be exercised");
+            line("        (the checks above still ran)");
+        } else if (!realCopyWorks()) {
             fail++;
             line("  FAIL  the copy did not work");
         } else {
@@ -148,6 +157,30 @@ public final class AutoCopyInputsTest {
             }
         }
         return false;
+    }
+
+    /**
+     * Whether a working WSL is reachable from here.
+     *
+     * <p>Asked by running {@code wsl.exe -l -q}: a machine with WSL but no
+     * distribution installed, or a shell that is not permitted to launch it, both
+     * answer no. The exit status is what is read, not the output, which is UTF-16
+     * and unreadable in a console that expects UTF-8.
+     */
+    private static boolean wslAvailable() {
+        try {
+            ProcessBuilder pb = new ProcessBuilder("wsl.exe", "-l", "-q");
+            pb.redirectErrorStream(true);
+            pb.redirectOutput(ProcessBuilder.Redirect.DISCARD);
+            Process p = pb.start();
+            if (!p.waitFor(20, java.util.concurrent.TimeUnit.SECONDS)) {
+                p.destroyForcibly();
+                return false;
+            }
+            return p.exitValue() == 0;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     /** Copies a real file into a real directory on the Linux side. */

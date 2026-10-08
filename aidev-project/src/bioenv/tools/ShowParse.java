@@ -1,4 +1,4 @@
-package bioenv.test;
+package bioenv.tools;
 
 import java.util.List;
 
@@ -9,7 +9,7 @@ import bioenv.core.Schema;
  * Shows the full parse of real help text, so the result of the rework can be
  * inspected tool by tool rather than only in aggregate.
  *
- * <p>Run: {@code java -cp <classes> bioenv.test.ShowParse <sampleFile>}
+ * <p>Run: {@code java -cp <classes> bioenv.tools.ShowParse <sampleFile>}
  */
 public final class ShowParse {
 
@@ -53,3 +53,5 @@ public final class ShowParse {
         System.out.println(s);
     }
 }
+
+

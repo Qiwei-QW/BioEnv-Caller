@@ -23,6 +23,11 @@ import bioenv.ui.SchemaFormPanel;
  * which has only a close button, so it could not be made full screen at all — the
  * frame's type was the limitation, not its size.
  *
+ * <p>Needs a real display: it opens windows and asserts they are visible and that
+ * closing disposes of them, which is the whole point of the checks. Headless it
+ * reports a skip and exits 0, so it can be run in a batch that may or may not have
+ * a display without the result being read as a failure.
+ *
  * <p>Run: {@code java -cp &lt;classes&gt; bioenv.test.OptionsWindowTest}
  */
 public final class OptionsWindowTest {
@@ -35,6 +40,16 @@ public final class OptionsWindowTest {
     static SchemaFormPanel form;
 
     public static void main(String[] args) throws Exception {
+        // This class tests that a window is really shown, so it needs a display.
+        // Report a skip rather than crashing with HeadlessException: a batch run on
+        // a machine without a display should not read as a failure, and a silent
+        // pass would hide that the check never ran.
+        if (java.awt.GraphicsEnvironment.isHeadless()) {
+            line("SKIP  OptionsWindowTest needs a display (no headless run possible)");
+            line("      It checks that the options window is visible and that closing");
+            line("      disposes of it; neither can be observed without a display.");
+            return;
+        }
         SwingUtilities.invokeAndWait(new Runnable() {
             @Override
             public void run() {

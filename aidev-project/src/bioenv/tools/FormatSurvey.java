@@ -1,4 +1,4 @@
-package bioenv.test;
+package bioenv.tools;
 
 import java.io.File;
 import java.io.IOException;
@@ -17,7 +17,7 @@ import bioenv.core.HelpFormat;
  * distribution, so the classifier is judged against real documents rather than
  * against samples written to make it pass.
  *
- * <p>Run: {@code java -cp <classes> bioenv.test.FormatSurvey [sampleDir]}
+ * <p>Run: {@code java -cp <classes> bioenv.tools.FormatSurvey [sampleDir]}
  */
 public final class FormatSurvey {
 
@@ -185,3 +185,5 @@ public final class FormatSurvey {
         System.out.println(s);
     }
 }
+
+

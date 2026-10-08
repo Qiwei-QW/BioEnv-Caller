@@ -1,4 +1,4 @@
-package bioenv.test;
+package bioenv.tools;
 
 import java.io.File;
 import java.nio.charset.Charset;
@@ -25,7 +25,7 @@ import java.util.regex.Pattern;
  * where a flag sits), never a tool's name or a list of tools, so the result
  * describes a property of help documents rather than of one machine's install.
  *
- * <p>Run: {@code java -cp <classes> bioenv.test.SourceSurvey}
+ * <p>Run: {@code java -cp <classes> bioenv.tools.SourceSurvey}
  */
 public final class SourceSurvey {
 
@@ -219,3 +219,5 @@ public final class SourceSurvey {
         System.out.println(s);
     }
 }
+
+

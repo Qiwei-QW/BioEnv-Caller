@@ -1,4 +1,4 @@
-package bioenv.test;
+package bioenv.tools;
 
 import java.io.File;
 import java.io.IOException;
@@ -22,7 +22,7 @@ import bioenv.core.Schema;
  * from declared types and placeholders, the parser is reading what the documents
  * state rather than guessing at it.
  *
- * <p>Run: {@code java -cp <classes> bioenv.test.EvidenceSurvey [sampleDir]}
+ * <p>Run: {@code java -cp <classes> bioenv.tools.EvidenceSurvey [sampleDir]}
  */
 public final class EvidenceSurvey {
 
@@ -127,3 +127,5 @@ public final class EvidenceSurvey {
         System.out.println(s);
     }
 }
+
+

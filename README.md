@@ -106,13 +106,23 @@ BioEnvCaller\
 │       ├─ core\                发现 / 解析 / 组装命令（无 UI 依赖）
 │       ├─ ui\                  Swing 界面
 │       ├─ i18n\                中英文案表
-│       └─ test\                自带测试（纯 main()，不依赖 JUnit）
+│       ├─ test\                自带测试，全部纳入构建门禁（纯 main()，不依赖 JUnit）
+│       └─ tools\               调查/调试用 main()，编译但不打包、不入门禁
 ├─ vmadapt\src\vmadapt\         SSH 传输模块（独立可编译，产物并入同一 JAR）
 ├─ docs\                        使用帮助 / VMware 连接指南 / 公众号推文
 └─ _archive\ui-redesign\        UI 改造过程的截图与探针，仅供追溯
 ```
 
 `build\` 是构建产物目录，**不入版本库**（见 `.gitignore`）。
+
+> **`test\` 与 `tools\` 的分工**：`test\` 里每个文件都是测试，全部在 `build.ps1`
+> 的门禁列表里；`tools\` 里是当初用来观察 help 解析结果的调查程序（无断言），
+> 编译进 `build\classes` 供手工运行，**不进 JAR、不进回归门禁**。
+>
+> 运行调查工具：
+> ```powershell
+> & 'D:\TBtools\jre\bin\java.exe' -cp 'build\classes;build\vmadapt-classes' bioenv.tools.ShowParse
+> ```
 
 ---
 

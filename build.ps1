@@ -141,6 +141,7 @@ if ($tbJar) { $testCp = "$testCp;$tbJar" }
 $env:JAVA_TOOL_OPTIONS = '-Djava.awt.headless=true'
 $failed = @()
 $passed = @()
+$skipped = @()
 try {
     $regression = @(
         'bioenv.test.SelfTest',
@@ -184,17 +185,24 @@ try {
         # repeatably (3 consecutive runs each, to rule out flakiness).
         # Registering them costs nothing and takes the gate from 33 to 62.
         #
-        # Deliberately NOT listed, and why:
+        # Two entries below need something the machine may not have, so each
+        # reports a skip and exits 0 rather than failing:
         #   - OptionsWindowTest opens real windows and asserts that they are
-        #     visible and that closing disposes of them. That is the thing it
-        #     tests, so it cannot run headless; run it by hand with a display.
-        #   - AutoCopyInputsTest finishes with a real WSL round trip: it makes a
-        #     work directory, copies a file in, and reads the content back. It
-        #     passes on a machine with WSL (11/11 verified) and cannot pass
-        #     where WSL is unavailable, so it is not a safe gate entry.
-        #   - 10 files are survey/debug tools, not tests (no assertions):
-        #     *Survey, ShowParse, ShowChoices, ExplainOne, ParameterAudit,
-        #     SpeedTest. They belong in tools\, not in the gate.
+        #     visible and that closing disposes of them. Headless it cannot
+        #     observe any of that, so it prints SKIP and returns.
+        #   - AutoCopyInputsTest finishes with a real WSL round trip: a work
+        #     directory, a copy in, and the content read back. Where wsl.exe
+        #     answers, it runs and passes (11/11 verified with WSL present);
+        #     where it does not, that last step prints SKIP while the ten
+        #     checks before it still run and still assert.
+        # Both skip loudly - a green run never claims the step was exercised.
+        #
+        # A skip is a real result here, not a way to hide a failure: each was
+        # also observed doing its work on a machine that has what it needs.
+        #
+        # Survey/debug tools are no longer in this list because they are no
+        # longer in test\: they moved to bioenv\tools, which is compiled but
+        # never packaged and never gated.
         #
         # Known flake: HotPathClassLoadTest asserts that setStatus loads no new
         # classes after warm-up, by comparing ClassLoadingMXBean counts. That
@@ -247,7 +255,14 @@ try {
         'bioenv.test.SubcommandLayoutTest',
         'bioenv.test.SubcommandNavTest',
         'bioenv.test.SubcommandReloadTest',
-        'bioenv.test.UsageLineDescriptionTest'
+        'bioenv.test.UsageLineDescriptionTest',
+
+        # --- need something the machine may not have ------------------------
+        # Both report a skip and exit 0 when the thing they need is absent,
+        # instead of failing. They are still worth gating: on a machine that
+        # has it, they do the real work.
+        'bioenv.test.AutoCopyInputsTest',
+        'bioenv.test.OptionsWindowTest'
     )
 
     foreach ($t in $regression) {
@@ -278,7 +293,22 @@ try {
                 $countLine = ($text -split "`r?`n" |
                     Where-Object { $_ -match 'PASS\s+\d+\s+check' } |
                     Select-Object -Last 1)
-                if ($countLine) {
+                # A test that skipped part of itself must say so here. Counting it
+                # as a plain PASS would let a green build imply that the skipped
+                # step - a real WSL copy, a window actually being shown - ran.
+                #
+                # Matched as the word SKIP at the start of a line followed by two
+                # or more spaces, which is the shape the harness prints. Matching
+                # any occurrence of "skip" also catches assertion text such as
+                # "brackets meaning other options are skipped", and would report a
+                # skip that never happened.
+                $skipLine = ($text -split "`r?`n" |
+                    Where-Object { $_ -match '^\s*SKIP\s{2,}' } |
+                    Select-Object -First 1)
+                if ($skipLine) {
+                    $skipped += $t
+                    Write-Host "PASS  $t  (SKIPPED: $($skipLine.Trim()))"
+                } elseif ($countLine) {
                     Write-Host "PASS  $t  ($($countLine.Trim()))"
                 } else {
                     Write-Host "PASS  $t"
@@ -294,6 +324,11 @@ try {
 
 Write-Host ""
 Write-Host "Regression: $($passed.Count) passed, $($failed.Count) failed"
+if ($skipped.Count -gt 0) {
+    Write-Host ""
+    Write-Host "Ran with a skipped step (the machine lacks what it needs):"
+    foreach ($s in $skipped) { Write-Host "  - $s" }
+}
 if ($failed.Count -gt 0) {
     throw ("Regression tests failed: " + ($failed -join ', '))
 }
@@ -315,9 +350,15 @@ New-Item -ItemType Directory -Path $jarStage -Force | Out-Null
 # the i18n package was added it was compiled but never staged, so the JAR shipped
 # without bioenv.i18n and died at runtime with NoClassDefFoundError while the
 # build reported success. Discovering the packages means a new one cannot be
-# forgotten; the only package excluded is bioenv\test, which must not ship.
+# forgotten; the packages excluded are the ones that must not ship: bioenv\test
+# and bioenv\tools.
+#
+# bioenv\tools holds the survey/debug mains that used to sit in bioenv\test.
+# They are developer tools, so they are compiled (a survey that no longer
+# compiles is worth knowing about) but never packaged.
+$shipExcluded = @('test', 'tools')
 $productPkgs = Get-ChildItem (Join-Path $ClassesDir 'bioenv') -Directory |
-    Where-Object { $_.Name -ne 'test' } |
+    Where-Object { $shipExcluded -notcontains $_.Name } |
     ForEach-Object { Join-Path 'bioenv' $_.Name }
 $productPkgs = @($productPkgs) + @('Plugin')
 
@@ -330,15 +371,18 @@ foreach ($pkg in $productPkgs) {
     New-Item -ItemType Directory -Path $destParent -Force | Out-Null
     Copy-Item -Recurse $from (Join-Path $destParent $leaf)
 }
-if (Test-Path (Join-Path $jarStage 'bioenv\test')) {
-    throw "test classes leaked into the packaged JAR"
+foreach ($excluded in $shipExcluded) {
+    if (Test-Path (Join-Path $jarStage "bioenv\$excluded")) {
+        throw "$excluded classes leaked into the packaged JAR"
+    }
 }
 
 # Gate: every compiled product class must be staged. A package that compiles but
 # is not staged produces a JAR that fails at runtime, and the build would still
 # report success - exactly how bioenv.i18n was lost once.
 $compiled = Get-ChildItem $ClassesDir -Recurse -Filter *.class |
-    Where-Object { $_.FullName -notlike '*\bioenv\test\*' } |
+    Where-Object { $_.FullName -notlike '*\bioenv\test\*' -and
+                   $_.FullName -notlike '*\bioenv\tools\*' } |
     ForEach-Object { $_.FullName.Substring($ClassesDir.Length).TrimStart('\') }
 $missing = @($compiled | Where-Object { -not (Test-Path (Join-Path $jarStage $_)) })
 if ($missing.Count -gt 0) {

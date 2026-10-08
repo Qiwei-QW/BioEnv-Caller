@@ -1,4 +1,4 @@
-package bioenv.test;
+package bioenv.tools;
 
 import bioenv.core.CommandBuilder;
 import bioenv.core.CorrectionStore;
@@ -131,3 +131,4 @@ public final class ExplainOne {
         System.out.println(s);
     }
 }
+

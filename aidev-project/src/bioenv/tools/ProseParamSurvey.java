@@ -1,4 +1,4 @@
-package bioenv.test;
+package bioenv.tools;
 
 import java.io.File;
 import java.nio.charset.Charset;
@@ -20,7 +20,7 @@ import bioenv.core.Schema;
  *
  * <p>Counting those quantifies whether the continuation test needs tightening.
  *
- * <p>Run: {@code java -cp <classes> bioenv.test.ProseParamSurvey}
+ * <p>Run: {@code java -cp <classes> bioenv.tools.ProseParamSurvey}
  */
 public final class ProseParamSurvey {
 
@@ -119,3 +119,5 @@ public final class ProseParamSurvey {
         System.out.println(s);
     }
 }
+
+
