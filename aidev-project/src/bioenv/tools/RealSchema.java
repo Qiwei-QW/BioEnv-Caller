@@ -18,13 +18,20 @@ import bioenv.core.WslBridge;
  * user clicks a command. It installs nothing, writes nothing, and passes no
  * arguments that would make a tool do work: only help flags.
  *
- * <p>Usage: {@code RealSchema [maxTools] [envFilter]}
+ * <p>Usage: {@code RealSchema [maxTools] [envFilter] [envFilter...]}
+ *
+ * <p>Several environment names may be given, all in one run: discovery takes
+ * about half a minute, so filtering in-process is much cheaper than starting
+ * the probe again per environment.
  */
 public final class RealSchema {
 
     public static void main(String[] args) {
         int max = args.length > 0 ? Integer.parseInt(args[0]) : 25;
-        String envFilter = args.length > 1 ? args[1] : null;
+        java.util.Set<String> envFilters = new java.util.LinkedHashSet<String>();
+        for (int i = 1; i < args.length; i++) {
+            envFilters.add(args[i]);
+        }
 
         WslBridge bridge = new WslBridge();
         EnvScanner scanner = new EnvScanner(bridge);
@@ -56,7 +63,7 @@ public final class RealSchema {
                 break;
             }
             Tool t = e.getValue();
-            if (envFilter != null && !envFilter.equals(t.envName)) {
+            if (!envFilters.isEmpty() && !envFilters.contains(t.envName)) {
                 continue;
             }
             tried++;
