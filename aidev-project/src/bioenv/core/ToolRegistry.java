@@ -531,6 +531,22 @@ public final class ToolRegistry {
      * <p>Called after a scan and after each tool is learned, so that closing the
      * plugin does not throw away work the user already waited for
      * (DESIGN.md P23).
+     *
+     * <h2>Schemas already on disk are kept</h2>
+     *
+     * <p>A scan lists tools without reading any help, so at that moment every
+     * tool's schema is null. Writing that entry as-is replaced the entry holding
+     * the parameter tables, and the next start restored a list in which no tool
+     * had one - the user saw a tool's parameters only after opening it again.
+     * (Reported as: edits made in the parameter editor came back on their own
+     * after a restart, because the editor's store was re-applied to a schema that
+     * had just been thrown away.)
+     *
+     * <p>So a tool whose schema this session has not learned yet keeps the schema
+     * the file already had for it. Only a tool that was genuinely re-learned -
+     * {@code introspect}, a version change, or a reset, all of which set a fresh
+     * schema - writes a new one. A tool with no schema here and none on disk is
+     * written without one, which is correct: it has not been read yet.
      */
     public void saveCache() {
         if (scanner == null || cache == null) {
@@ -543,6 +559,11 @@ public final class ToolRegistry {
         d.scannedAt = scannedAt;
         d.fingerprint = lastFingerprint != null ? lastFingerprint
                 : EnvFingerprint.compute(wsl, scanner.getEnvs(), d.condaRoot);
+
+        // What the file holds now, so a schema this session has not touched is
+        // carried over rather than dropped.
+        Map<String, Schema> onDisk = schemasOnDisk(d.distro);
+
         for (Tool t : tools.values()) {
             DiscoveryCache.CachedTool c = new DiscoveryCache.CachedTool();
             c.command = t.command;
@@ -553,10 +574,38 @@ public final class ToolRegistry {
             // 不存的话重启后每个工具的版本都是空的，于是永远判断成「没变」。
             c.packageName = t.packageName;
             c.packageVersion = t.packageVersion;
-            c.schema = t.schema;
+            if (t.schema != null) {
+                c.schema = t.schema;
+            } else {
+                c.schema = onDisk.get(t.command);
+            }
             d.tools.add(c);
         }
         cache.save(d);
+    }
+
+    /**
+     * The schemas the cache already holds for one channel, by command.
+     *
+     * <p>Read at the moment of saving rather than kept in a field: the file is
+     * the only place that knows what a previous session learned, and this
+     * registry did not load it when it scanned instead of restoring.
+     */
+    private Map<String, Schema> schemasOnDisk(String distro) {
+        Map<String, Schema> out = new LinkedHashMap<String, Schema>();
+        if (cache == null) {
+            return out;
+        }
+        DiscoveryCache.Data existing = cache.loadFor(distro);
+        if (existing == null) {
+            return out;
+        }
+        for (DiscoveryCache.CachedTool c : existing.tools) {
+            if (c.schema != null && c.command != null && !c.command.isEmpty()) {
+                out.put(c.command, c.schema);
+            }
+        }
+        return out;
     }
 
     /**
