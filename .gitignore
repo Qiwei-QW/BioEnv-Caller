@@ -1,0 +1,36 @@
+# =====================================================================
+#  BioEnv Caller - ignore rules
+# =====================================================================
+
+# --- build output ----------------------------------------------------
+# build.ps1 wipes and recreates these on every run; nothing here is a
+# source of truth. Rebuild with:  powershell -ExecutionPolicy Bypass -File .\build.ps1
+build/
+vmadapt/build/
+
+# --- packaged plugin -------------------------------------------------
+# The installable ZIP produced by build.ps1. Rebuilt from source, so it
+# is not tracked. Delete this line if you would rather ship the artifact
+# from the repository.
+*.plugin
+
+# --- probe residue ---------------------------------------------------
+# EMBOSS-family tools write an ACD debug dump into the working directory
+# whenever their help is probed. These appear during a scan and are pure
+# noise; they used to be committed by hand.
+*.acdlog
+
+# --- Windows / editor ------------------------------------------------
+Thumbs.db
+desktop.ini
+ehthumbs.db
+*.swp
+*~
+.idea/
+.vscode/
+*.iml
+
+# --- Java ------------------------------------------------------------
+*.class
+hs_err_pid*.log
+replay_pid*.log

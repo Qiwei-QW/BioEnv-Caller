@@ -1,0 +1,10 @@
+{
+  "formatVersion": 1,
+  "pluginName": "BioEnv Caller",
+  "menuPath": "AI+",
+  "panelPackage": "bioenv.ui",
+  "panelClassSimpleName": "MainPanel",
+  "dependencies": [],
+  "buildNumber": 1,
+  "exportedAt": "2026-05-20 00:00:00"
+}

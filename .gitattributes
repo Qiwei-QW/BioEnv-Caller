@@ -1,0 +1,18 @@
+# Normalize line endings in the repository.
+#
+# Without this, Git stores whatever the working tree has (CRLF on Windows)
+# and every checkout on another platform shows a whole-file diff. Keeping
+# text normalized to LF in the object store fixes that without changing
+# what Windows tools see, since .ps1 and .java are checked out as CRLF.
+* text=auto
+
+*.java   text
+*.ps1    text
+*.md     text
+*.json   text
+*.ini    text
+
+# Binary assets must never be line-ending converted.
+*.png    binary
+*.jar    binary
+*.plugin binary

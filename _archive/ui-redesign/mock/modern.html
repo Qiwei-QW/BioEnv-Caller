@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="zh-CN" class="theme-light">
+<head>
+<meta charset="utf-8">
+<style>
+  :root{
+    --bg:#F3F3F7; --surface:#FFFFFF; --surface-2:#F7F7FA;
+    --line:#E7E7EE; --line-soft:#EFEFF4;
+    --text:#15151A; --text-2:#63636F; --text-3:#9A9AA6;
+    --accent:#4F46E5; --accent-soft:#EEF0FF; --accent-line:#DCDEFB;
+    --ok:#0B9366; --term:#0E1526; --term-fg:#E8ECF5;
+    --shadow:0 1px 2px rgba(18,20,35,.05), 0 6px 16px rgba(18,20,35,.05);
+    --shadow-sm:0 1px 2px rgba(18,20,35,.06);
+  }
+  html.theme-dark{
+    --bg:#101014; --surface:#191920; --surface-2:#20202A;
+    --line:#2B2B36; --line-soft:#24242E;
+    --text:#EFEFF5; --text-2:#A0A0AE; --text-3:#6E6E7E;
+    --accent:#8B84FF; --accent-soft:#22203C; --accent-line:#3A3766;
+    --ok:#34D399; --term:#0A0F1C; --term-fg:#E8ECF5;
+    --shadow:0 1px 2px rgba(0,0,0,.45), 0 8px 24px rgba(0,0,0,.35);
+    --shadow-sm:0 1px 2px rgba(0,0,0,.45);
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{width:1400px;height:900px;overflow:hidden;}
+  body{background:var(--bg);color:var(--text);
+    font-family:"Microsoft YaHei UI","Microsoft YaHei","Segoe UI",sans-serif;
+    font-size:13px;-webkit-font-smoothing:antialiased;display:flex;flex-direction:column;}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);}
+  .btn{font:inherit;color:var(--text);background:var(--surface);border:1px solid var(--line);
+    border-radius:8px;padding:7px 14px;cursor:pointer;box-shadow:var(--shadow-sm);white-space:nowrap;}
+  .btn.ghost{background:transparent;border-color:transparent;box-shadow:none;color:var(--text-2);}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;
+    box-shadow:0 2px 8px rgba(79,70,229,.3);font-weight:600;}
+  .btn.sm{padding:5px 11px;font-size:12px;}
+
+  /* 顶栏 */
+  .topbar{height:58px;flex:0 0 58px;display:flex;align-items:center;gap:12px;padding:0 16px;
+    background:var(--surface);border-bottom:1px solid var(--line);margin-bottom:12px;}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:700;font-size:14px;}
+  .logo{width:26px;height:26px;border-radius:8px;background:linear-gradient(135deg,#6366F1,#4F46E5);
+    color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;
+    box-shadow:0 2px 6px rgba(79,70,229,.35);}
+  .seg{display:flex;background:var(--surface-2);border:1px solid var(--line);border-radius:9px;padding:2px;gap:2px;}
+  .seg button{font:inherit;font-size:12.5px;border:0;background:transparent;color:var(--text-2);
+    padding:5px 14px;border-radius:7px;cursor:pointer;white-space:nowrap;}
+  .seg button.on{background:var(--surface);color:var(--text);font-weight:600;box-shadow:var(--shadow-sm);}
+  .seg.theme button{padding:5px 11px;}
+  .spacer{flex:1;}
+
+  /* 三栏 */
+  .body{flex:1;display:flex;gap:12px;padding:0 16px;min-height:0;}
+  .col-left{width:282px;flex:0 0 282px;display:flex;flex-direction:column;overflow:hidden;}
+  .col-mid{flex:1;display:flex;flex-direction:column;gap:10px;min-width:0;}
+  .col-right{width:336px;flex:0 0 336px;display:flex;flex-direction:column;overflow:hidden;}
+  .card-h{padding:12px 14px 10px;font-weight:700;font-size:13px;display:flex;
+    align-items:center;justify-content:space-between;gap:8px;}
+  .card-f{margin-top:auto;padding:10px 14px;border-top:1px solid var(--line-soft);
+    color:var(--text-3);font-size:11.5px;line-height:1.5;}
+  .card-f b{color:var(--text-2);font-weight:600;display:block;font-size:11px;letter-spacing:.4px;}
+
+  .search{padding:0 12px 8px;}
+  .search input{width:100%;font:inherit;font-size:12.5px;color:var(--text);background:var(--surface-2);
+    border:1px solid transparent;border-radius:8px;padding:7px 11px;outline:none;}
+  .search input::placeholder{color:var(--text-3);}
+
+  /* 树 */
+  .tree{padding:2px 10px 6px;overflow:hidden;}
+  .tnode{display:flex;align-items:center;height:28px;position:relative;}
+  .dot{width:10px;height:10px;border-radius:50%;flex:0 0 auto;margin-right:11px;}
+  .dot.sm{width:8px;height:8px;margin-left:3px;margin-right:9px;}
+  .nm{font-weight:700;font-size:13px;}
+  .nm2{font-weight:700;font-size:13px;color:var(--text-2);}
+  .cnt{color:var(--text-3);font-size:12px;margin-left:6px;font-weight:400;}
+  .kids{margin-left:6px;padding-left:24px;border-left:1px solid var(--accent-line);position:relative;}
+  .kids .tnode::before{content:"";position:absolute;left:-24px;top:50%;width:15px;height:1px;
+    background:var(--accent-line);}
+  .kids .tnode:last-child::after{content:"";position:absolute;left:-25px;top:calc(50% + 1px);
+    bottom:0;width:2px;background:var(--surface);}
+  .sel{background:var(--accent-soft);border-radius:7px;}
+
+  /* 表单 */
+  .form{flex:1;display:flex;flex-direction:column;padding:14px 16px 12px;min-height:0;}
+  .form-h{display:flex;align-items:flex-start;gap:12px;}
+  .form-h h1{font-size:20px;font-weight:700;}
+  .sub{color:var(--text-3);font-size:12px;margin-top:4px;}
+  .h-actions{margin-left:auto;display:flex;gap:6px;}
+  .field-label{color:var(--text-3);font-size:12px;margin:14px 0 6px;}
+  .input{width:100%;font:inherit;font-size:12.5px;color:var(--text);background:var(--surface);
+    border:1px solid var(--line);border-radius:8px;padding:8px 11px;outline:none;}
+  .input::placeholder{color:var(--text-3);}
+  .wdrow{display:flex;gap:8px;align-items:center;}
+  .icon-btn{width:34px;height:34px;flex:0 0 34px;border:1px solid var(--line);border-radius:8px;
+    background:var(--surface);display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow-sm);}
+  .icon-btn img{width:22px;height:22px;}
+  .win{width:15px;height:15px;display:grid;grid-template-columns:1fr 1fr;gap:2px;}
+  .win i{background:#00A4EF;border-radius:1px;}
+  .findrow{display:flex;align-items:center;gap:10px;}
+  .findrow .input{width:290px;background:var(--surface-2);border-color:transparent;}
+  .findrow .lab{color:var(--text-3);font-size:12px;}
+  .rows{margin-top:10px;overflow:hidden;}
+  .orow{display:flex;align-items:center;gap:10px;height:34px;}
+  .chip{flex:0 0 132px;background:var(--accent-soft);color:var(--accent);
+    border:1px solid var(--accent-line);border-radius:7px;font-size:11.5px;font-weight:700;
+    padding:5px 8px;font-family:Consolas,"Courier New",monospace;white-space:nowrap;overflow:hidden;}
+  .mini{flex:0 0 32px;height:26px;font:inherit;font-size:12px;color:var(--text-2);
+    background:var(--surface);border:1px solid var(--line);border-radius:7px;}
+  .ghead{color:var(--accent);font-weight:700;font-size:12px;letter-spacing:.4px;margin:10px 0 2px;}
+  .term{background:var(--term);color:var(--term-fg);border-radius:10px;padding:11px 13px;
+    font-family:Consolas,"Courier New",monospace;font-size:12.5px;display:flex;align-items:center;
+    gap:8px;box-shadow:var(--shadow);}
+  .term .ps{color:#7C93E0;}
+  .term .copy{margin-left:auto;color:#8A93A8;font-family:"Microsoft YaHei UI",sans-serif;font-size:12px;}
+  .actions{display:flex;gap:8px;}
+
+  .log{padding:8px 14px;color:var(--text-2);font-size:12.5px;line-height:1.85;}
+  .log .ok{color:var(--ok);}
+  .link{font:inherit;font-size:12px;color:var(--text-3);background:none;border:0;font-weight:400;}
+
+  .status{height:30px;flex:0 0 30px;display:flex;align-items:center;gap:8px;padding:0 18px;
+    color:var(--text-3);font-size:11.5px;}
+  .status .ok{color:var(--ok);}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand"><div class="logo">◈</div>BioEnv Caller</div>
+  <div class="seg"><button>Linux 虚拟机</button><button class="on">WSL</button></div>
+  <button class="btn ghost">扫描 conda 环境</button>
+  <div class="spacer"></div>
+  <div class="seg theme"><button>经典</button><button class="on">现代</button></div>
+  <button class="btn ghost">English</button>
+</header>
+
+<div class="body">
+
+  <section class="card col-left">
+    <div class="card-h">命令（按环境分组）</div>
+    <div class="search"><input placeholder="工具检索"></div>
+    <div class="tree">
+      <div class="tnode"><span class="dot" style="background:#4F46E5"></span><span class="nm">EMBOSS_env</span><span class="cnt">(261)</span></div>
+      <div class="kids">
+        <div class="tnode"><span class="dot sm" style="background:#746CF0"></span><span class="nm2">emboss</span><span class="cnt">(261 个命令)</span></div>
+      </div>
+      <div class="tnode"><span class="dot" style="background:#059669"></span><span class="nm">WGDI_env</span><span class="cnt">(1)</span></div>
+      <div class="kids">
+        <div class="tnode"><span class="dot sm" style="background:#746CF0"></span><span class="nm2">wgdi</span></div>
+      </div>
+      <div class="tnode"><span class="dot" style="background:#D97706"></span><span class="nm">bio_env</span><span class="cnt">(1)</span></div>
+      <div class="kids">
+        <div class="tnode"><span class="dot sm" style="background:#746CF0"></span><span class="nm2">bio</span></div>
+      </div>
+      <div class="tnode"><span class="dot" style="background:#DB2777"></span><span class="nm">cafe5_env</span><span class="cnt">(1)</span></div>
+      <div class="kids">
+        <div class="tnode"><span class="dot sm" style="background:#746CF0"></span><span class="nm2">cafe5</span></div>
+      </div>
+      <div class="tnode"><span class="dot" style="background:#0891B2"></span><span class="nm">catfasta2phyml_env</span><span class="cnt">(1)</span></div>
+      <div class="kids">
+        <div class="tnode"><span class="dot sm" style="background:#746CF0"></span><span class="nm2">catfasta2phyml</span></div>
+      </div>
+      <div class="tnode"><span class="dot" style="background:#7C3AED"></span><span class="nm">clustalw_env</span><span class="cnt">(2)</span></div>
+      <div class="kids">
+        <div class="tnode sel"><span class="dot sm" style="background:#746CF0"></span><span class="nm2">clustalw</span></div>
+        <div class="tnode"><span class="dot sm" style="background:#22B582"></span><span class="nm2">clustalw2</span></div>
+      </div>
+      <div class="tnode"><span class="dot" style="background:#E11D48"></span><span class="nm">diamond_env</span><span class="cnt">(1)</span></div>
+      <div class="kids">
+        <div class="tnode"><span class="dot sm" style="background:#746CF0"></span><span class="nm2">diamond</span></div>
+      </div>
+      <div class="tnode"><span class="dot" style="background:#0D9488"></span><span class="nm">dos2unix_env</span><span class="cnt">(4)</span></div>
+      <div class="kids">
+        <div class="tnode"><span class="dot sm" style="background:#746CF0"></span><span class="nm2">dos2unix</span></div>
+        <div class="tnode"><span class="dot sm" style="background:#22B582"></span><span class="nm2">mac2unix</span></div>
+        <div class="tnode"><span class="dot sm" style="background:#F2A42E"></span><span class="nm2">unix2dos</span></div>
+        <div class="tnode"><span class="dot sm" style="background:#F06AA8"></span><span class="nm2">unix2mac</span></div>
+      </div>
+      <div class="tnode"><span class="dot" style="background:#4F46E5"></span><span class="nm">hmmer_env</span><span class="cnt">(43)</span></div>
+    </div>
+    <div class="card-f"><b>CONDA</b>/home/qw/miniconda3</div>
+  </section>
+
+  <section class="col-mid">
+    <div class="card form">
+      <div class="form-h">
+        <div>
+          <h1>orthofinder</h1>
+          <div class="sub">orthofinder @ orthofinder_env — 21 个参数</div>
+        </div>
+        <div class="h-actions">
+          <button class="btn ghost sm">查看帮助原文</button>
+          <button class="btn ghost sm">编辑参数…</button>
+        </div>
+      </div>
+
+      <div class="field-label">工作目录</div>
+      <div class="wdrow">
+        <input class="input" value="/home/qw/vmadapt_work/run1">
+        <button class="icon-btn"><img src="tux.png" alt=""></button>
+        <button class="icon-btn"><span class="win"><i></i><i></i><i></i><i></i></span></button>
+      </div>
+
+      <div class="field-label">参数</div>
+      <div class="findrow">
+        <span class="lab">查找</span>
+        <input class="input" placeholder="按名称筛选参数">
+        <span class="lab" style="margin-left:auto">21 个参数</span>
+        <button class="btn sm">在新窗口中打开</button>
+      </div>
+
+      <div class="rows">
+        <div class="orow"><span class="chip">-f &lt;dir&gt;</span><input class="input" placeholder="蛋白文件所在目录（支持 fasta, pep）"><button class="mini">⋯</button></div>
+        <div class="orow"><span class="chip">--core &lt;dir2&gt;</span><input class="input" placeholder="核心物种"><button class="mini">⋯</button></div>
+        <div class="orow"><span class="chip">--assign &lt;dir1&gt;</span><input class="input" placeholder="新增物种"><button class="mini">⋯</button></div>
+        <div class="ghead">OPTIONS</div>
+        <div class="orow"><span class="chip">-M &lt;txt&gt;</span><input class="input" placeholder="MCL 聚类膨胀参数"></div>
+        <div class="orow"><span class="chip">-t &lt;int&gt;</span><input class="input" value="12"></div>
+        <div class="orow"><span class="chip">-s &lt;file&gt;</span><input class="input" placeholder="User-specified rooted species tree"><button class="mini">⋯</button></div>
+        <div class="orow"><span class="chip">-o &lt;txt&gt;</span><input class="input" placeholder="Non-default results directory"><button class="mini">⋯</button></div>
+        <div class="orow"><span class="chip">-a &lt;int&gt;</span><input class="input" placeholder="Analyse only, and stop after this many genomes"></div>
+        <div class="orow"><span class="chip">-b &lt;dir&gt;</span><input class="input" placeholder="Start from pre-computed BLAST results"><button class="mini">⋯</button></div>
+        <div class="ghead">WORKFLOW</div>
+        <div class="orow"><span class="chip">--msa</span><input class="input" placeholder="Use MSA instead of BLAST"></div>
+        <div class="orow"><span class="chip">-S &lt;txt&gt;</span><input class="input" placeholder="Species tree for orthologue assignment"><button class="mini">⋯</button></div>
+      </div>
+
+      <div class="field-label" style="margin-top:auto">命令预览</div>
+      <div class="term"><span class="ps">$</span><span>orthofinder -f /home/qw/data/pep -t 12</span><span class="copy">复制</span></div>
+    </div>
+
+    <div class="actions">
+      <button class="btn primary">▶ 运行</button>
+      <button class="btn">停止</button>
+      <button class="btn">清空日志</button>
+    </div>
+  </section>
+
+  <section class="card col-right">
+    <div class="card-h">输出<button class="link">清空</button></div>
+    <div class="log">
+      <div>已恢复 Ubuntu 的命令列表。</div>
+      <div>点「扫描 conda 环境」可以拾取新装的工具。</div>
+      <div style="height:10px"></div>
+      <div>orthofinder -v</div>
+      <div>OrthoFinder3.1.5</div>
+      <div style="height:10px"></div>
+      <div><span class="ok">●</span> ─── 完成，用时 3.1 秒 ───</div>
+    </div>
+  </section>
+</div>
+
+<footer class="status"><span class="ok">●</span> 就绪 · 389 个命令可用 · 工作目录 /home/qw/vmadapt_work/run1</footer>
+
+</body>
+</html>
