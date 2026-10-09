@@ -429,7 +429,14 @@ if ($vmTestSources.Count -gt 0) {
         # 可选的联网冒烟测试：没配环境变量时打印 SKIP 并以 0 退出，所以放进常规列表
         # 是安全的。它的类注释本来就写着"会出现在 build.ps1 的常规列表里"，但两个
         # 清单都没有它——配了虚拟机的人因此永远跑不到它。
-        'vmadapt.test.SshLiveTest'
+        'vmadapt.test.SshLiveTest',
+        # 密码通道的自检：验 ssh 版本够不够、以及 askpass 辅助程序能不能把密码打到
+        # stdout。这两条不需要任何服务器，所以每次都跑。
+        #
+        # 完整的端到端（ssh 真的去调 askpass）需要一台启用了密码认证的 sshd，通过
+        # TBVM_ASKPASS_TEST_HOST 指定；没指定时它会说明"跳过端到端"并以 0 退出，
+        # 不假装验过。
+        'vmadapt.test.AskpassProbe'
     )
     $vmPassed = @()
     $vmFailed = @()

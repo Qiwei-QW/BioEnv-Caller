@@ -36,6 +36,7 @@ import javax.swing.filechooser.FileNameExtensionFilter;
 
 import vmadapt.core.ConnectionStore;
 import vmadapt.core.RemoteSetup;
+import vmadapt.core.SshAskpass;
 import vmadapt.core.SshTarget;
 import vmadapt.core.VmConnector;
 import vmadapt.core.VmConnector.ConnectionReport;
@@ -64,60 +65,50 @@ public final class ConnectionPanel extends JPanel {
     // 界面控件
     // ------------------------------------------------------------------
 
-    /** 主机名或 IP，带灰色占位提示。占位文案在 {@link #applyLanguage()} 里按语言设置。 */
+    /**
+     * 连接参数。
+     *
+     * <p>这五个字段不再显示在面板上——填写搬进了 {@link SetupWizard}。留在这里是因为
+     * 它们是 {@link #readTarget()} / {@link #writeTarget} 的数据源：独立版
+     * {@code MainFrame} 通过那两个方法注入预设，向导每步填完也写回这里。
+     * 也就是说面板与向导共用同一份数据，谁也不会覆盖谁。
+     */
     private final PlaceholderTextField hostField = new PlaceholderTextField(null);
-
-    /** SSH 端口，默认 22。故意不带占位提示：默认值已经占了输入框的位置。 */
     private final JTextField portField = new JTextField("22", 6);
-
-    /** 登录用户名，带灰色占位提示。 */
     private final PlaceholderTextField userField = new PlaceholderTextField(null);
-
-    /** 私钥路径，右侧带「浏览…」按钮，带灰色占位提示。 */
     private final PlaceholderTextField keyField = new PlaceholderTextField(null);
-
-    /** 配置名称（别名），用于保存/删除本地配置，带灰色占位提示。 */
     private final PlaceholderTextField nameField = new PlaceholderTextField(null);
-
-    /** 备注，仅作人类可读说明，不参与连接，带灰色占位提示。 */
-    private final PlaceholderTextField noteField = new PlaceholderTextField(null);
-
-    /** 超时秒数。故意不带占位提示：默认值已经占了输入框的位置。 */
     private final JTextField timeoutField = new JTextField("15", 5);
 
-    // 控件一律先用空文字构造，真实文案在 applyLanguage() 里统一填。
-    // 这样做的好处是「语言」只有一个入口，不会出现某个控件忘了跟着切的情况。
-    private final JButton browseKeyButton = new JButton();
-    private final JComboBox<String> savedBox = new JComboBox<String>();
-    private final JButton loadSavedButton = new JButton();
+    /** 面板上显示"当前连的是哪台机器"。 */
+    private final JLabel currentLabel = new JLabel();
 
-    private final JButton testButton = new JButton();
-    private final JButton saveButton = new JButton();
-    private final JButton deleteButton = new JButton();
-    private final JButton genKeyButton = new JButton();
-    private final JButton copyKeyButton = new JButton();
-
-    /** 表单里各行的标签，按 addRow 顺序存放，语言切换时统一改文字。 */
-    private final List<JLabel> rowLabels = new ArrayList<JLabel>();
-
-    /** 各区块的边框标题（Connection / Actions / Probe details / VMware network modes）。 */
-    private final javax.swing.border.TitledBorder connectionBorder;
-    private final javax.swing.border.TitledBorder actionsBorder;
-    private final javax.swing.border.TitledBorder networkBorder;
+    /** 面板上的一句话状态：还没配过 / 已保存 / 上次连接失败。 */
+    private final JTextArea statusField = new JTextArea();
 
     /**
-     * 「连接配置」页三个分组的标题边框。
+     * 上一次失败的原因，显示在面板上。
      *
-     * <p>见 {@link #buildFormTab()}：分组是按用户做事的步骤切的，标题就是这个
-     * 步骤的名字。
+     * <p>用意是"关掉对话框之后仍然知道发生过什么"：失败信息只在弹窗里出现过一次，
+     * 用户关掉就没了。留在面板上，他回头还能看到上次为什么没连上。
+     * 用 {@link #lastErrorIsHard} 区分"密码错"与"网络不通"之类，避免把可重试的
+     * 提示一直挂着吓人。
      */
-    private final javax.swing.border.TitledBorder machineBorder;
-    private final javax.swing.border.TitledBorder loginBorder;
-    private final javax.swing.border.TitledBorder saveAsBorder;
-    private final javax.swing.border.TitledBorder testBorder;
+    private String lastError = "";
+    private boolean lastErrorIsHard;
 
-    /** 底部那条「耗时操作都在后台」提示。 */
-    private final JLabel backgroundHint = new JLabel();
+    /**
+     * 唯一入口：打开向导。
+     *
+     * <p>面板上原来有八个按钮，现在填写与连接全在向导里完成，这里只负责开始。
+     */
+    private final JButton connectButton = new JButton();
+
+    /** 「已存配置」下拉框。暂留：向导尚未接管"选回旧机器"这件事。 */
+    private final JComboBox<String> savedBox = new JComboBox<String>();
+
+    /** 「网络模式速查」页那块的标题边框。 */
+    private final javax.swing.border.TitledBorder networkBorder;
 
     /** 选项卡容器，语言切换时要改标题与提示。 */
     private final JTabbedPane tabs = new JTabbedPane();
@@ -197,9 +188,6 @@ public final class ConnectionPanel extends JPanel {
     /** 同一时刻只允许一个耗时任务在跑，避免两次连接结果互相覆盖。 */
     private boolean busy;
 
-    /** 把「忙碌」状态包起来，保证按钮的禁用与恢复成对出现。 */
-    private final List<JButton> gatedButtons = new ArrayList<JButton>();
-
     // ------------------------------------------------------------------
     // 语言
     // ------------------------------------------------------------------
@@ -227,24 +215,11 @@ public final class ConnectionPanel extends JPanel {
         super(new BorderLayout(0, 8));
         setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
-        connectionBorder = BorderFactory.createTitledBorder("");
-        actionsBorder = BorderFactory.createTitledBorder("");
         networkBorder = BorderFactory.createTitledBorder("");
-        machineBorder = BorderFactory.createTitledBorder("");
-        loginBorder = BorderFactory.createTitledBorder("");
-        saveAsBorder = BorderFactory.createTitledBorder("");
-        testBorder = BorderFactory.createTitledBorder("");
 
-        gatedButtons.add(testButton);
-        gatedButtons.add(saveButton);
-        gatedButtons.add(genKeyButton);
-        gatedButtons.add(copyKeyButton);
-        gatedButtons.add(loadSavedButton);
-
-        // 只有两页。曾经有第三页「连接结果」，但它已经不需要了：测试连接、保存、
-        // 删除、载入、生成密钥、复制公钥的结果现在都以弹窗呈现，而弹窗把"做完了"
-        // 和"结果是什么"放在同一处——用户点完按钮不必再去别的页面找。一个专门用来看
-        // 结果的页面，反而要求他先知道结果在哪一页。
+        // 只有两页。曾经有第三页「连接结果」，但它已经不需要了：结果都以弹窗呈现，
+        // 弹窗把"做完了"和"结果是什么"放在同一处——用户点完按钮不必再去别的页面找。
+        // 一个专门用来看结果的页面，反而要求他先知道结果在哪一页。
         tabs.addTab("", buildFormTab());
         tabs.addTab("", buildNetworkHelpTab());
         add(tabs, BorderLayout.CENTER);
@@ -252,13 +227,9 @@ public final class ConnectionPanel extends JPanel {
         // 先把文案铺一遍（此时没有 provider，即英文），再绑事件。
         applyLanguage();
 
-        // 事件绑定放在最后：loadSavedNames() 会触发下拉框的监听器，
-        // 那时控件必须已经全部建好。
         wireEvents();
-        reloadSavedNames();
-
-        // 没有配置名称时，删除按钮没有意义。
-        updateDeleteEnabled();
+        // 面板上显示当前目标与状态；没有已存配置时就显示"还没配过"。
+        refreshPanelState();
     }
 
     // ------------------------------------------------------------------
@@ -341,79 +312,10 @@ public final class ConnectionPanel extends JPanel {
         tabs.setToolTipTextAt(0, tx.get(UiText.TAB_CONNECTION_TIP));
         tabs.setToolTipTextAt(1, tx.get(UiText.TAB_NETWORK_TIP));
 
-        // 区块标题
-        connectionBorder.setTitle(tx.get(UiText.SEC_CONNECTION));
-        actionsBorder.setTitle(tx.get(UiText.SEC_ACTIONS));
-        networkBorder.setTitle(tx.get(UiText.SEC_NETWORK));
-        machineBorder.setTitle(tx.get(UiText.SEC_MACHINE));
-        loginBorder.setTitle(tx.get(UiText.SEC_LOGIN));
-        saveAsBorder.setTitle(tx.get(UiText.SEC_SAVEAS));
-        testBorder.setTitle(tx.get(UiText.SEC_ACTIONS));
-
-        // 「测试连接」进行中的文字跟着语言走；空闲时的文字由 BTN_TEST 那段统一设。
-        // 这里只在确实处于忙碌状态时改写，免得切语言把按钮从忙碌变回空闲的样子。
-        if (busy) {
-            testButton.setText(tx.get(UiText.BTN_TESTING));
-        }
-
-        // 表单标签。
-        //
-        // 顺序必须与 buildFormTab() 里 addRow() 的调用顺序完全一致：这里按下标把
-        // 文案铺到 rowLabels 上，而 rowLabels 是按"添加顺序"排的。曾经两组顺序不同
-        // （超时在界面上排第 4、在这个数组里排第 7），于是标签整体错位一格——
-        // 「密钥路径」那一行显示的是「15」。
-        String[] labelKeys = {
-            // 这台机器
-            UiText.LBL_HOST, UiText.LBL_PORT, UiText.LBL_USER, UiText.LBL_TIMEOUT,
-            // 登录方式
-            UiText.LBL_KEY,
-            // 保存与载入配置
-            UiText.LBL_NAME, UiText.LBL_NOTE, UiText.LBL_SAVED,
-        };
-        for (int i = 0; i < rowLabels.size() && i < labelKeys.length; i++) {
-            rowLabels.get(i).setText(tx.get(labelKeys[i]));
-        }
-
-        // 字段悬停提示（含 JComboBox 那一行）。顺序同 labelKeys。
-        String[] tipKeys = {
-            UiText.TIP_HOST, UiText.TIP_PORT, UiText.TIP_USER, UiText.TIP_TIMEOUT,
-            UiText.TIP_KEY,
-            UiText.TIP_NAME, UiText.TIP_NOTE, UiText.TIP_SAVED,
-        };
-        if (rowFields.size() == tipKeys.length) {
-            for (int i = 0; i < tipKeys.length; i++) {
-                setTooltipRecursive(rowFields.get(i), tx.get(tipKeys[i]));
-            }
-        }
-
-        // 占位提示：只改画什么，不动 getText()
-        hostField.setPlaceholder(tx.get(UiText.PH_HOST));
-        userField.setPlaceholder(tx.get(UiText.PH_USER));
-        keyField.setPlaceholder(tx.get(UiText.PH_KEY));
-        nameField.setPlaceholder(tx.get(UiText.PH_NAME));
-        noteField.setPlaceholder(tx.get(UiText.PH_NOTE));
-
-        // 按钮
-        browseKeyButton.setText(tx.get(UiText.BTN_BROWSE));
-        browseKeyButton.setToolTipText(tx.get(UiText.BTN_BROWSE_TIP));
-        loadSavedButton.setText(tx.get(UiText.BTN_LOAD));
-        loadSavedButton.setToolTipText(tx.get(UiText.BTN_LOAD_TIP));
-        testButton.setText(tx.get(UiText.BTN_TEST));
-        testButton.setToolTipText(tx.get(UiText.BTN_TEST_TIP));
-        saveButton.setText(tx.get(UiText.BTN_SAVE));
-        saveButton.setToolTipText(tx.get(UiText.BTN_SAVE_TIP));
-        deleteButton.setText(tx.get(UiText.BTN_DELETE));
-        deleteButton.setToolTipText(tx.get(UiText.BTN_DELETE_TIP));
-        genKeyButton.setText(tx.get(UiText.BTN_GEN_KEY));
-        genKeyButton.setToolTipText(tx.get(UiText.BTN_GEN_KEY_TIP));
-        copyKeyButton.setText(tx.get(UiText.BTN_COPY_KEY));
-        copyKeyButton.setToolTipText(tx.get(UiText.BTN_COPY_KEY_TIP));
-
-        savedBox.setToolTipText(tx.get(UiText.TIP_SAVED));
-
-        // 底部提示
-        backgroundHint.setText("<html>" + escapeHtml(tx.get(UiText.HINT_BACKGROUND))
-                + "</html>");
+        // 面板上的当前目标与状态。
+        connectButton.setText(tx.get(UiText.BTN_CONNECT));
+        connectButton.setToolTipText(tx.get(UiText.BTN_CONNECT_TIP));
+        refreshPanelState();
 
         // Network modes 正文
         networkHelpArea.setText(tx.get(UiText.NET_HELP));
@@ -429,6 +331,35 @@ public final class ConnectionPanel extends JPanel {
         }
     }
 
+    /**
+     * 刷新面板上的"当前连哪台机器"与状态文字。
+     *
+     * <p>填写搬进向导之后，这个面板的作用变成了"告诉用户现在是什么情况"。所以每次
+     * 连接参数变化（向导填完、{@link #writeTarget} 注入预设）都要重画一次，否则面板
+     * 会一直显示上一次的内容。
+     */
+    private void refreshPanelState() {
+        String host = hostField.getText().trim();
+        String user = userField.getText().trim();
+        String port = portField.getText().trim();
+        String name = nameField.getText().trim();
+
+        if (host.isEmpty()) {
+            currentLabel.setText(text(UiText.PANEL_NO_TARGET));
+            statusField.setText(text(UiText.PANEL_NO_TARGET_HINT));
+            return;
+        }
+        String who = (user.isEmpty() ? "" : user + "@") + host
+                + (port.isEmpty() ? "" : ":" + port);
+        currentLabel.setText(name.isEmpty() ? who : name + "  (" + who + ")");
+
+        if (lastError != null && !lastError.isEmpty()) {
+            statusField.setText(lastError);
+        } else {
+            statusField.setText(text(UiText.PANEL_READY_HINT));
+        }
+    }
+
     /** 状态区是否正在显示某次结果（true 时语言切换不覆盖它）。 */
     private boolean statusShowsResult;
 
@@ -440,13 +371,6 @@ public final class ConnectionPanel extends JPanel {
         return NEUTRAL_COLOR;
     }
 
-    /** 简单 HTML 转义，避免文案里的 & < > 破坏 JLabel 的 html 渲染。 */
-    private static String escapeHtml(String s) {
-        if (s == null) {
-            return "";
-        }
-        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
-    }
 
     /** 把 Runnable 派发到 EDT；已经在 EDT 上就直接执行。 */
     private static void runOnEdt(Runnable r) {
@@ -472,95 +396,51 @@ public final class ConnectionPanel extends JPanel {
     // ------------------------------------------------------------------
 
     /**
-     * 表单每一行的「控件」侧，按 addRow 顺序存放。
+     * 「连接配置」页：显示当前连的是哪台机器，并提供一个入口按钮。
      *
-     * <p>语言切换时要重设它们的悬停提示，所以必须留引用；
-     * 私钥行与已存配置行存的是包好的 JPanel，递归设提示即可覆盖内部控件。
-     */
-    private final List<Component> rowFields = new ArrayList<Component>();
-
-    /** 「连接配置」页：上方表单，下方操作按钮。 */
-    /**
-     * 「连接配置」页。
+     * <h2>为什么不再是一个表单</h2>
      *
-     * <p>按"用户在做哪一步"分成三组，而不是把八行输入排成一列、七个按钮平铺一行：
+     * <p>这里曾经有六行输入和八个按钮，用户要自己判断先填什么、能点哪个。但这件事本身
+     * 有固定顺序（地址 → 端口 → 用户名 → 密钥 → 连接），把顺序写进界面就不必再要求
+     * 用户知道顺序。填写因此搬进了 {@link SetupWizard}，一步一步来。
      *
-     * <ul>
-     *   <li><b>这台机器</b>：主机、端口、用户名、超时——填完这些就知道连哪里；</li>
-     *   <li><b>登录方式</b>：密钥路径，以及"生成密钥 / 复制公钥到远端"这对一次性
-     *       准备工作。它们和参数是两件事，混在一排按钮里用户不知道先点哪个；</li>
-     *   <li><b>保存与载入配置</b>：配置名、备注、已存配置。这一组管的是"记录"，
-     *       不是机器属性，所以从表单里分出来。</li>
-     * </ul>
-     *
-     * <p>「测试连接」单独放在页面底部：它是"我填完了，验证一下"的收尾动作，
-     * 不属于上面任何一组。
+     * <p>面板上留下的只有"当前状态 + 一个入口"。参数本身仍然存在
+     * {@link #hostField} 等字段里，因为它们同时是 {@link #readTarget()} /
+     * {@link #writeTarget} 的数据源——独立版 {@code MainFrame} 依赖这两个方法，
+     * 向导填完也写回这里，所以两边改的是同一份数据。
      */
     private JPanel buildFormTab() {
-        JPanel root = new JPanel(new BorderLayout(0, 8));
+        JPanel root = new JPanel(new BorderLayout(0, 10));
+        root.setBorder(BorderFactory.createEmptyBorder(12, 14, 12, 14));
 
-        JPanel north = new JPanel();
-        north.setLayout(new javax.swing.BoxLayout(north, javax.swing.BoxLayout.Y_AXIS));
+        // 当前目标：一行大字，让人一眼看出连的是哪台。
+        currentLabel.setName("bioenv.currentTarget");
+        currentLabel.setFont(currentLabel.getFont().deriveFont(Font.BOLD, 14f));
+        root.add(currentLabel, BorderLayout.NORTH);
 
-        // ── 第一组：这台机器 ────────────────────────────────────────────────
-        JPanel machine = new JPanel(new GridBagLayout());
-        machine.setBorder(machineBorder);
-        int row = 0;
-        addRow(machine, row++, hostField);
-        addRow(machine, row++, portField);
-        addRow(machine, row++, userField);
-        addRow(machine, row++, timeoutField);
-        north.add(machine);
+        // 状态：例如"已连接 / 还没配过"，以及一句可执行的下一步。
+        statusField.setName("bioenv.panelState");
+        statusField.setEditable(false);
+        statusField.setLineWrap(true);
+        statusField.setWrapStyleWord(true);
+        statusField.setOpaque(false);
+        statusField.setForeground(new Color(0x55, 0x5B, 0x64));
+        statusField.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12));
+        statusField.setPreferredSize(new Dimension(420, 60));
+        root.add(statusField, BorderLayout.CENTER);
 
-        // ── 第二组：登录方式 ────────────────────────────────────────────────
-        JPanel login = new JPanel(new GridBagLayout());
-        login.setBorder(loginBorder);
-        row = 0;
-        addRow(login, row++, withBrowse(keyField));
-
-        JPanel keyActions = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
-        keyActions.add(genKeyButton);
-        keyActions.add(copyKeyButton);
-        GridBagConstraints kc = new GridBagConstraints();
-        kc.gridx = 1;
-        kc.gridy = row;
-        kc.weightx = 1.0;
-        kc.fill = GridBagConstraints.HORIZONTAL;
-        kc.insets = new Insets(3, 0, 3, 4);
-        login.add(keyActions, kc);
-        north.add(login);
-
-        // ── 第三组：保存与载入配置 ──────────────────────────────────────────
-        JPanel saveAs = new JPanel(new GridBagLayout());
-        saveAs.setBorder(saveAsBorder);
-        row = 0;
-        addRow(saveAs, row++, nameField);
-        addRow(saveAs, row++, noteField);
-
-        JPanel savedRow = new JPanel(new BorderLayout(4, 0));
-        savedRow.add(savedBox, BorderLayout.CENTER);
-        JPanel savedButtons = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
-        savedButtons.add(loadSavedButton);
-        savedButtons.add(saveButton);
-        savedButtons.add(deleteButton);
-        savedRow.add(savedButtons, BorderLayout.EAST);
-        addRow(saveAs, row++, savedRow);
-        north.add(saveAs);
-
-        root.add(north, BorderLayout.NORTH);
-
-        // ── 收尾动作：测试连接 ──────────────────────────────────────────────
-        JPanel bottom = new JPanel(new BorderLayout(0, 6));
-        JPanel testRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 6));
-        testRow.setBorder(testBorder);
-        testRow.add(testButton);
-        bottom.add(testRow, BorderLayout.NORTH);
-
-        backgroundHint.setForeground(new Color(0x55, 0x55, 0x55));
-        bottom.add(backgroundHint, BorderLayout.SOUTH);
-        root.add(bottom, BorderLayout.CENTER);
+        JPanel bar = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
+        bar.add(connectButton);
+        root.add(bar, BorderLayout.SOUTH);
         return root;
     }
+
+    // ------------------------------------------------------------------
+    // 评审用的布局变体已经选定并删除。
+    //
+    // 保留下来的是「向导」方案：填写不再放在这个面板上，而是像装软件那样一步步弹窗
+    // （见 SetupWizard）。面板本身只显示当前连的是哪台机器，以及一个入口按钮。
+    // ------------------------------------------------------------------
 
     // 「连接结果」页已经删掉（见构造函数里加标签页处的说明）。statusArea 仍然保留，
     // 但只是**文本缓冲**，不再挂在界面上：所有操作的报告都先写进它，
@@ -582,135 +462,722 @@ public final class ConnectionPanel extends JPanel {
     }
 
     // ------------------------------------------------------------------
-    // 表单辅助
-    // ------------------------------------------------------------------
-
-    /**
-     * 往 GridBagLayout 表单里加一行「标签 + 组件」。
-     *
-     * <p>只建结构，文案留空：标签文字与悬停提示都由 {@link #applyLanguage()}
-     * 统一填，这样语言切换时不会漏掉任何一行。标签与控件分别记进
-     * {@link #rowLabels} 和 {@link #rowFields}，供刷新时按顺序取用。
-     *
-     * @param field 控件；若是组合面板，提示会递归设到内部每个子控件上
-     */
-    private void addRow(JPanel form, int row, Component field) {
-        GridBagConstraints lc = new GridBagConstraints();
-        lc.gridx = 0;
-        lc.gridy = row;
-        lc.anchor = GridBagConstraints.LINE_END;
-        lc.insets = new Insets(3, 4, 3, 6);
-        JLabel l = new JLabel();
-        rowLabels.add(l);
-        form.add(l, lc);
-
-        GridBagConstraints fc = new GridBagConstraints();
-        fc.gridx = 1;
-        fc.gridy = row;
-        fc.weightx = 1.0;
-        fc.fill = GridBagConstraints.HORIZONTAL;
-        fc.insets = new Insets(3, 0, 3, 4);
-        rowFields.add(field);
-        form.add(field, fc);
-    }
-
-    /**
-     * 给组件及其所有子组件设置同一条悬停提示。
-     *
-     * <p>必须递归：私钥那一行传进来的是包着输入框 + 「Browse...」的组合面板，
-     * 「已存配置」那一行是包着下拉框 + 「Load」的面板。只设最外层的话，
-     * 用户把鼠标悬停在真正的输入框或下拉框上是看不到提示的。
-     *
-     * <p>每次调用都是<b>覆盖</b>（而不是「只在 null 时设」）：语言切换要能把
-     * 旧语言的提示换成新语言的，所以这里必须无条件写入。
-     */
-    private static void setTooltipRecursive(Component c, String tooltip) {
-        if (tooltip == null) {
-            return;
-        }
-        if (c instanceof JComponent) {
-            ((JComponent) c).setToolTipText(tooltip);
-        }
-        if (c instanceof java.awt.Container) {
-            for (Component child : ((java.awt.Container) c).getComponents()) {
-                setTooltipRecursive(child, tooltip);
-            }
-        }
-    }    /** 给文本框右侧拼一个「浏览…」按钮，两部分一起当成一个组件加进表单。 */
-    private Component withBrowse(JTextField field) {
-        JPanel p = new JPanel(new BorderLayout(4, 0));
-        p.add(field, BorderLayout.CENTER);
-        p.add(browseKeyButton, BorderLayout.EAST);
-        return p;
-    }
-
-    // ------------------------------------------------------------------
     // 事件绑定
     // ------------------------------------------------------------------
 
+    /**
+     * 面板上只剩一个入口：打开向导。
+     *
+     * <p>原来这里绑了八个按钮。填写与连接搬进向导之后，它们全部由向导负责——
+     * 两个地方都能做同一件事，迟早会出现"在面板上点了没反应，因为向导那套才是生效的"
+     * 这类问题。所以这里只留一个。
+     */
     private void wireEvents() {
-        browseKeyButton.addActionListener(new ActionListener() {
+        connectButton.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                chooseKeyFile();
+                openWizard();
             }
         });
+    }
 
-        loadSavedButton.addActionListener(new ActionListener() {
+    // ------------------------------------------------------------------
+    // 连接向导
+    // ------------------------------------------------------------------
+
+    /**
+     * 打开向导：一步一个窗，像装软件那样走完。
+     *
+     * <p>把填写也搬进向导，是因为这件事本身有固定顺序（地址 → 端口 → 用户名 → 密钥
+     * → 连接）。顺序写进界面之后，用户不必自己知道该先填什么；每一步只回答一个问题，
+     * 也就没有"按钮是灰的，为什么"这种疑问。
+     *
+     * <p>每一步都从当前字段读初值，所以「上一步」是真的回填，而不是重填。
+     * 每一步的结果又立刻写回字段，于是取消时保留已填的部分——重新打开向导不用从头来。
+     */
+    private void openWizard() {
+        if (java.awt.GraphicsEnvironment.isHeadless()) {
+            // 自检环境没有窗口。状态写进缓冲，测试据此断言。
+            statusArea.setText(text(UiText.PANEL_NO_TARGET_HINT));
+            return;
+        }
+        stepHost();
+    }
+
+    /** 当前向导窗口，换步骤时复用它，避免一屏闪好几个窗。 */
+    private javax.swing.JDialog wizardWindow;
+    /** 向导各步共用的摘要文本，用于第 5 步回显。 */
+    private String wizardSummary = "";
+
+    private void showWizardStep(javax.swing.JPanel content, String title) {
+        if (wizardWindow == null) {
+            wizardWindow = new javax.swing.JDialog(
+                    SwingUtilities.getWindowAncestor(this), title);
+            wizardWindow.setName("bioenv.setupWizard");
+            wizardWindow.setModal(false);
+        }
+        wizardWindow.setTitle(title);
+        wizardWindow.setContentPane(content);
+        wizardWindow.pack();
+        wizardWindow.setLocationRelativeTo(this);
+        wizardWindow.setVisible(true);
+    }
+
+    private void closeWizard() {
+        if (wizardWindow != null) {
+            wizardWindow.setVisible(false);
+            wizardWindow.dispose();
+            wizardWindow = null;
+        }
+    }
+
+    /** 第 1 步：地址。 */
+    private void stepHost() {
+        final SetupWizard.FieldStep s = new SetupWizard.FieldStep(
+                1, WIZARD_STEPS, text(UiText.WIZ_HOST_TITLE),
+                text(UiText.WIZ_HOST_HINT), text(UiText.LBL_HOST),
+                text(UiText.PH_HOST), text(UiText.BTN_CANCEL),
+                text(UiText.BTN_NEXT));
+        s.field().setText(hostField.getText());
+        s.back().addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                loadSelectedConfig();
+                closeWizard();
             }
         });
-
-        savedBox.addActionListener(new ActionListener() {
+        s.next().addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                updateDeleteEnabled();
+                String v = s.field().getText().trim();
+                if (v.isEmpty()) {
+                    warnStep(s.panel(), text(UiText.WIZ_NEED_HOST));
+                    return;
+                }
+                hostField.setText(v);
+                stepPort();
             }
         });
+        showWizardStep(s.panel(), text(UiText.DIALOG_CONNECTION_TITLE_WIZARD));
+    }
 
-        nameField.getDocument().addDocumentListener(new SimpleDocumentListener() {
-            @Override
-            public void changed() {
-                updateDeleteEnabled();
-            }
-        });
-
-        testButton.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                testConnection();
-            }
-        });
-
-        saveButton.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                saveConfig();
-            }
-        });
-
-        deleteButton.addActionListener(new ActionListener() {
+    /** 第 2 步：端口。 */
+    private void stepPort() {
+        final SetupWizard.FieldStep s = new SetupWizard.FieldStep(
+                2, WIZARD_STEPS, text(UiText.WIZ_PORT_TITLE),
+                text(UiText.WIZ_PORT_HINT), text(UiText.LBL_PORT),
+                text(UiText.WIZ_PORT_PH), text(UiText.BTN_BACK),
+                text(UiText.BTN_NEXT));
+        s.field().setText(portField.getText());
+        s.back().addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                deleteConfig();
+                stepHost();
             }
         });
-
-        genKeyButton.addActionListener(new ActionListener() {
+        s.next().addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                generateKey();
+                String v = s.field().getText().trim();
+                if (!v.isEmpty()) {
+                    try {
+                        int p = Integer.parseInt(v);
+                        if (p <= 0 || p > 65535) {
+                            warnStep(s.panel(), text(UiText.ERR_PORT_NUMBER, v));
+                            return;
+                        }
+                    } catch (NumberFormatException nfe) {
+                        warnStep(s.panel(), text(UiText.ERR_PORT_NUMBER, v));
+                        return;
+                    }
+                }
+                portField.setText(v.isEmpty() ? "22" : v);
+                stepUser();
             }
         });
+        showWizardStep(s.panel(), text(UiText.DIALOG_CONNECTION_TITLE_WIZARD));
+    }
 
-        copyKeyButton.addActionListener(new ActionListener() {
+    /** 第 3 步：用户名。 */
+    private void stepUser() {
+        final SetupWizard.FieldStep s = new SetupWizard.FieldStep(
+                3, WIZARD_STEPS, text(UiText.WIZ_USER_TITLE),
+                text(UiText.WIZ_USER_HINT), text(UiText.LBL_USER),
+                text(UiText.PH_USER), text(UiText.BTN_BACK),
+                text(UiText.BTN_NEXT));
+        s.field().setText(userField.getText());
+        s.back().addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                copyPublicKeyToRemote();
+                stepPort();
             }
         });
+        s.next().addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                String v = s.field().getText().trim();
+                if (v.isEmpty()) {
+                    warnStep(s.panel(), text(UiText.WIZ_NEED_USER));
+                    return;
+                }
+                userField.setText(v);
+                stepKey();
+            }
+        });
+        showWizardStep(s.panel(), text(UiText.DIALOG_CONNECTION_TITLE_WIZARD));
+    }
+
+    /** 第 4 步：密钥（可留空）。 */
+    private void stepKey() {
+        final SetupWizard.FieldStep s = new SetupWizard.FieldStep(
+                4, WIZARD_STEPS, text(UiText.WIZ_KEY_TITLE),
+                text(UiText.WIZ_KEY_HINT), text(UiText.LBL_KEY),
+                text(UiText.WIZ_KEY_PH), text(UiText.BTN_BACK),
+                text(UiText.BTN_NEXT));
+        s.field().setText(keyField.getText());
+        s.back().addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                stepUser();
+            }
+        });
+        s.next().addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                keyField.setText(SshTarget.normalizeKeyPath(s.field().getText()));
+                stepConfirm();
+            }
+        });
+        showWizardStep(s.panel(), text(UiText.DIALOG_CONNECTION_TITLE_WIZARD));
+    }
+
+    /** 第 5 步：把前面填的摊出来核对。 */
+    private void stepConfirm() {
+        final SetupWizard.Confirm s = new SetupWizard.Confirm(
+                5, WIZARD_STEPS, text(UiText.WIZ_CONFIRM_TITLE),
+                text(UiText.WIZ_CONFIRM_HINT), text(UiText.BTN_BACK),
+                text(UiText.BTN_START));
+        String key = keyField.getText().trim();
+        wizardSummary = text(UiText.LBL_HOST) + "  " + hostField.getText().trim() + "\n"
+                + text(UiText.LBL_PORT) + "  " + portField.getText().trim() + "\n"
+                + text(UiText.LBL_USER) + "  " + userField.getText().trim() + "\n"
+                + text(UiText.LBL_KEY) + "  "
+                + (key.isEmpty() ? text(UiText.WIZ_KEY_DEFAULT) : key);
+        s.setSummary(wizardSummary);
+        s.back().addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                stepKey();
+            }
+        });
+        s.next().addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                beginConnect();
+            }
+        });
+        showWizardStep(s.panel(), text(UiText.DIALOG_CONNECTION_TITLE_WIZARD));
+    }
+
+    /** 每步共用的"还缺什么"提示，不换窗，就地告诉用户。 */
+    private void warnStep(javax.swing.JPanel panel, String message) {
+        javax.swing.JOptionPane.showMessageDialog(panel, message,
+                text(UiText.DIALOG_CONNECTION_TITLE_WIZARD),
+                javax.swing.JOptionPane.WARNING_MESSAGE);
+    }
+
+    /** 向导总步数（不含密码那一步，它是按需出现的）。 */
+    private static final int WIZARD_STEPS = 5;
+
+    /**
+     * 从第 5 步开始真正干活。
+     *
+     * <p>先做环境自检：ssh.exe 存不存在、版本够不够。不够就<b>不走密码通道</b>——
+     * 那条路依赖 {@code SSH_ASKPASS_REQUIRE}，8.4 以下不认，弹一个注定失败的密码框
+     * 只会让用户以为是自己密码打错了。这时改为显示公钥和一段可复制的命令。
+     *
+     * <p>环境没问题再看这台机器能不能免密登录：
+     * <ul>
+     *   <li>能 → 直接测试，<b>不问密码</b>（能连上就不该多问一句）；</li>
+     *   <li>不能 → 弹密码框，输一次，用它装上公钥，之后永久免密。</li>
+     * </ul>
+     */
+    private void beginConnect() {
+        final String ssh = OpenSsh.locate("ssh.exe");
+        if (ssh == null) {
+            stepManual(text(UiText.MSG_NO_SSH), text(UiText.MSG_NO_SSH_REASON));
+            return;
+        }
+        String ver = SshAskpass.versionOf(ssh);
+        int major = SshAskpass.majorOf(ver);
+        int minor = SshAskpass.minorOf(ver);
+        if (!SshAskpass.supportsAskpassRequire(major, minor)) {
+            stepManual(text(UiText.WIZ_OLD_SSH_TITLE),
+                    text(UiText.WIZ_OLD_SSH_REASON, ver));
+            return;
+        }
+
+        // 已经能免密吗？能就直接测试，不问密码。
+        setBusy(true);
+        final javax.swing.JDialog wait = progressDialog();
+        new SwingWorker<Boolean, Void>() {
+            @Override
+            protected Boolean doInBackground() {
+                return canLogInWithoutPassword(ssh);
+            }
+
+            @Override
+            protected void done() {
+                setBusy(false);
+                if (wait != null) {
+                    wait.dispose();
+                }
+                boolean ok = false;
+                try {
+                    ok = get().booleanValue();
+                } catch (Exception ignored) {
+                    // 探测本身失败按"还不能免密"处理，走密码那条路
+                }
+                if (ok) {
+                    // 免密已可用：不需要密码，直接做一次完整测试。
+                    finishConnect();
+                } else {
+                    stepPassword();
+                }
+            }
+        }.execute();
+    }
+
+    /** 一次最小免密探测：能执行 echo 就说明公钥已经装好了。 */
+    private boolean canLogInWithoutPassword(String ssh) {
+        try {
+            List<String> cmd = new ArrayList<String>();
+            cmd.add(ssh);
+            cmd.add("-o");
+            cmd.add("BatchMode=yes");
+            cmd.add("-o");
+            cmd.add("StrictHostKeyChecking=accept-new");
+            cmd.add("-o");
+            cmd.add("ConnectTimeout=" + timeoutSeconds());
+            cmd.add("-p");
+            cmd.add(portField.getText().trim());
+            SshTarget t = readTarget();
+            if (t.usesKey()) {
+                cmd.add("-i");
+                cmd.add(t.keyPath);
+            }
+            cmd.add(userField.getText().trim() + "@" + hostField.getText().trim());
+            cmd.add("echo TBVM_OK");
+            ProcessBuilder pb = new ProcessBuilder(cmd);
+            pb.redirectErrorStream(true);
+            Process p = pb.start();
+            String out = drainText(p.getInputStream());
+            p.waitFor();
+            return p.exitValue() == 0 && out.contains("TBVM_OK");
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private int timeoutSeconds() {
+        return SshTarget.DEFAULT_TIMEOUT_SECONDS;
+    }
+
+    private static String drainText(java.io.InputStream in) {
+        StringBuilder sb = new StringBuilder();
+        try {
+            byte[] b = new byte[512];
+            int n;
+            while ((n = in.read(b)) > 0) {
+                sb.append(new String(b, 0, n, "UTF-8"));
+            }
+        } catch (Exception ignored) {
+            // 读不到就当空输出
+        }
+        return sb.toString();
+    }
+
+    private javax.swing.JDialog progressDialog() {
+        if (java.awt.GraphicsEnvironment.isHeadless()) {
+            return null;
+        }
+        javax.swing.JDialog dlg = new javax.swing.JDialog(
+                wizardWindow, text(UiText.DIALOG_CONNECTION_TITLE_WIZARD));
+        javax.swing.JLabel l = new javax.swing.JLabel(
+                "  " + text(UiText.WIZ_WORKING) + "  ");
+        dlg.setContentPane(l);
+        dlg.pack();
+        dlg.setLocationRelativeTo(this);
+        dlg.setVisible(true);
+        return dlg;
+    }
+
+    /**
+     * 密码步：免密还不行，让用户输一次密码，用它把公钥装上。
+     *
+     * <p>密码只经内存交给 {@code SSH_ASKPASS} 那条管道，不落盘、不进命令行、不进日志。
+     * 这一步是"最后一次需要密码"——装完就永久免密。
+     */
+    private void stepPassword() {
+        final SetupWizard.Password s = new SetupWizard.Password(
+                WIZARD_STEPS, WIZARD_STEPS, text(UiText.WIZ_PWD_TITLE),
+                text(UiText.WIZ_PWD_HINT), text(UiText.WIZ_PWD_NOTE),
+                text(UiText.BTN_BACK), text(UiText.BTN_START),
+                text(UiText.BTN_CANCEL));
+        s.back().addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                stepConfirm();
+            }
+        });
+        s.cancel().addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                closeWizard();
+            }
+        });
+        s.connect().addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                char[] pwd = s.field().getPassword();
+                if (pwd == null || pwd.length == 0) {
+                    warnStep(s.panel(), text(UiText.WIZ_NEED_PASSWORD));
+                    return;
+                }
+                runSetup(new String(pwd));
+
+                // 用完立刻清空输入框。
+                //
+                // 老实说明这里的边界：密码最终要交给 ssh，而 ssh 读的是<b>字符串</b>
+                // （通过 askpass 的 stdout），所以无法全程只用 char[]。Java 的 String
+                // 一旦创建就不能覆写，因此"内存里绝对没有副本"这件事做不到——我们只能
+                // 保证：不落盘、不进命令行、不进日志、用完清掉输入框里这一份。
+                //
+                // 这比"让用户在终端里敲密码"并不更差：那种做法下密码同样在内存里，
+                // 只是输入途径不同。
+                java.util.Arrays.fill(pwd, '\0');
+                s.field().setText("");
+            }
+        });
+        showWizardStep(s.panel(), text(UiText.DIALOG_CONNECTION_TITLE_WIZARD));
+    }
+
+    /**
+     * 环境不足时的替代页：把公钥和一段可复制的命令摆出来。
+     *
+     * <p>不弹密码框：没有可用的 ssh 或版本太旧时那条路注定失败。
+     */
+    private void stepManual(String reason, String detail) {
+        String pub = publicKeyText();
+        String cmd = "mkdir -p ~/.ssh && chmod 700 ~/.ssh\n"
+                + "echo '" + (pub == null ? "<公钥内容>" : pub.trim())
+                + "' >> ~/.ssh/authorized_keys\n"
+                + "chmod 600 ~/.ssh/authorized_keys";
+        final SetupWizard.Result s = new SetupWizard.Result(
+                WIZARD_STEPS, WIZARD_STEPS, text(UiText.WIZ_MANUAL_TITLE),
+                reason, detail + "\n\n" + cmd, false,
+                text(UiText.BTN_CLOSE));
+        s.close().addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                closeWizard();
+            }
+        });
+        showWizardStep(s.panel(), text(UiText.DIALOG_CONNECTION_TITLE_WIZARD));
+    }
+
+    /** 读公钥内容；没有就返回 null。 */
+    private String publicKeyText() {
+        try {
+            File sshDir = sshDirForSetup();
+            if (sshDir == null) {
+                return null;
+            }
+            File pub = new File(new File(sshDir, "id_rsa_tbvm").getAbsolutePath() + ".pub");
+            return pub.isFile() ? readTextFile(pub) : null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 真正的执行：生成密钥（若没有）→ 用密码装公钥 → 免密复测。
+     *
+     * @param password 一次性密码；装完就不再需要
+     */
+    private void runSetup(final String password) {
+        final javax.swing.JDialog wait = progressDialog();
+        new SwingWorker<String, Void>() {
+            @Override
+            protected String doInBackground() {
+                try {
+                    // ① 生成密钥（若还没有）。已有就不覆盖：覆盖会让装到别的机器上的
+                    //    那把公钥失效。
+                    File sshDir = sshDirForSetup();
+                    if (sshDir == null) {
+                        return text(UiText.MSG_NO_HOME_REASON);
+                    }
+                    File keyFile = new File(sshDir, "id_rsa_tbvm");
+                    String priv = keyFile.getAbsolutePath();
+                    if (!keyFile.isFile()) {
+                        String keygen = OpenSsh.locate("ssh-keygen.exe");
+                        if (keygen == null) {
+                            return text(UiText.MSG_NO_KEYGEN_REASON);
+                        }
+                        if (!sshDir.isDirectory() && !sshDir.mkdirs()) {
+                            return text(UiText.MSG_MKDIR_FAILED, sshDir.getAbsolutePath());
+                        }
+                        OpenSsh.Result r = OpenSsh.runViaCmd(
+                                text(UiText.PFX_EXEC_FAILED), text(UiText.PFX_EXEC_CMD),
+                                keygenCommandLine(keygen, keyComment(), priv));
+                        if (r.exitCode != 0) {
+                            return text(UiText.MSG_GEN_FAILED_CODE,
+                                    String.valueOf(r.exitCode)) + "\n" + r.output;
+                        }
+                    }
+
+                    // ② 用密码把公钥装上去。
+                    String installed = installPublicKeyWithPassword(priv, password);
+                    if (installed != null) {
+                        return installed;    // 非 null 表示失败原因
+                    }
+                    return null;             // 成功
+                } catch (Exception e) {
+                    return String.valueOf(e);
+                }
+            }
+
+            @Override
+            protected void done() {
+                if (wait != null) {
+                    wait.dispose();
+                }
+                String problem = null;
+                try {
+                    problem = get();
+                } catch (Exception e) {
+                    problem = String.valueOf(e);
+                }
+                if (problem != null) {
+                    lastError = problem;
+                    lastErrorIsHard = true;
+                    refreshPanelState();
+                    stepFailed(problem);
+                    return;
+                }
+                lastError = "";
+                lastErrorIsHard = false;
+                // 装好了 → 立刻做一次免密复测。这才是"测试连接"的真意：
+                // 证明从今往后不需要密码也能连上。
+                finishConnect();
+            }
+        }.execute();
+    }
+
+    /**
+     * 用密码把公钥装到虚拟机。
+     *
+     * @return null 表示成功；否则是失败原因
+     */
+    private String installPublicKeyWithPassword(String privKeyPath, String password) {
+        try {
+            File pub = new File(privKeyPath + ".pub");
+            if (!pub.isFile()) {
+                return text(UiText.MSG_NO_PUBFILE_REASON, pub.getAbsolutePath());
+            }
+            String publicKey = readTextFile(pub).trim();
+            if (publicKey.isEmpty()) {
+                return text(UiText.MSG_PUB_EMPTY, pub.getAbsolutePath());
+            }
+            String ssh = OpenSsh.locate("ssh.exe");
+            String remote = "mkdir -p ~/.ssh && chmod 700 ~/.ssh && "
+                    + "touch ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys && "
+                    + "grep -qxF '" + publicKey + "' ~/.ssh/authorized_keys || "
+                    + "echo '" + publicKey + "' >> ~/.ssh/authorized_keys; "
+                    + "echo TBVM_KEY_INSTALLED";
+
+            List<String> cmd = new ArrayList<String>();
+            cmd.add(ssh);
+            cmd.add("-o");
+            cmd.add("BatchMode=no");
+            cmd.add("-o");
+            cmd.add("StrictHostKeyChecking=accept-new");
+            cmd.add("-o");
+            cmd.add("ConnectTimeout=" + timeoutSeconds());
+            // 只走密码；否则 ssh 会先拿还没装上的公钥试一遍，白等一个来回。
+            cmd.add("-o");
+            cmd.add("PreferredAuthentications=password,keyboard-interactive");
+            cmd.add("-o");
+            cmd.add("NumberOfPasswordPrompts=1");
+            cmd.add("-p");
+            cmd.add(portField.getText().trim());
+            cmd.add(userField.getText().trim() + "@" + hostField.getText().trim());
+            cmd.add(remote);
+
+            ProcessBuilder pb = new ProcessBuilder(cmd);
+            // 关键：通过 SSH_ASKPASS 把密码交给 ssh，绝不放进命令行。
+            pb.environment().clear();
+            pb.environment().putAll(SshAskpass.environmentFor(
+                    System.getenv(), SshAskpass.javaExe(),
+                    System.getProperty("java.class.path"), password));
+            pb.redirectErrorStream(true);
+            Process p = pb.start();
+            String out = drainText(p.getInputStream());
+            p.waitFor();
+            if (p.exitValue() != 0 || !out.contains("TBVM_KEY_INSTALLED")) {
+                return text(UiText.MSG_COPY_FAILED, out.trim());
+            }
+            return null;
+        } catch (Exception e) {
+            return String.valueOf(e);
+        }
+    }
+
+    /** 装好之后（或本来就免密时）做一次完整验证，然后进入命名步。 */
+    private void finishConnect() {
+        final javax.swing.JDialog wait = progressDialog();
+        new SwingWorker<String, Void>() {
+            @Override
+            protected String doInBackground() {
+                String ssh = OpenSsh.locate("ssh.exe");
+                try {
+                    List<String> cmd = new ArrayList<String>();
+                    cmd.add(ssh);
+                    cmd.add("-o");
+                    cmd.add("BatchMode=yes");
+                    cmd.add("-o");
+                    cmd.add("StrictHostKeyChecking=accept-new");
+                    cmd.add("-o");
+                    cmd.add("ConnectTimeout=" + timeoutSeconds());
+                    cmd.add("-p");
+                    cmd.add(portField.getText().trim());
+                    cmd.add(userField.getText().trim() + "@" + hostField.getText().trim());
+                    cmd.add("echo TBVM_OK; uname -sr");
+                    ProcessBuilder pb = new ProcessBuilder(cmd);
+                    pb.redirectErrorStream(true);
+                    Process p = pb.start();
+                    String out = drainText(p.getInputStream());
+                    p.waitFor();
+                    if (p.exitValue() == 0 && out.contains("TBVM_OK")) {
+                        return null;
+                    }
+                    return out.trim();
+                } catch (Exception e) {
+                    return String.valueOf(e);
+                }
+            }
+
+            @Override
+            protected void done() {
+                if (wait != null) {
+                    wait.dispose();
+                }
+                String problem = null;
+                try {
+                    problem = get();
+                } catch (Exception e) {
+                    problem = String.valueOf(e);
+                }
+                if (problem != null) {
+                    lastError = problem;
+                    lastErrorIsHard = true;
+                    refreshPanelState();
+                    stepFailed(problem);
+                    return;
+                }
+                lastError = "";
+                refreshPanelState();
+                stepName();
+            }
+        }.execute();
+    }
+
+    /** 失败页。 */
+    private void stepFailed(final String detail) {
+        final SetupWizard.Result s = new SetupWizard.Result(
+                WIZARD_STEPS, WIZARD_STEPS, text(UiText.WIZ_FAIL_TITLE),
+                text(UiText.WIZ_FAIL_HINT), detail, false,
+                text(UiText.BTN_CLOSE));
+        s.close().addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                closeWizard();
+            }
+        });
+        showWizardStep(s.panel(), text(UiText.DIALOG_CONNECTION_TITLE_WIZARD));
+    }
+
+    /** 命名页：连上了，给这条配置起个名字。 */
+    private void stepName() {
+        final SetupWizard.Name s = new SetupWizard.Name(
+                WIZARD_STEPS, WIZARD_STEPS, text(UiText.WIZ_OK_TITLE),
+                text(UiText.WIZ_OK_HINT), text(UiText.LBL_NAME),
+                text(UiText.WIZ_NAME_NOTE), text(UiText.BTN_SKIP),
+                text(UiText.BTN_SAVE));
+        s.field().setText(nameField.getText());
+        s.skip().addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                closeWizard();
+            }
+        });
+        s.save().addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                String v = s.field().getText().trim();
+                nameField.setText(v);
+                saveCurrentProfile();
+                closeWizard();
+            }
+        });
+        showWizardStep(s.panel(), text(UiText.DIALOG_CONNECTION_TITLE_WIZARD));
+    }
+
+    /**
+     * 保存当前这条配置。
+     *
+     * <p>名字留空就用 {@code 用户@主机:端口}：一台机器的人不必被迫起名字。
+     * 同一台机器再次保存会<b>更新</b>那一条（{@code ConnectionStore.save} 按身份去重），
+     * 不会产生重复条目。
+     */
+    private void saveCurrentProfile() {
+        SshTarget t = readTarget();
+        if (t.host.isEmpty()) {
+            return;
+        }
+        String name = nameField.getText().trim();
+        if (name.isEmpty()) {
+            name = defaultLabelFor(t);
+            nameField.setText(name);
+        }
+        t.label = name;
+        final SshTarget snapshot = t;
+        new SwingWorker<Boolean, Void>() {
+            @Override
+            protected Boolean doInBackground() {
+                return Boolean.valueOf(store.save(snapshot));
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    if (get().booleanValue()) {
+                        paintStatus(OK_COLOR, OK_BG,
+                                text(UiText.MSG_SAVED_TITLE, snapshot.label));
+                        statusArea.setText(text(UiText.MSG_SAVED_BODY, snapshot.label)
+                                + "\n  " + snapshot.toDisplay() + "\n");
+                        refreshPanelState();
+                    } else {
+                        reportFailure(text(UiText.MSG_SAVE_REJECTED),
+                                text(UiText.MSG_SAVE_REJECTED_REASON, snapshot.label),
+                                null);
+                    }
+                } catch (Exception ex) {
+                    reportFailure(text(UiText.MSG_SAVE_FAILED),
+                            String.valueOf(ex.getCause() == null ? ex : ex.getCause()),
+                            null);
+                }
+            }
+        }.execute();
     }
 
     // ------------------------------------------------------------------
@@ -861,57 +1328,6 @@ public final class ConnectionPanel extends JPanel {
     // 按键：测试连接
     // ------------------------------------------------------------------
 
-    /**
-     * 在后台线程跑一次 {@link VmConnector#connect()}，把结果画到状态区。
-     *
-     * <p>先做本地校验再连线：主机/用户名没填就发出去的连接是纯粹的浪费时间，
-     * 而且用户要等十几秒才看到「请填写用户名」这种本该立刻知道的事。
-     */
-    public void testConnection() {
-        final SshTarget target = readTarget();
-        String problem = takeInputProblem();
-        if (problem == null) {
-            problem = validateLocalized(target);
-        }
-        if (problem != null) {
-            // 参数都没填全就点了测试：reportFailure 里统一弹窗。
-            reportFailure(text(UiText.MSG_INCOMPLETE), problem, null);
-            return;
-        }
-
-        setBusy(true);
-        // 进度提示，不弹窗；结果由 showReport 发出。
-        paintStatusBusy(NEUTRAL_COLOR, NEUTRAL_BG,
-                text(UiText.MSG_CONNECTING_TO, target.toDisplay()));
-        statusArea.setText(text(UiText.MSG_CONNECTING_BG,
-                String.valueOf(target.timeoutSeconds)) + "\n");
-        new SwingWorker<ConnectionReport, Void>() {
-            @Override
-            protected ConnectionReport doInBackground() {
-                // 连接失败不抛异常：VmConnector 会把原因写进 report.error，
-                // 界面据此展示。真抛了也会被 done() 里的 get() 捞住。
-                return new VmConnector(target).connect();
-            }
-
-            @Override
-            protected void done() {
-                ConnectionReport report = null;
-                try {
-                    report = get();
-                } catch (Exception ex) {
-                    Throwable cause = ex.getCause() == null ? ex : ex.getCause();
-                    setBusy(false);
-                    reportFailure(text(UiText.MSG_CONNECT_THREW),
-                            String.valueOf(cause), null);
-                    return;
-                }
-                setBusy(false);
-                // 弹窗由 showReport 内部的 paintStatus / reportFailure 发出，
-                // 这里不再单独弹一次，否则会连弹两个窗。
-                showReport(target, report);
-            }
-        }.execute();
-    }
 
     /**
      * 把 {@link #paintStatus} 刚记下的那次结果弹成一个窗。
@@ -1074,234 +1490,12 @@ public final class ConnectionPanel extends JPanel {
     // 按键：保存 / 删除 / 载入配置
     // ------------------------------------------------------------------
 
-    private void saveConfig() {
-        SshTarget t = readTarget();
 
-        // 主机为空的配置存下来没有意义，先拦这个：它比「名字没填」更根本，
-        // 而且名字留空本来是允许的（见下）。
-        if (t.host.isEmpty()) {
-            reportFailure(text(UiText.MSG_NO_HOST),
-                    text(UiText.MSG_NO_HOST_REASON), null);
-            return;
-        }
 
-        String name = nameField.getText().trim();
-        if (name.isEmpty()) {
-            // 名字可以留空。
-            //
-            // 绝大多数人只有一台机器，给唯一的东西起个名字只是白加一层间接：
-            // 用户先要想个名字，之后在多处看到的是这个名字而不是地址，反而更难认。
-            // 留空就用「用户@主机:端口」当标签，和界面别处显示的写法一致。
-            name = defaultLabelFor(t);
-        }
-        t.label = name;
-        // 名字可能刚刚由主机地址推出来，worker 里要用的是最终值。
-        final String savedName = name;
 
-        // 表单内容在事件线程上一次性捕获，后台线程只碰这个不可变快照，
-        // 避免 worker 跑起来之后用户又改了表单导致存下去的和看到的不一致。
-        final SshTarget snapshot = t;
 
-        setBusy(true);
-        new SwingWorker<Boolean, Void>() {
-            @Override
-            protected Boolean doInBackground() {
-                // 走磁盘，放到后台。save 返回 false 表示存储层拒绝了这条记录
-                // （例如名称非法），这跟抛异常一样要如实告诉用户，不能当成功。
-                return Boolean.valueOf(store.save(snapshot));
-            }
 
-            @Override
-            protected void done() {
-                setBusy(false);
-                boolean saved = false;
-                try {
-                    saved = get().booleanValue();
-                } catch (Exception ex) {
-                    Throwable cause = ex.getCause() == null ? ex : ex.getCause();
-                    reportFailure(text(UiText.MSG_SAVE_FAILED), String.valueOf(cause), null);
-                    return;
-                }
-                reloadSavedNames();
-                if (!saved) {
-                    reportFailure(text(UiText.MSG_SAVE_REJECTED),
-                            text(UiText.MSG_SAVE_REJECTED_REASON, savedName), null);
-                    return;
-                }
-                paintStatus(OK_COLOR, OK_BG, text(UiText.MSG_SAVED_TITLE, savedName));
-                statusArea.setForeground(OK_COLOR);
-                statusArea.setText(text(UiText.MSG_SAVED_BODY, savedName) + "\n"
-                        + text(UiText.MSG_SAVED_TARGET, snapshot.toDisplay()) + "\n"
-                        + text(UiText.MSG_SAVED_KEY, snapshot.keyPath == null
-                                ? text(UiText.MSG_SAVED_KEY_NONE) : snapshot.keyPath) + "\n");
-                updateDeleteEnabled();
-            }
-        }.execute();
-    }
 
-    private void deleteConfig() {
-        final String name = selectedName();
-        if (name == null || name.isEmpty()) {
-            reportFailure(text(UiText.MSG_NO_SELECTION),
-                    text(UiText.MSG_NO_SELECTION_DELETE), null);
-            return;
-        }
-        int choice = JOptionPane.showConfirmDialog(this,
-                text(UiText.MSG_CONFIRM_DELETE, name),
-                text(UiText.MSG_CONFIRM_DELETE_TITLE),
-                JOptionPane.OK_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE);
-        if (choice != JOptionPane.OK_OPTION) {
-            return;
-        }
-
-        setBusy(true);
-        new SwingWorker<Boolean, Void>() {
-            @Override
-            protected Boolean doInBackground() {
-                return Boolean.valueOf(store.remove(name));
-            }
-
-            @Override
-            protected void done() {
-                setBusy(false);
-                boolean removed = false;
-                try {
-                    removed = get().booleanValue();
-                } catch (Exception ex) {
-                    Throwable cause = ex.getCause() == null ? ex : ex.getCause();
-                    reportFailure(text(UiText.MSG_DELETE_FAILED), String.valueOf(cause), null);
-                    return;
-                }
-                reloadSavedNames();
-                if (removed) {
-                    paintStatus(OK_COLOR, OK_BG, text(UiText.MSG_DELETED_TITLE, name));
-                    statusArea.setForeground(OK_COLOR);
-                    statusArea.setText(text(UiText.MSG_DELETED_BODY, name) + "\n");
-                } else {
-                    reportFailure(text(UiText.MSG_MISSING_TITLE),
-                            text(UiText.MSG_MISSING_DELETED, name), null);
-                }
-                updateDeleteEnabled();
-            }
-        }.execute();
-    }
-
-    /** 把下拉框里选中的配置载入表单。读盘也放后台。 */
-    private void loadSelectedConfig() {
-        final String name = selectedName();
-        if (name == null || name.isEmpty()) {
-            reportFailure(text(UiText.MSG_NO_SELECTION),
-                    text(UiText.MSG_NO_SELECTION_LOAD), null);
-            return;
-        }
-
-        setBusy(true);
-        new SwingWorker<SshTarget, Void>() {
-            @Override
-            protected SshTarget doInBackground() {
-                return store.load(name);
-            }
-
-            @Override
-            protected void done() {
-                setBusy(false);
-                SshTarget t = null;
-                try {
-                    t = get();
-                } catch (Exception ex) {
-                    Throwable cause = ex.getCause() == null ? ex : ex.getCause();
-                    reportFailure(text(UiText.MSG_LOAD_FAILED), String.valueOf(cause), null);
-                    return;
-                }
-                if (t == null) {
-                    reportFailure(text(UiText.MSG_MISSING_TITLE),
-                            text(UiText.MSG_MISSING, name), null);
-                    return;
-                }
-                writeTarget(t);
-                if (t.label == null || t.label.trim().isEmpty()) {
-                    nameField.setText(name);
-                }
-                paintStatus(NEUTRAL_COLOR, NEUTRAL_BG, text(UiText.MSG_LOADED_TITLE, name));
-                statusArea.setForeground(NEUTRAL_COLOR);
-                statusArea.setText(text(UiText.MSG_LOADED_BODY, name, t.toDisplay()) + "\n");
-                updateDeleteEnabled();
-            }
-        }.execute();
-    }
-
-    /** 重新从本地配置读出名称列表填进下拉框。 */
-    private void reloadSavedNames() {
-        String keep = selectedName();
-        List<SshTarget> all = store.list();
-        DefaultComboBoxModel<String> model = new DefaultComboBoxModel<String>();
-        for (SshTarget t : all) {
-            String n = t.label == null ? "" : t.label.trim();
-            if (!n.isEmpty()) {
-                model.addElement(n);
-            }
-        }
-        savedBox.setModel(model);
-        if (keep != null && !keep.isEmpty()) {
-            savedBox.setSelectedItem(keep);
-        }
-        updateDeleteEnabled();
-    }
-
-    /** 下拉框当前选中的配置名，没有则为 null。 */
-    private String selectedName() {
-        Object sel = savedBox.getSelectedItem();
-        if (sel == null) {
-            return null;
-        }
-        String s = String.valueOf(sel).trim();
-        return s.isEmpty() ? null : s;
-    }
-
-    /**
-     * 「删除配置」只在能确定要删哪条时才可用。
-     *
-     * <p>选中的配置名和表单里的配置名不一致时也禁用：那说明用户改了名字准备存
-     * 新条目，这时点删除很可能删错东西。
-     */
-    private void updateDeleteEnabled() {
-        String sel = selectedName();
-        boolean ok = !busy && sel != null;
-        deleteButton.setEnabled(ok);
-        loadSavedButton.setEnabled(!busy && sel != null);
-    }
-
-    private void chooseKeyFile() {
-        JFileChooser chooser = new JFileChooser();
-        chooser.setDialogTitle(text(UiText.DLG_CHOOSE_KEY));
-        chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
-        chooser.setFileFilter(new FileNameExtensionFilter(
-                text(UiText.FILTER_PRIVKEY),
-                "rsa", "ed25519", "ecdsa", "dsa", "pem", "ppk"));
-        String cur = keyField.getText().trim();
-        if (!cur.isEmpty()) {
-            File f = new File(cur);
-            if (f.getParentFile() != null && f.getParentFile().isDirectory()) {
-                chooser.setCurrentDirectory(f.getParentFile());
-            }
-        } else {
-            String home = System.getProperty("user.home");
-            if (home != null) {
-                File sshDir = new File(home, ".ssh");
-                if (sshDir.isDirectory()) {
-                    chooser.setCurrentDirectory(sshDir);
-                }
-            }
-        }
-        // showOpenDialog 会阻塞事件线程，这是文件对话框的固有行为，属于用户
-        // 正在交互的模态等待，不是后台任务，所以放在事件线程里是对的。
-        if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
-            File f = chooser.getSelectedFile();
-            if (f != null) {
-                keyField.setText(f.getAbsolutePath());
-            }
-        }
-    }
 
     // ------------------------------------------------------------------
     // 按键：生成密钥
@@ -1420,8 +1614,82 @@ public final class ConnectionPanel extends JPanel {
                         + "\n" + text(UiText.MSG_GEN_TAIL) + "\n"
                         + "\n" + text(UiText.MSG_GEN_OUTPUT) + "\n" + r.output + "\n");
                 statusArea.setCaretPosition(0);
+                if (afterGenerate != null) {
+                    Runnable next = afterGenerate;
+                    afterGenerate = null;
+                    next.run();
+                }
             }
         }.execute();
+    }
+
+    /**
+     * 生成成功后要接着做的事，由 {@link #setupKey()} 设置。
+     *
+     * <p>存在的原因只有一个：「设置密钥」要在密钥生成<b>之后</b>再把它传到虚拟机，
+     * 而生成是异步的。用回调而不是让 setupKey 轮询或等待，是因为等待会占住事件线程。
+     * 一次用完即清，避免影响下次单独点「生成密钥」。
+     */
+    private Runnable afterGenerate;
+
+    /**
+     * 「设置密钥」：一步把密钥准备好并装到虚拟机上。
+     *
+     * <h2>为什么可以合并</h2>
+     *
+     * <p>两件事本来就是一条链：生成密钥写在<b>固定路径</b> {@code ~/.ssh/id_rsa_tbvm}，
+     * 并把它填进密钥框；复制公钥读的正是密钥框里的路径 + 表单里的 IP/用户名/端口。
+     * 所以生成完必然知道要传哪个文件，用户不需要在两步之间做任何选择。
+     *
+     * <p>分三种情况：
+     * <ul>
+     *   <li>密钥不存在 → 生成，然后自动传，一步到位；</li>
+     *   <li>密钥已存在 → 不覆盖（覆盖会让之前已经装到别的机器的公钥失效），直接传；</li>
+     *   <li>表单填得不全 → 明确说缺什么，什么都不做。</li>
+     * </ul>
+     *
+     * <p>传之前需要 IP/用户名/端口，所以先把表单校验跑一遍——否则会先生成了一把
+     * 密钥、再告诉你地址没填，白做一步。
+     */
+    private void setupKey() {
+        final SshTarget target = readTarget();
+        String problem = takeInputProblem();
+        if (problem == null) {
+            problem = validateLocalized(target);
+        }
+        if (problem != null) {
+            reportFailure(text(UiText.MSG_SETUP_NEED_FORM), problem, null);
+            return;
+        }
+
+        File sshDir = sshDirForSetup();
+        if (sshDir == null) {
+            return;   // 已经报过错
+        }
+        File keyFile = new File(sshDir, "id_rsa_tbvm");
+        if (keyFile.isFile()) {
+            // 已有密钥：不重新生成，直接把它装上去。
+            copyPublicKeyToRemote();
+            return;
+        }
+        afterGenerate = new Runnable() {
+            @Override
+            public void run() {
+                copyPublicKeyToRemote();
+            }
+        };
+        generateKey();
+    }
+
+    /** 「设置密钥」用的 .ssh 目录；拿不到用户目录时报错并返回 null。 */
+    private File sshDirForSetup() {
+        String home = System.getProperty("user.home");
+        if (home == null || home.trim().isEmpty()) {
+            reportFailure(text(UiText.MSG_NO_HOME), text(UiText.MSG_NO_HOME_REASON),
+                    keygenAdvice());
+            return null;
+        }
+        return new File(home, ".ssh");
     }
 
     /** 生成密钥时用的注释，写清来源方便日后在 authorized_keys 里认出来。 */
@@ -1567,15 +1835,14 @@ public final class ConnectionPanel extends JPanel {
             return;
         }
 
-        int choice = JOptionPane.showConfirmDialog(this,
-                text(UiText.MSG_CONFIRM_COPY, pubFile.getAbsolutePath(),
-                        target.toDisplay()),
-                text(UiText.MSG_CONFIRM_COPY_TITLE),
-                JOptionPane.OK_CANCEL_OPTION, JOptionPane.QUESTION_MESSAGE);
-        if (choice != JOptionPane.OK_OPTION) {
-            return;
-        }
-
+        // 这里不再弹确认框。
+        //
+        // 曾经弹一次「确定把 X 装到 Y 吗」。但地址、用户名、端口和密钥都是用户刚在
+        // 表单里填好的，再问一句等于让他把刚填的东西读一遍确认——而这一步的目的
+        // （免密登录）本来就是他按这个按钮想要的结果。多一次点击换不到额外的判断。
+        //
+        // 想核对的话，"测试连接"会告诉你能不能连上；而这里写入的是追加（不是覆盖）
+        // authorized_keys，重复安装同一个公钥也不会破坏别的登录方式。
         final String ssh = sshExe;
         setBusy(true);
         // 进度提示，不弹窗。
@@ -1695,24 +1962,17 @@ public final class ConnectionPanel extends JPanel {
     /**
      * 切换忙碌状态。
      *
-     * <p>忙碌时把所有会再起一个后台任务的按钮禁用掉。不禁用的话，用户可以连点
-     * 五次「测试连接」，五个 worker 并发跑，最后到达的那个结果覆盖前面的，
-     * 界面显示的可能是任意一次的结果——比等一会儿更让人困惑。
-     *
-     * <p>「测试连接」另外把文字换成「正在连接…」：这是唯一一个会让用户盯着等的
-     * 按钮，而它原来只是变灰——用户看不出是在跑还是自己被卡住了。文字由
-     * {@link #applyLanguage()} 之外的地方设，所以切语言时也要照看重设一次。
+     * <p>忙碌时禁用入口按钮并换成「正在连接…」：否则用户会连点几次，几个后台任务
+     * 并发跑，最后到达的那个结果覆盖前面的，界面显示的可能是任意一次的结果——比等
+     * 一会儿更让人困惑。
      */
     private void setBusy(boolean value) {
         busy = value;
-        for (JButton b : gatedButtons) {
-            b.setEnabled(!value);
-        }
-        testButton.setText(value
+        connectButton.setEnabled(!value);
+        connectButton.setText(value
                 ? text(UiText.BTN_TESTING)
-                : text(UiText.BTN_TEST));
+                : text(UiText.BTN_CONNECT));
         setCursor(value ? Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR) : null);
-        updateDeleteEnabled();
     }
 
     /**

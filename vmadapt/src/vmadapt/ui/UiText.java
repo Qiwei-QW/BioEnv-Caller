@@ -188,6 +188,65 @@ final class UiText {
     /** 按钮：测试连接进行中的文案。 */
     static final String BTN_TESTING = "btn.testing";
 
+    /** 临时：评审用布局变体的文案。选定后保留需要的那些。 */
+    static final String SEC_ADVANCED = "sec.advanced";
+    static final String BTN_ADVANCED = "btn.advanced";
+    static final String BTN_ADVANCED_HIDE = "btn.advancedHide";
+    static final String HINT_TEST_FIRST = "hint.testFirst";
+
+    /** 按钮：设置密钥（生成 + 安装到远端，一步完成）。 */
+    static final String BTN_SETUP_KEY = "btn.setupKey";
+    static final String BTN_SETUP_KEY_TIP = "btn.setupKey.tip";
+
+    /** 错误：设置密钥时表单还没填全。 */
+    static final String MSG_SETUP_NEED_FORM = "msg.setupNeedForm";
+
+    /** 主面板：唯一入口按钮「连接虚拟机…」。 */
+    static final String BTN_CONNECT = "btn.connect";
+    static final String BTN_CONNECT_TIP = "btn.connect.tip";
+
+    /** 主面板：还没有配置任何机器。 */
+    static final String PANEL_NO_TARGET = "panel.noTarget";
+    static final String PANEL_NO_TARGET_HINT = "panel.noTargetHint";
+    static final String PANEL_READY_HINT = "panel.readyHint";
+
+    // 向导各步的标题、提示与按钮。
+    static final String DIALOG_CONNECTION_TITLE_WIZARD = "dialog.wizardTitle";
+    static final String WIZ_HOST_TITLE = "wiz.host.title";
+    static final String WIZ_HOST_HINT = "wiz.host.hint";
+    static final String WIZ_PORT_TITLE = "wiz.port.title";
+    static final String WIZ_PORT_HINT = "wiz.port.hint";
+    static final String WIZ_PORT_PH = "wiz.port.ph";
+    static final String WIZ_USER_TITLE = "wiz.user.title";
+    static final String WIZ_USER_HINT = "wiz.user.hint";
+    static final String WIZ_KEY_TITLE = "wiz.key.title";
+    static final String WIZ_KEY_HINT = "wiz.key.hint";
+    static final String WIZ_KEY_PH = "wiz.key.ph";
+    static final String WIZ_KEY_DEFAULT = "wiz.key.default";
+    static final String WIZ_CONFIRM_TITLE = "wiz.confirm.title";
+    static final String WIZ_CONFIRM_HINT = "wiz.confirm.hint";
+    static final String WIZ_PWD_TITLE = "wiz.pwd.title";
+    static final String WIZ_PWD_HINT = "wiz.pwd.hint";
+    static final String WIZ_PWD_NOTE = "wiz.pwd.note";
+    static final String WIZ_WORKING = "wiz.working";
+    static final String WIZ_OK_TITLE = "wiz.ok.title";
+    static final String WIZ_OK_HINT = "wiz.ok.hint";
+    static final String WIZ_NAME_NOTE = "wiz.name.note";
+    static final String WIZ_FAIL_TITLE = "wiz.fail.title";
+    static final String WIZ_FAIL_HINT = "wiz.fail.hint";
+    static final String WIZ_MANUAL_TITLE = "wiz.manual.title";
+    static final String WIZ_OLD_SSH_TITLE = "wiz.oldSsh.title";
+    static final String WIZ_OLD_SSH_REASON = "wiz.oldSsh.reason";
+    static final String WIZ_NEED_HOST = "wiz.needHost";
+    static final String WIZ_NEED_USER = "wiz.needUser";
+    static final String WIZ_NEED_PASSWORD = "wiz.needPassword";
+    static final String BTN_NEXT = "btn.next";
+    static final String BTN_BACK = "btn.back";
+    static final String BTN_START = "btn.start";
+    static final String BTN_CANCEL = "btn.cancel";
+    static final String BTN_CLOSE = "btn.close";
+    static final String BTN_SKIP = "btn.skip";
+
     /** 选择私钥文件的对话框。 */
     static final String DLG_CHOOSE_KEY = "dlg.choosekey";
     static final String FILTER_PRIVKEY = "dlg.filter.privkey";
@@ -504,6 +563,113 @@ final class UiText {
         put(SEC_LOGIN, "How to log in", "登录方式");
         put(SEC_SAVEAS, "Save / load a profile", "保存与载入配置");
         put(BTN_TESTING, "Connecting...", "正在连接…");
+
+        put(SEC_ADVANCED, "Advanced", "高级");
+        put(BTN_ADVANCED, "\u25b8 Advanced (timeout, profile name, keys)",
+                "\u25b8 高级（超时、配置名称、密钥工具）");
+        put(BTN_ADVANCED_HIDE, "\u25be Advanced (timeout, profile name, keys)",
+                "\u25be 高级（超时、配置名称、密钥工具）");
+        put(HINT_TEST_FIRST, "(test it first, then save)",
+                "（先测通，再保存）");
+
+        put(BTN_SETUP_KEY, "Set up key", "设置密钥");
+        put(BTN_SETUP_KEY_TIP,
+                "Generate a key if there is none, then install its public half "
+                        + "on the VM so login needs no password. Uses the host, "
+                        + "user and port filled in above.",
+                "还没有密钥就生成一把，然后把公钥装到虚拟机上，之后登录免密。"
+                        + "用上面填好的主机、用户名和端口。");
+        put(MSG_SETUP_NEED_FORM, "Set up key needs these first:",
+                "要设置密钥，请先填好：");
+
+        put(BTN_CONNECT, "Connect to a VM...", "连接虚拟机…");
+        put(BTN_CONNECT_TIP,
+                "Opens a step-by-step wizard: address, port, user, key, "
+                        + "then connect and save.",
+                "打开一步步的向导：地址、端口、用户名、密钥，然后连接并保存。");
+        put(PANEL_NO_TARGET, "No VM configured yet", "还没有配置虚拟机");
+        put(PANEL_NO_TARGET_HINT,
+                "Click 'Connect to a VM...' to set one up. It takes five short steps.",
+                "点「连接虚拟机…」开始配置，一共五步。");
+        put(PANEL_READY_HINT,
+                "Click 'Connect to a VM...' to test the connection or switch machine.",
+                "点「连接虚拟机…」可以测试连接，或换一台机器。");
+
+        put(DIALOG_CONNECTION_TITLE_WIZARD, "Linux VM connection",
+                "虚拟机连接配置");
+        put(WIZ_HOST_TITLE, "Where is the VM?", "虚拟机在哪里？");
+        put(WIZ_HOST_HINT,
+                "Enter the VM's IP address. Run ip addr inside the VM to see it; "
+                        + "it is usually 192.168.x.x.",
+                "填虚拟机的 IP 地址。在虚拟机的终端里执行 ip addr 可以看到，"
+                        + "通常是 192.168.x.x。");
+        put(WIZ_PORT_TITLE, "Which port?", "用哪个端口？");
+        put(WIZ_PORT_HINT,
+                "SSH is 22 unless you changed it in the VM's sshd config.",
+                "SSH 默认是 22。只有在虚拟机上改过 sshd 配置时才需要改这里。");
+        put(WIZ_PORT_PH, "Default 22", "默认 22");
+        put(WIZ_USER_TITLE, "Which account?", "用哪个账号登录？");
+        put(WIZ_USER_HINT,
+                "The login name inside the VM - the one you set when installing it, "
+                        + "often ubuntu.",
+                "虚拟机里你的登录名。装系统时设的那个，常见是 ubuntu。");
+        put(WIZ_KEY_TITLE, "Which key?", "用哪个密钥？");
+        put(WIZ_KEY_HINT,
+                "Leave it blank and the plugin generates a dedicated key in ~/.ssh. "
+                        + "If you already have your own key, give its full path.",
+                "可以留空——插件会在 ~/.ssh 下生成一把专用密钥。"
+                        + "已经有自己的密钥时，填它的完整路径。");
+        put(WIZ_KEY_PH, "Leave blank for the default key (recommended)",
+                "留空则使用默认密钥（推荐）");
+        put(WIZ_KEY_DEFAULT, "(default key)", "（使用默认密钥）");
+        put(WIZ_CONFIRM_TITLE, "Check before connecting", "确认一下");
+        put(WIZ_CONFIRM_HINT,
+                "This will create an SSH key pair on this computer. The private key "
+                        + "stays here; the public key is appended to your VM.",
+                "点「开始连接」后：会在本机生成 SSH 密钥对，私钥留在本机，"
+                        + "公钥追加到虚拟机上。");
+        put(WIZ_PWD_TITLE, "Enter the VM login password",
+                "请输入虚拟机登录密码");
+        put(WIZ_PWD_HINT,
+                "This is the last time a password is needed. Once the public key is "
+                        + "installed, connections use the key instead.",
+                "这是最后一次需要密码。装上公钥之后，以后连接都用免密。");
+        put(WIZ_PWD_NOTE,
+                "Used once to install the public key. The password is not saved.",
+                "只用于这一次安装公钥，密码不会被保存。");
+        put(WIZ_WORKING, "Connecting, please wait...", "正在连接，请稍候…");
+        put(WIZ_OK_TITLE, "Connected", "连接成功");
+        put(WIZ_OK_HINT,
+                "Give this machine a name so you can pick it next time.",
+                "给这台机器起个名字，下次就能直接选它。");
+        put(WIZ_NAME_NOTE,
+                "Leave blank to use \"user@host:port\". You can rename it later.",
+                "留空则用「用户名@主机:端口」。以后可以随时改。");
+        put(WIZ_FAIL_TITLE, "Connection failed", "连接失败");
+        put(WIZ_FAIL_HINT,
+                "Nothing was changed on the VM. Check the reason below and try again.",
+                "虚拟机上没有做任何改动。请对照下面的原因重试。");
+        put(WIZ_MANUAL_TITLE, "OpenSSH is not usable on this computer",
+                "这台电脑的 OpenSSH 不可用");
+        put(WIZ_OLD_SSH_TITLE, "OpenSSH is too old for automatic setup",
+                "OpenSSH 版本太旧，无法自动安装公钥");
+        put(WIZ_OLD_SSH_REASON,
+                "The plugin needs OpenSSH 8.4 or newer to supply a password "
+                        + "without putting it on the command line. This computer has: {0}",
+                "插件需要 OpenSSH 8.4 或更新版本，才能在不把密码写进命令行的前提下"
+                        + "使用密码。这台电脑上是：{0}");
+        put(WIZ_NEED_HOST, "Enter the VM's IP address first.",
+                "请先填虚拟机的 IP 地址。");
+        put(WIZ_NEED_USER, "Enter the login user name first.",
+                "请先填登录用户名。");
+        put(WIZ_NEED_PASSWORD, "Enter the password, or click Back.",
+                "请输入密码，或点「上一步」返回。");
+        put(BTN_NEXT, "Next", "下一步");
+        put(BTN_BACK, "Back", "上一步");
+        put(BTN_START, "Start connecting", "开始连接");
+        put(BTN_CANCEL, "Cancel", "取消");
+        put(BTN_CLOSE, "Close", "关闭");
+        put(BTN_SKIP, "Skip", "跳过");
         put(HINT_BACKGROUND,
                 "Tip: every long-running task runs on a background thread, "
                         + "so the window stays responsive while connecting.",
