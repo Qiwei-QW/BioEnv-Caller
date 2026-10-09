@@ -72,9 +72,6 @@ public final class Strings {
     /** 主按钮：扫描 conda 环境。 */
     public static final String MENU_DETECT = "menu.detect";
 
-    /** 主按钮：查看帮助原文。 */
-    public static final String MENU_VIEW_HELP = "menu.viewHelp";
-
     /** 主按钮：从表单重建命令预览。 */
     public static final String MENU_REBUILD_PREVIEW = "menu.rebuildPreview";
 
@@ -647,12 +644,6 @@ public final class Strings {
     /** 表单：附加参数的提示。 */
     public static final String FORM_EXTRA_ARGS_TIP = "form.extraArgsTip";
 
-    /** 表单：帮助文本框的标题（带命令占位）。 */
-    public static final String FORM_HELP_TITLE = "form.helpTitle";
-
-    /** 表单：帮助文本框的标题（无命令）。 */
-    public static final String FORM_HELP_TITLE_PLAIN = "form.helpTitlePlain";
-
     /** 表单：还没有读取过帮助文本。 */
     public static final String FORM_NO_HELP_YET = "form.noHelpYet";
 
@@ -865,6 +856,46 @@ public final class Strings {
     public static final String DIALOG_PARAMS_UNAVAILABLE = "dialog.paramsUnavailable";
 
     // ------------------------------------------------------------------
+    // 工具助手（帮助原文 + 我的帮助）
+    // ------------------------------------------------------------------
+
+    /** 工具助手：窗口标题（带命令占位）。 */
+    public static final String ASSISTANT_TITLE = "assistant.title";
+
+    /** 工具助手：按钮文案。 */
+    public static final String ASSISTANT_BUTTON = "assistant.button";
+
+    /** 工具助手：标签页「帮助原文」。 */
+    public static final String ASSISTANT_TAB_HELP = "assistant.tabHelp";
+
+    /** 工具助手：标签页「我的帮助」。 */
+    public static final String ASSISTANT_TAB_NOTES = "assistant.tabNotes";
+
+    /** 工具助手：帮助原文页的说明。 */
+    public static final String ASSISTANT_HELP_HINT = "assistant.helpHint";
+
+    /** 工具助手：我的帮助页的说明。 */
+    public static final String ASSISTANT_NOTES_HINT = "assistant.notesHint";
+
+    /** 工具助手：明确告知备注不参与解析。 */
+    public static final String ASSISTANT_NOTES_NOTE = "assistant.notesNote";
+
+    /** 工具助手：我的帮助页还没有内容时的占位提示。 */
+    public static final String ASSISTANT_NOTES_EMPTY = "assistant.notesEmpty";
+
+    /** 工具助手：清空按钮。 */
+    public static final String ASSISTANT_CLEAR = "assistant.clear";
+
+    /** 工具助手：保存按钮。 */
+    public static final String ASSISTANT_SAVE = "assistant.save";
+
+    /** 工具助手：取消按钮。 */
+    public static final String ASSISTANT_CANCEL = "assistant.cancel";
+
+    /** 工具助手：已保存的状态提示。 */
+    public static final String ASSISTANT_SAVED = "assistant.saved";
+
+    // ------------------------------------------------------------------
     // 语言包本体
     // ------------------------------------------------------------------
 
@@ -884,7 +915,6 @@ public final class Strings {
 
     static {
         put(ZH_TEXT, EN_TEXT, MENU_DETECT, "扫描 conda 环境", "Detect conda environments");
-        put(ZH_TEXT, EN_TEXT, MENU_VIEW_HELP, "查看帮助原文", "View help text");
         put(ZH_TEXT, EN_TEXT, MENU_REBUILD_PREVIEW, "从表单重建", "Rebuild from form");
 
         put(ZH_TEXT, EN_TEXT, STATUS_READY, "就绪。点击「扫描 conda 环境」。",
@@ -1211,6 +1241,33 @@ public final class Strings {
                 "这个命令的参数还不可用。先打开它，然后重试。",
                 "This tool's parameters are not available yet. Open it and try again.");
 
+        // --- 工具助手 ---
+        put(ZH_TEXT, EN_TEXT, ASSISTANT_TITLE, "工具助手 - {0}",
+                "Tool assistant - {0}");
+        put(ZH_TEXT, EN_TEXT, ASSISTANT_BUTTON, "工具助手", "Tool assistant");
+        put(ZH_TEXT, EN_TEXT, ASSISTANT_TAB_HELP, "帮助原文", "Original help");
+        put(ZH_TEXT, EN_TEXT, ASSISTANT_TAB_NOTES, "我的帮助", "My notes");
+        put(ZH_TEXT, EN_TEXT, ASSISTANT_HELP_HINT,
+                "工具自己打印的文本，一字不改。",
+                "The text the tool itself printed, kept as it came.");
+        put(ZH_TEXT, EN_TEXT, ASSISTANT_NOTES_HINT,
+                "写下工具没讲清楚的地方，或你自己的备注。只对这个工具有效。",
+                "Write down what the tool does not explain, or your own reminders. "
+                        + "Only this tool sees them.");
+        put(ZH_TEXT, EN_TEXT, ASSISTANT_NOTES_NOTE,
+                "备注只供查看，不会参与参数解析，也不会改变上面的参数表。",
+                "Notes are for reading only: they are not parsed and never change "
+                        + "the parameter form.");
+        put(ZH_TEXT, EN_TEXT, ASSISTANT_NOTES_EMPTY,
+                "还没有写过备注。可以记下常用参数、容易踩的坑、或者一段能跑通的命令。",
+                "No notes yet. Useful things to keep here: the parameters you always "
+                        + "use, a trap you hit, or a command line that worked.");
+        put(ZH_TEXT, EN_TEXT, ASSISTANT_CLEAR, "清空", "Clear");
+        put(ZH_TEXT, EN_TEXT, ASSISTANT_SAVE, "保存", "Save");
+        put(ZH_TEXT, EN_TEXT, ASSISTANT_CANCEL, "取消", "Cancel");
+        put(ZH_TEXT, EN_TEXT, ASSISTANT_SAVED, "已保存 {0} 的备注。",
+                "Notes for {0} saved.");
+
         // --- FileDialogs ---
         put(ZH_TEXT, EN_TEXT, FILE_OVERWRITE_QUESTION,
                 "文件已存在，要覆盖吗？\n{0}", "Overwrite existing file?\n{0}");
@@ -1375,8 +1432,6 @@ public final class Strings {
                 "Arguments the form does not show, written one per line. "
                         + "They are appended to the command in the order written, so a "
                         + "parameter the help never described can still be passed.");
-        put(ZH_TEXT, EN_TEXT, FORM_HELP_TITLE, "帮助文本 - {0}", "Help text - {0}");
-        put(ZH_TEXT, EN_TEXT, FORM_HELP_TITLE_PLAIN, "帮助文本", "Help text");
         put(ZH_TEXT, EN_TEXT, FORM_NO_HELP_YET, "还没有读取过这个命令的帮助文本。",
                 "No help text has been read for this command yet.");
         put(ZH_TEXT, EN_TEXT, FORM_NO_HELP_OUTPUT, "{0} 没有输出任何帮助文本。\n\n"

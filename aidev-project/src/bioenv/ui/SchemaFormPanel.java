@@ -3001,45 +3001,17 @@ public final class SchemaFormPanel extends JPanel {
     }
 
     /**
-     * Shows the help text this command's form was built from.
+     * The help text this command's form was built from, as the tool printed it.
      *
-     * <p>The whole text, as the tool printed it. That is what the user needs in
-     * order to judge a parameter: the plugin's own reading of the document is not
-     * evidence about the tool, and showing statistics about parsing only invites
-     * the user to audit the parser instead of reading the help.
+     * <p>Read by the tool assistant, which shows it on its first tab. Kept here
+     * because this panel is what holds the schema the form was made from.
+     *
+     * <p>The viewer that used to live here is gone: showing the text and letting
+     * the user write their own are the same task seen twice, so both moved into
+     * one window. Nothing about the text itself changed.
      */
-    public void showSchemaSource(java.awt.Component parent) {
-        if (schema == null) {
-            JOptionPane.showMessageDialog(parent,
-                    I18n.t(Strings.FORM_NO_HELP_YET));
-            return;
-        }
-        String raw = schema.rawHelp == null ? "" : schema.rawHelp;
-        String name = (tool == null || tool.command == null) ? "" : tool.command;
-        if (raw.trim().isEmpty()) {
-            // The command name is an argument, and the em-dash-free phrasing is baked
-            // into the template for each language rather than assembled here: Chinese
-            // does not put the subject in the same place as English.
-            JOptionPane.showMessageDialog(parent,
-                    I18n.t(Strings.FORM_NO_HELP_OUTPUT,
-                            name.isEmpty() ? I18n.t(Strings.FORM_THIS_COMMAND) : name));
-            return;
-        }
-        JTextArea area = new JTextArea(raw, 30, 100);
-        area.setEditable(false);
-        area.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
-        area.setLineWrap(false);
-        // Start at the top: the beginning of a help text is where the synopsis is.
-        area.setCaretPosition(0);
-
-        JScrollPane scroll = new JScrollPane(area);
-        scroll.setPreferredSize(new Dimension(900, 560));
-
-        String title = name.isEmpty()
-                ? I18n.t(Strings.FORM_HELP_TITLE_PLAIN)
-                : I18n.t(Strings.FORM_HELP_TITLE, name);
-        JOptionPane.showMessageDialog(parent, scroll,
-                title, JOptionPane.INFORMATION_MESSAGE);
+    public String rawHelpText() {
+        return schema == null || schema.rawHelp == null ? "" : schema.rawHelp;
     }
 
     private void fireChange() {
