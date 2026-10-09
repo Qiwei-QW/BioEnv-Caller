@@ -301,7 +301,13 @@ try {
         # The same false status was reused on the SSH path. This covers both the
         # first-install branch (guide, do not lie) and the already-linked branch
         # (say "click Detect", do not lie). Needs WSL to reach the real path.
-        'bioenv.test.FirstRunScanTest'
+        'bioenv.test.FirstRunScanTest',
+
+        # --- 换风格不得留下上一套的底色 --------------------------------------
+        # 深色期间给滚动条设过深色底，切回经典时只换了 UI 委托、没把底色还回去，
+        # 而细滚动条的滑道什么都不画，露出的正是那个底色——命令树两侧于是各挂
+        # 一根黑条。断言用"从没进过深色的同类控件"作基准，而不是写死某个颜色。
+        'bioenv.test.ThemeSwitchResidueTest'
     )
 
     foreach ($t in $regression) {
