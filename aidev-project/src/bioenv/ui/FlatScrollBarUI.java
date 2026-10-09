@@ -89,6 +89,14 @@ public final class FlatScrollBarUI extends BasicScrollBarUI {
         if (!UiTheme.flat()) {
             if (bar.getUI() instanceof FlatScrollBarUI) {
                 bar.updateUI();
+                // 把底色还给 Look-and-Feel。
+                //
+                // updateUI() 只换 UI 委托，不碰 setBackground() 设过的颜色，所以深色
+                // 期间设下的深色底会原样留着。滑道本来就什么都不画（见 paintTrack），
+                // 露出来的正是这个底色——于是"忘了改回来"直接变成肉眼可见的黑条：
+                // 深色切回经典后，命令树两侧各挂一根。
+                bar.setBackground(javax.swing.UIManager.getColor("ScrollBar.background"));
+                bar.setForeground(javax.swing.UIManager.getColor("ScrollBar.foreground"));
             }
             return;
         }
