@@ -76,7 +76,18 @@ try {
         'vmadapt.test.KeygenCommandTest',
         'vmadapt.test.CommandTimeoutTest',
         'vmadapt.test.ReachabilityTest',
-        'vmadapt.test.RemoteWorkdirTest'
+        'vmadapt.test.RemoteWorkdirTest',
+
+        # 连接面板的分组布局与标签顺序。
+        #
+        # 分成三组之后，标签曾经整体错位一格（「密钥路径」那一行显示的是「15」）：
+        # rowLabels 按 addRow 的调用顺序排，而文案数组仍按旧顺序。错位不会报错，
+        # 只是每一行都写着隔壁那一行的名字，所以要用「第 i 个标签配第 i 个控件」来验。
+        'vmadapt.test.ConnectionLayoutTest',
+
+        # 可选的联网冒烟测试：没配 VMADAPT_LIVE_* 时打印 SKIP 并以 0 退出。
+        # 它的类注释写着"会出现在 build.ps1 的常规列表里"，但两个清单都漏了它。
+        'vmadapt.test.SshLiveTest'
     )) {
         Write-Host ""
         Write-Host "=== $t ==="

@@ -175,6 +175,24 @@ final class UiText {
     static final String SEC_NETWORK = "sec.network";
     static final String HINT_BACKGROUND = "hint.background";
 
+    /**
+     * 第一页的三个分组标题。
+     *
+     * <p>分组是为了回答"我现在在做哪一步"：一张表上八行输入加七个按钮，用户得自己
+     * 判断先填什么、能点哪个。分开之后每组只讲一件事——这台机器是什么、怎么登录、
+     * 这条配置叫什么。
+     */
+    static final String SEC_MACHINE = "sec.machine";
+    static final String SEC_LOGIN = "sec.login";
+    static final String SEC_SAVEAS = "sec.saveas";
+
+    /** 按钮：测试连接进行中的文案。 */
+    static final String BTN_TESTING = "btn.testing";
+
+    /** 连接结果弹窗的标题。 */
+    static final String DLG_RESULT_OK = "dlg.resultOk";
+    static final String DLG_RESULT_FAIL = "dlg.resultFail";
+
     /** 选择私钥文件的对话框。 */
     static final String DLG_CHOOSE_KEY = "dlg.choosekey";
     static final String FILTER_PRIVKEY = "dlg.filter.privkey";
@@ -491,6 +509,13 @@ final class UiText {
         put(SEC_ACTIONS, "Actions", "操作");
         put(SEC_PROBE, "Probe details", "探测详情");
         put(SEC_NETWORK, "VMware network modes", "VMware 网络模式速查");
+
+        put(SEC_MACHINE, "This machine", "这台机器");
+        put(SEC_LOGIN, "How to log in", "登录方式");
+        put(SEC_SAVEAS, "Save / load a profile", "保存与载入配置");
+        put(BTN_TESTING, "Connecting...", "正在连接…");
+        put(DLG_RESULT_OK, "Connection succeeded", "连接成功");
+        put(DLG_RESULT_FAIL, "Connection failed", "连接失败");
         put(HINT_BACKGROUND,
                 "Tip: every long-running task runs on a background thread, "
                         + "so the window stays responsive while connecting.",

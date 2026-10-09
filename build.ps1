@@ -383,6 +383,70 @@ if ($failed.Count -gt 0) {
     throw ("Regression tests failed: " + ($failed -join ', '))
 }
 
+# --- vmadapt tests ----------------------------------------------------
+# 这一步曾经不存在，而 vmadapt 的 UI 是**打进插件**的：BioEnvCaller.jar 里有
+# vmadapt/ui/ConnectionPanel.class，可根门禁只编译 vmadapt 的产品代码（上面那条
+# Get-ChildItem 排除了 \test\），也从不运行它的测试。结果是：改一个会随插件发布的
+# 界面类，根门禁全绿也说明不了任何事——它根本没看过那些测试。
+#
+# 所以这里补上：编译 vmadapt 的测试，然后逐个运行。它们跑在 vmadapt 自己的 classpath
+# 上（不需要 TBtools 的 JAR），和 vmadapt/build.ps1 里的跑法一致。
+$vmTestSources = Get-ChildItem (Join-Path $Root 'vmadapt\src') -Recurse -Filter *.java |
+    Where-Object { $_.FullName -like '*\test\*' } |
+    ForEach-Object { $_.FullName }
+if ($vmTestSources.Count -gt 0) {
+    Write-Host ""
+    Write-Host "Compiling $($vmTestSources.Count) vmadapt test source file(s)..."
+    & $Javac -encoding UTF-8 -Xlint:-options -d $VmadaptClasses `
+        -cp "$VmadaptClasses;$tbJar" $vmTestSources
+    if ($LASTEXITCODE -ne 0) { throw "vmadapt test compilation failed." }
+
+    $vmTests = @(
+        'vmadapt.test.ShellQuoteTest',
+        'vmadapt.test.SshTargetTest',
+        'vmadapt.test.ConnectionStoreTest',
+        'vmadapt.test.SshCommandTest',
+        'vmadapt.test.RemotePathTest',
+        'vmadapt.test.UploadPlanTest',
+        'vmadapt.test.ProbeScriptTest',
+        'vmadapt.test.KeygenCommandTest',
+        'vmadapt.test.CommandTimeoutTest',
+        'vmadapt.test.ReachabilityTest',
+        'vmadapt.test.RemoteWorkdirTest',
+        # 连接面板的分组布局与标签顺序：分组之后标签曾整体错位一格。
+        'vmadapt.test.ConnectionLayoutTest',
+        # 可选的联网冒烟测试：没配环境变量时打印 SKIP 并以 0 退出，所以放进常规列表
+        # 是安全的。它的类注释本来就写着"会出现在 build.ps1 的常规列表里"，但两个
+        # 清单都没有它——配了虚拟机的人因此永远跑不到它。
+        'vmadapt.test.SshLiveTest'
+    )
+    $vmPassed = @()
+    $vmFailed = @()
+    $env:JAVA_TOOL_OPTIONS = '-Djava.awt.headless=true'
+    foreach ($t in $vmTests) {
+        Push-Location $Root
+        try {
+            $out = cmd.exe /c "`"$Java`" -cp `"$VmadaptClasses`" $t 2>&1"
+            if ($LASTEXITCODE -eq 0) {
+                $vmPassed += $t
+                Write-Host "PASS  $t"
+            } else {
+                $vmFailed += $t
+                Write-Host "FAIL  $t"
+                $out | Select-Object -Last 12 | ForEach-Object { Write-Host "        $_" }
+            }
+        } finally {
+            Pop-Location
+        }
+    }
+    Remove-Item Env:\JAVA_TOOL_OPTIONS -ErrorAction SilentlyContinue
+    Write-Host ""
+    Write-Host "vmadapt: $($vmPassed.Count) passed, $($vmFailed.Count) failed"
+    if ($vmFailed.Count -gt 0) {
+        throw ("vmadapt tests failed: " + ($vmFailed -join ', '))
+    }
+}
+
 # --- package ----------------------------------------------------------
 # Layout mirrors the official FASTA Merge.plugin:
 #   <Name>/<Name>.jar + MenuConfig.ini + AiDevBuild.txt + aidev-project/

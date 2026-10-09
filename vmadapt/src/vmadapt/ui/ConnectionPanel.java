@@ -30,6 +30,7 @@ import javax.swing.JSeparator;
 import javax.swing.JTabbedPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
+import javax.swing.SwingUtilities;
 import javax.swing.SwingWorker;
 import javax.swing.filechooser.FileNameExtensionFilter;
 
@@ -104,6 +105,17 @@ public final class ConnectionPanel extends JPanel {
     private final javax.swing.border.TitledBorder actionsBorder;
     private final javax.swing.border.TitledBorder probeBorder;
     private final javax.swing.border.TitledBorder networkBorder;
+
+    /**
+     * 「连接配置」页三个分组的标题边框。
+     *
+     * <p>见 {@link #buildFormTab()}：分组是按用户做事的步骤切的，标题就是这个
+     * 步骤的名字。
+     */
+    private final javax.swing.border.TitledBorder machineBorder;
+    private final javax.swing.border.TitledBorder loginBorder;
+    private final javax.swing.border.TitledBorder saveAsBorder;
+    private final javax.swing.border.TitledBorder testBorder;
 
     /** 底部那条「耗时操作都在后台」提示。 */
     private final JLabel backgroundHint = new JLabel();
@@ -220,6 +232,10 @@ public final class ConnectionPanel extends JPanel {
         actionsBorder = BorderFactory.createTitledBorder("");
         probeBorder = BorderFactory.createTitledBorder("");
         networkBorder = BorderFactory.createTitledBorder("");
+        machineBorder = BorderFactory.createTitledBorder("");
+        loginBorder = BorderFactory.createTitledBorder("");
+        saveAsBorder = BorderFactory.createTitledBorder("");
+        testBorder = BorderFactory.createTitledBorder("");
 
         gatedButtons.add(testButton);
         gatedButtons.add(saveButton);
@@ -330,20 +346,40 @@ public final class ConnectionPanel extends JPanel {
         actionsBorder.setTitle(tx.get(UiText.SEC_ACTIONS));
         probeBorder.setTitle(tx.get(UiText.SEC_PROBE));
         networkBorder.setTitle(tx.get(UiText.SEC_NETWORK));
+        machineBorder.setTitle(tx.get(UiText.SEC_MACHINE));
+        loginBorder.setTitle(tx.get(UiText.SEC_LOGIN));
+        saveAsBorder.setTitle(tx.get(UiText.SEC_SAVEAS));
+        testBorder.setTitle(tx.get(UiText.SEC_ACTIONS));
 
-        // 表单标签
+        // 「测试连接」进行中的文字跟着语言走；空闲时的文字由 BTN_TEST 那段统一设。
+        // 这里只在确实处于忙碌状态时改写，免得切语言把按钮从忙碌变回空闲的样子。
+        if (busy) {
+            testButton.setText(tx.get(UiText.BTN_TESTING));
+        }
+
+        // 表单标签。
+        //
+        // 顺序必须与 buildFormTab() 里 addRow() 的调用顺序完全一致：这里按下标把
+        // 文案铺到 rowLabels 上，而 rowLabels 是按"添加顺序"排的。曾经两组顺序不同
+        // （超时在界面上排第 4、在这个数组里排第 7），于是标签整体错位一格——
+        // 「密钥路径」那一行显示的是「15」。
         String[] labelKeys = {
-            UiText.LBL_HOST, UiText.LBL_PORT, UiText.LBL_USER, UiText.LBL_KEY,
-            UiText.LBL_NAME, UiText.LBL_NOTE, UiText.LBL_TIMEOUT, UiText.LBL_SAVED,
+            // 这台机器
+            UiText.LBL_HOST, UiText.LBL_PORT, UiText.LBL_USER, UiText.LBL_TIMEOUT,
+            // 登录方式
+            UiText.LBL_KEY,
+            // 保存与载入配置
+            UiText.LBL_NAME, UiText.LBL_NOTE, UiText.LBL_SAVED,
         };
         for (int i = 0; i < rowLabels.size() && i < labelKeys.length; i++) {
             rowLabels.get(i).setText(tx.get(labelKeys[i]));
         }
 
-        // 字段悬停提示（含 JComboBox 那一行）
+        // 字段悬停提示（含 JComboBox 那一行）。顺序同 labelKeys。
         String[] tipKeys = {
-            UiText.TIP_HOST, UiText.TIP_PORT, UiText.TIP_USER, UiText.TIP_KEY,
-            UiText.TIP_NAME, UiText.TIP_NOTE, UiText.TIP_TIMEOUT, UiText.TIP_SAVED,
+            UiText.TIP_HOST, UiText.TIP_PORT, UiText.TIP_USER, UiText.TIP_TIMEOUT,
+            UiText.TIP_KEY,
+            UiText.TIP_NAME, UiText.TIP_NOTE, UiText.TIP_SAVED,
         };
         if (rowFields.size() == tipKeys.length) {
             for (int i = 0; i < tipKeys.length; i++) {
@@ -444,40 +480,85 @@ public final class ConnectionPanel extends JPanel {
     private final List<Component> rowFields = new ArrayList<Component>();
 
     /** 「连接配置」页：上方表单，下方操作按钮。 */
+    /**
+     * 「连接配置」页。
+     *
+     * <p>按"用户在做哪一步"分成三组，而不是把八行输入排成一列、七个按钮平铺一行：
+     *
+     * <ul>
+     *   <li><b>这台机器</b>：主机、端口、用户名、超时——填完这些就知道连哪里；</li>
+     *   <li><b>登录方式</b>：密钥路径，以及"生成密钥 / 复制公钥到远端"这对一次性
+     *       准备工作。它们和参数是两件事，混在一排按钮里用户不知道先点哪个；</li>
+     *   <li><b>保存与载入配置</b>：配置名、备注、已存配置。这一组管的是"记录"，
+     *       不是机器属性，所以从表单里分出来。</li>
+     * </ul>
+     *
+     * <p>「测试连接」单独放在页面底部：它是"我填完了，验证一下"的收尾动作，
+     * 不属于上面任何一组。
+     */
     private JPanel buildFormTab() {
         JPanel root = new JPanel(new BorderLayout(0, 8));
 
-        JPanel form = new JPanel(new GridBagLayout());
-        form.setBorder(connectionBorder);
+        JPanel north = new JPanel();
+        north.setLayout(new javax.swing.BoxLayout(north, javax.swing.BoxLayout.Y_AXIS));
 
+        // ── 第一组：这台机器 ────────────────────────────────────────────────
+        JPanel machine = new JPanel(new GridBagLayout());
+        machine.setBorder(machineBorder);
         int row = 0;
-        addRow(form, row++, hostField);
-        addRow(form, row++, portField);
-        addRow(form, row++, userField);
-        addRow(form, row++, withBrowse(keyField));
-        addRow(form, row++, nameField);
-        addRow(form, row++, noteField);
-        addRow(form, row++, timeoutField);
+        addRow(machine, row++, hostField);
+        addRow(machine, row++, portField);
+        addRow(machine, row++, userField);
+        addRow(machine, row++, timeoutField);
+        north.add(machine);
+
+        // ── 第二组：登录方式 ────────────────────────────────────────────────
+        JPanel login = new JPanel(new GridBagLayout());
+        login.setBorder(loginBorder);
+        row = 0;
+        addRow(login, row++, withBrowse(keyField));
+
+        JPanel keyActions = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        keyActions.add(genKeyButton);
+        keyActions.add(copyKeyButton);
+        GridBagConstraints kc = new GridBagConstraints();
+        kc.gridx = 1;
+        kc.gridy = row;
+        kc.weightx = 1.0;
+        kc.fill = GridBagConstraints.HORIZONTAL;
+        kc.insets = new Insets(3, 0, 3, 4);
+        login.add(keyActions, kc);
+        north.add(login);
+
+        // ── 第三组：保存与载入配置 ──────────────────────────────────────────
+        JPanel saveAs = new JPanel(new GridBagLayout());
+        saveAs.setBorder(saveAsBorder);
+        row = 0;
+        addRow(saveAs, row++, nameField);
+        addRow(saveAs, row++, noteField);
 
         JPanel savedRow = new JPanel(new BorderLayout(4, 0));
         savedRow.add(savedBox, BorderLayout.CENTER);
-        savedRow.add(loadSavedButton, BorderLayout.EAST);
-        addRow(form, row++, savedRow);
+        JPanel savedButtons = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        savedButtons.add(loadSavedButton);
+        savedButtons.add(saveButton);
+        savedButtons.add(deleteButton);
+        savedRow.add(savedButtons, BorderLayout.EAST);
+        addRow(saveAs, row++, savedRow);
+        north.add(saveAs);
 
-        root.add(form, BorderLayout.NORTH);
+        root.add(north, BorderLayout.NORTH);
 
-        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 6));
-        buttons.setBorder(actionsBorder);
-        buttons.add(testButton);
-        buttons.add(saveButton);
-        buttons.add(deleteButton);
-        buttons.add(new JSeparator(JSeparator.VERTICAL));
-        buttons.add(genKeyButton);
-        buttons.add(copyKeyButton);
-        root.add(buttons, BorderLayout.CENTER);
+        // ── 收尾动作：测试连接 ──────────────────────────────────────────────
+        JPanel bottom = new JPanel(new BorderLayout(0, 6));
+        JPanel testRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 6));
+        testRow.setBorder(testBorder);
+        testRow.add(testButton);
+        bottom.add(testRow, BorderLayout.NORTH);
 
         backgroundHint.setForeground(new Color(0x55, 0x55, 0x55));
-        root.add(backgroundHint, BorderLayout.SOUTH);
+        bottom.add(backgroundHint, BorderLayout.SOUTH);
+        root.add(bottom, BorderLayout.CENTER);
         return root;
     }
 
@@ -812,7 +893,10 @@ public final class ConnectionPanel extends JPanel {
             problem = validateLocalized(target);
         }
         if (problem != null) {
+            // 参数都没填全就点了测试：同样要弹窗。否则用户点完按钮，自己那一页
+            // 什么都不变，得跑到第二页才知道"缺了东西"。
             reportFailure(text(UiText.MSG_INCOMPLETE), problem, null);
+            showResultDialog(target, false);
             return;
         }
 
@@ -821,7 +905,6 @@ public final class ConnectionPanel extends JPanel {
                 text(UiText.MSG_CONNECTING_TO, target.toDisplay()));
         statusArea.setText(text(UiText.MSG_CONNECTING_BG,
                 String.valueOf(target.timeoutSeconds)) + "\n");
-
         new SwingWorker<ConnectionReport, Void>() {
             @Override
             protected ConnectionReport doInBackground() {
@@ -844,13 +927,56 @@ public final class ConnectionPanel extends JPanel {
                 }
                 setBusy(false);
                 showReport(target, report);
+                // 结果同时弹一个窗。
+                //
+                // 报告本来就写在「连接结果」那一页，但点「测试连接」的人在配置页，
+                // 而界面不会自己跳过去——于是用户等完这一次连接，还得自己去找结果
+                // 在哪一页。弹窗把"做完了"和"结果是什么"放在同一处，省掉这一步。
+                showResultDialog(target, report != null && report.ok);
             }
         }.execute();
     }
 
+    /**
+     * 把刚落进状态区的报告原样弹成一个窗。
+     *
+     * <p>刻意<b>复用</b> {@code statusArea} 里已有的文本，而不是另拼一份：两处各写
+     * 一份迟早会走样，而"弹窗说的和详情页说的不一样"比不弹窗更糟。所以这里只读
+     * 已渲染好的内容。
+     *
+     * <p>无头环境（自检）下不弹：那里没有窗口可言，而状态区已经写好了。
+     */
+    private void showResultDialog(SshTarget target, boolean ok) {
+        if (java.awt.GraphicsEnvironment.isHeadless()) {
+            return;
+        }
+        String body = statusArea.getText();
+        if (body == null || body.trim().isEmpty()) {
+            return;
+        }
+        JTextArea area = new JTextArea(body, 20, 74);
+        area.setEditable(false);
+        area.setLineWrap(true);
+        area.setWrapStyleWord(true);
+        area.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        area.setCaretPosition(0);
+        area.setBackground(Color.WHITE);
+        area.setForeground(ok ? OK_COLOR : FAIL_COLOR);
+
+        JScrollPane scroll = new JScrollPane(area);
+        scroll.setPreferredSize(new Dimension(700, 420));
+
+        String title = ok
+                ? text(UiText.DLG_RESULT_OK)
+                : text(UiText.DLG_RESULT_FAIL);
+        javax.swing.JOptionPane.showMessageDialog(
+                SwingUtilities.getWindowAncestor(this), scroll, title,
+                ok ? javax.swing.JOptionPane.INFORMATION_MESSAGE
+                        : javax.swing.JOptionPane.WARNING_MESSAGE);
+    }
+
     /** 把一份 {@link ConnectionReport} 渲染到状态区：成功绿、失败红。 */
-    private void showReport(SshTarget target, ConnectionReport report) {
-        if (report == null) {
+    private void showReport(SshTarget target, ConnectionReport report) {        if (report == null) {
             reportFailure(text(UiText.MSG_NULL_REPORT),
                     text(UiText.MSG_NULL_REPORT_REASON), null);
             return;
@@ -1589,12 +1715,19 @@ public final class ConnectionPanel extends JPanel {
      * <p>忙碌时把所有会再起一个后台任务的按钮禁用掉。不禁用的话，用户可以连点
      * 五次「测试连接」，五个 worker 并发跑，最后到达的那个结果覆盖前面的，
      * 界面显示的可能是任意一次的结果——比等一会儿更让人困惑。
+     *
+     * <p>「测试连接」另外把文字换成「正在连接…」：这是唯一一个会让用户盯着等的
+     * 按钮，而它原来只是变灰——用户看不出是在跑还是自己被卡住了。文字由
+     * {@link #applyLanguage()} 之外的地方设，所以切语言时也要照看重设一次。
      */
     private void setBusy(boolean value) {
         busy = value;
         for (JButton b : gatedButtons) {
             b.setEnabled(!value);
         }
+        testButton.setText(value
+                ? text(UiText.BTN_TESTING)
+                : text(UiText.BTN_TEST));
         setCursor(value ? Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR) : null);
         updateDeleteEnabled();
     }
