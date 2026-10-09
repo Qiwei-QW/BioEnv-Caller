@@ -783,7 +783,10 @@ public final class MainPanel extends JPanel {
         if (isSshMode()) {
             // No SSH equivalent of "the machine's own default": every target needs
             // an address the user supplied. Only offer what is already saved.
-            refreshSshList(true);
+            //
+            // 这里刻意不给"可以弹引导窗"的许可：打开面板时回到上次用的方式只是便利，
+            // 不是用户当下要连虚拟机。见 refreshSshList(boolean, boolean)。
+            refreshSshList(true, false);
             return;
         }
         setStatus(I18n.t(Strings.STATUS_LOOKING_WSL));
@@ -1014,7 +1017,10 @@ public final class MainPanel extends JPanel {
             // again on this machine, which is precisely the behaviour being fixed.
             dialogDismissedByUser = false;
             setStatus(I18n.t(Strings.STATUS_READING_PROFILES));
-            refreshSshList(true);
+            // 用户把下拉框改成了「虚拟机」——他明确要连虚拟机，这时该引导他填配置。
+            // 这是 applyConnectionMode 才有的许可：打开面板恢复上次方式时走的是
+            // loadDistroAsync，那里传的是 false。
+            refreshSshList(true, true);
         } else {
             setStatus(I18n.t(Strings.STATUS_LOOKING_WSL));
             loadDistroAsync(null);
@@ -1056,6 +1062,26 @@ public final class MainPanel extends JPanel {
      *             紧接着就去连一台机器会很突兀。
      */
     private void refreshSshList(final boolean auto) {
+        refreshSshList(auto, true);
+    }
+
+    /**
+     * @param auto   同 {@link #refreshSshList(boolean)}
+     * @param mayGuide 是否允许在"从没连过"时自动弹出连接配置窗。
+     *
+     * <p>为什么要有这个参数：读配置列表这件事有两条来源，而它们对弹窗的期望相反。
+     *
+     * <ul>
+     *   <li><b>用户把下拉框改成「虚拟机」</b>——他明确要连虚拟机了，这时该引导，
+     *       传 {@code true}；</li>
+     *   <li><b>打开面板、回到上次用的方式</b>——用户只是想看看命令列表，恢复上次的
+     *       选择是便利，不是他要连虚拟机。传 {@code false}，不弹。</li>
+     * </ul>
+     *
+     * <p>这两条以前共用同一个入口，于是"上次用过虚拟机方式"就等价于"每次打开都弹窗"，
+     * 而弹窗本该由用户主动选虚拟机方式触发。
+     */
+    private void refreshSshList(final boolean auto, final boolean mayGuide) {
         final int mine = ++loadGeneration;
         new SwingWorker<java.util.List<vmadapt.core.SshTarget>, Void>() {
             @Override
@@ -1126,7 +1152,10 @@ public final class MainPanel extends JPanel {
                 //     and can open it deliberately.
                 // dismissGuard handles the separate, session-scoped concern of not
                 // reopening the thing the user just closed.
-                if (shouldAutoOpenDialog()) {
+                //
+                // mayGuide 另外把关：只有"用户主动选了虚拟机方式"这一条来源才允许弹。
+                // 打开面板时恢复上次的选择不算，否则上次用过虚拟机就会每次开插件都弹。
+                if (mayGuide && shouldAutoOpenDialog()) {
                     openConnectionDialog();
                 } else if (auto && !all.isEmpty()) {
                     // 自动连接：先做可达性检查，能连上就恢复缓存。
@@ -1258,7 +1287,9 @@ public final class MainPanel extends JPanel {
                     dialogDismissedByUser = true;
                     if (isSshMode()) {
                         // The user may have added or deleted configs in there.
-                        refreshSshList();
+                        // mayGuide=false：这是他刚关掉那个窗之后的刷新，再弹一次
+                        // 就是"关了又开"的死循环。
+                        refreshSshList(false, false);
                     }
                 }
             });

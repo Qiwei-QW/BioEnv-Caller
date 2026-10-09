@@ -103,7 +103,6 @@ public final class ConnectionPanel extends JPanel {
     /** 各区块的边框标题（Connection / Actions / Probe details / VMware network modes）。 */
     private final javax.swing.border.TitledBorder connectionBorder;
     private final javax.swing.border.TitledBorder actionsBorder;
-    private final javax.swing.border.TitledBorder probeBorder;
     private final javax.swing.border.TitledBorder networkBorder;
 
     /**
@@ -230,7 +229,6 @@ public final class ConnectionPanel extends JPanel {
 
         connectionBorder = BorderFactory.createTitledBorder("");
         actionsBorder = BorderFactory.createTitledBorder("");
-        probeBorder = BorderFactory.createTitledBorder("");
         networkBorder = BorderFactory.createTitledBorder("");
         machineBorder = BorderFactory.createTitledBorder("");
         loginBorder = BorderFactory.createTitledBorder("");
@@ -243,8 +241,11 @@ public final class ConnectionPanel extends JPanel {
         gatedButtons.add(copyKeyButton);
         gatedButtons.add(loadSavedButton);
 
+        // 只有两页。曾经有第三页「连接结果」，但它已经不需要了：测试连接、保存、
+        // 删除、载入、生成密钥、复制公钥的结果现在都以弹窗呈现，而弹窗把"做完了"
+        // 和"结果是什么"放在同一处——用户点完按钮不必再去别的页面找。一个专门用来看
+        // 结果的页面，反而要求他先知道结果在哪一页。
         tabs.addTab("", buildFormTab());
-        tabs.addTab("", buildStatusTab());
         tabs.addTab("", buildNetworkHelpTab());
         add(tabs, BorderLayout.CENTER);
 
@@ -334,17 +335,15 @@ public final class ConnectionPanel extends JPanel {
         appliedLang = code;
 
         // 选项卡
+        // 选项卡。只有两页了：0 连接配置、1 网络模式速查。
         tabs.setTitleAt(0, tx.get(UiText.TAB_CONNECTION));
-        tabs.setTitleAt(1, tx.get(UiText.TAB_RESULT));
-        tabs.setTitleAt(2, tx.get(UiText.TAB_NETWORK));
+        tabs.setTitleAt(1, tx.get(UiText.TAB_NETWORK));
         tabs.setToolTipTextAt(0, tx.get(UiText.TAB_CONNECTION_TIP));
-        tabs.setToolTipTextAt(1, tx.get(UiText.TAB_RESULT_TIP));
-        tabs.setToolTipTextAt(2, tx.get(UiText.TAB_NETWORK_TIP));
+        tabs.setToolTipTextAt(1, tx.get(UiText.TAB_NETWORK_TIP));
 
         // 区块标题
         connectionBorder.setTitle(tx.get(UiText.SEC_CONNECTION));
         actionsBorder.setTitle(tx.get(UiText.SEC_ACTIONS));
-        probeBorder.setTitle(tx.get(UiText.SEC_PROBE));
         networkBorder.setTitle(tx.get(UiText.SEC_NETWORK));
         machineBorder.setTitle(tx.get(UiText.SEC_MACHINE));
         loginBorder.setTitle(tx.get(UiText.SEC_LOGIN));
@@ -423,7 +422,8 @@ public final class ConnectionPanel extends JPanel {
         // 状态区：只有在「用户还没点过测试」时才覆盖，否则会把上一次的
         // 连接结果冲掉——切语言不该抹掉用户刚看到的结果。
         if (!statusShowsResult) {
-            paintStatus(statusFg, statusBg, tx.get(UiText.STATUS_NOT_TESTED));
+            // 不弹窗：这只是一句"尚未测试"，不是某次操作的结果。
+            paintStatusBusy(statusFg, statusBg, tx.get(UiText.STATUS_NOT_TESTED));
             statusArea.setText(tx.get(UiText.STATUS_INTRO));
             statusArea.setForeground(neutralFg());
         }
@@ -562,28 +562,9 @@ public final class ConnectionPanel extends JPanel {
         return root;
     }
 
-    /** 「连接结果」页：状态标签 + 等宽字体的报告区。 */
-    private JPanel buildStatusTab() {
-        JPanel root = new JPanel(new BorderLayout(0, 6));
-
-        statusLabel.setFont(statusLabel.getFont().deriveFont(Font.BOLD, 13f));
-        statusLabel.setOpaque(true);
-        statusLabel.setBorder(BorderFactory.createEmptyBorder(8, 10, 8, 10));
-
-        statusArea.setEditable(false);
-        statusArea.setLineWrap(true);
-        statusArea.setWrapStyleWord(true);
-        statusArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
-        statusArea.setBackground(Color.WHITE);
-
-        JScrollPane scroll = new JScrollPane(statusArea);
-        scroll.setBorder(probeBorder);
-        scroll.setPreferredSize(new Dimension(560, 300));
-
-        root.add(statusLabel, BorderLayout.NORTH);
-        root.add(scroll, BorderLayout.CENTER);
-        return root;
-    }
+    // 「连接结果」页已经删掉（见构造函数里加标签页处的说明）。statusArea 仍然保留，
+    // 但只是**文本缓冲**，不再挂在界面上：所有操作的报告都先写进它，
+    // 再由相应的弹窗读出来展示。这样"报告内容"只有一份，弹窗和别处不会各说各话。
 
     /** 「网络模式速查」页：VMware 三种网络模式对 SSH 连不上的影响。 */
     private JPanel buildNetworkHelpTab() {
@@ -893,15 +874,14 @@ public final class ConnectionPanel extends JPanel {
             problem = validateLocalized(target);
         }
         if (problem != null) {
-            // 参数都没填全就点了测试：同样要弹窗。否则用户点完按钮，自己那一页
-            // 什么都不变，得跑到第二页才知道"缺了东西"。
+            // 参数都没填全就点了测试：reportFailure 里统一弹窗。
             reportFailure(text(UiText.MSG_INCOMPLETE), problem, null);
-            showResultDialog(target, false);
             return;
         }
 
         setBusy(true);
-        paintStatus(NEUTRAL_COLOR, NEUTRAL_BG,
+        // 进度提示，不弹窗；结果由 showReport 发出。
+        paintStatusBusy(NEUTRAL_COLOR, NEUTRAL_BG,
                 text(UiText.MSG_CONNECTING_TO, target.toDisplay()));
         statusArea.setText(text(UiText.MSG_CONNECTING_BG,
                 String.valueOf(target.timeoutSeconds)) + "\n");
@@ -926,27 +906,26 @@ public final class ConnectionPanel extends JPanel {
                     return;
                 }
                 setBusy(false);
+                // 弹窗由 showReport 内部的 paintStatus / reportFailure 发出，
+                // 这里不再单独弹一次，否则会连弹两个窗。
                 showReport(target, report);
-                // 结果同时弹一个窗。
-                //
-                // 报告本来就写在「连接结果」那一页，但点「测试连接」的人在配置页，
-                // 而界面不会自己跳过去——于是用户等完这一次连接，还得自己去找结果
-                // 在哪一页。弹窗把"做完了"和"结果是什么"放在同一处，省掉这一步。
-                showResultDialog(target, report != null && report.ok);
             }
         }.execute();
     }
 
     /**
-     * 把刚落进状态区的报告原样弹成一个窗。
+     * 把 {@link #paintStatus} 刚记下的那次结果弹成一个窗。
      *
-     * <p>刻意<b>复用</b> {@code statusArea} 里已有的文本，而不是另拼一份：两处各写
-     * 一份迟早会走样，而"弹窗说的和详情页说的不一样"比不弹窗更糟。所以这里只读
-     * 已渲染好的内容。
+     * <p>刻意<b>复用</b> {@code statusArea} 里已有的正文，而不是另拼一份：两处各写
+     * 一份迟早会走样，而"弹窗说的和别处说的不一样"比不弹窗更糟。所以这里只读已渲染
+     * 好的内容，调用方负责先把它写好。
      *
-     * <p>无头环境（自检）下不弹：那里没有窗口可言，而状态区已经写好了。
+     * <p>无头环境（自检）下不弹：那里没有窗口可言，而正文已经写好了，测试断言正文即可。
+     *
+     * @param title 标题栏文字，由调用方按操作类型给（测试连接 / 保存 / 生成密钥…）
+     * @param ok    true 用信息图标与绿色正文，false 用警告图标与红色正文
      */
-    private void showResultDialog(SshTarget target, boolean ok) {
+    private void showResultDialog(String title, boolean ok) {
         if (java.awt.GraphicsEnvironment.isHeadless()) {
             return;
         }
@@ -966,17 +945,16 @@ public final class ConnectionPanel extends JPanel {
         JScrollPane scroll = new JScrollPane(area);
         scroll.setPreferredSize(new Dimension(700, 420));
 
-        String title = ok
-                ? text(UiText.DLG_RESULT_OK)
-                : text(UiText.DLG_RESULT_FAIL);
         javax.swing.JOptionPane.showMessageDialog(
-                SwingUtilities.getWindowAncestor(this), scroll, title,
+                SwingUtilities.getWindowAncestor(this), scroll,
+                title == null ? "" : title,
                 ok ? javax.swing.JOptionPane.INFORMATION_MESSAGE
                         : javax.swing.JOptionPane.WARNING_MESSAGE);
     }
 
     /** 把一份 {@link ConnectionReport} 渲染到状态区：成功绿、失败红。 */
-    private void showReport(SshTarget target, ConnectionReport report) {        if (report == null) {
+    private void showReport(SshTarget target, ConnectionReport report) {
+        if (report == null) {
             reportFailure(text(UiText.MSG_NULL_REPORT),
                     text(UiText.MSG_NULL_REPORT_REASON), null);
             return;
@@ -1002,11 +980,12 @@ public final class ConnectionPanel extends JPanel {
             sb.append("──────────────────────────────\n");
             sb.append(text(UiText.RPT_NEXT)).append('\n');
 
-            paintStatus(OK_COLOR, OK_BG,
-                    text(UiText.MSG_CONNECTED_SHORT, target.toDisplay()));
+            // 先写正文，再 paintStatus：弹窗在 paintStatus 里发，读的是 statusArea。
             statusArea.setText(sb.toString());
             statusArea.setCaretPosition(0);
             statusArea.setForeground(OK_COLOR);
+            paintStatus(OK_COLOR, OK_BG,
+                    text(UiText.MSG_CONNECTED_SHORT, target.toDisplay()));
             markStatusResult();
             fireConnected(target);
         } else {
@@ -1064,10 +1043,12 @@ public final class ConnectionPanel extends JPanel {
         sb.append("──────────────────────────────\n");
         sb.append(text(UiText.RPT_SEE_NETWORK)).append('\n');
 
-        paintStatus(FAIL_COLOR, FAIL_BG, title);
+        // 顺序要紧：先把正文写好，再 paintStatus —— 弹窗就是在那里面发的，
+        // 它读的是 statusArea 的内容。先 paintStatus 会让弹窗弹出上一轮的文字。
         statusArea.setText(sb.toString());
         statusArea.setCaretPosition(0);
         statusArea.setForeground(FAIL_COLOR);
+        paintStatus(FAIL_COLOR, FAIL_BG, title);
         markStatusResult();
     }
 
@@ -1380,7 +1361,8 @@ public final class ConnectionPanel extends JPanel {
         }
 
         setBusy(true);
-        paintStatus(NEUTRAL_COLOR, NEUTRAL_BG, text(UiText.MSG_GEN_RUNNING));
+        // 进度提示，不弹窗；结果在下面完成时由 paintStatus 发出。
+        paintStatusBusy(NEUTRAL_COLOR, NEUTRAL_BG, text(UiText.MSG_GEN_RUNNING));
         statusArea.setForeground(NEUTRAL_COLOR);
         statusArea.setText(text(UiText.MSG_GEN_RUNNING_BODY) + "\n  " + sshKeygen + "\n"
                 + text(UiText.MSG_GEN_OUTFILES) + "\n  " + keyFile.getAbsolutePath() + "\n"
@@ -1596,7 +1578,8 @@ public final class ConnectionPanel extends JPanel {
 
         final String ssh = sshExe;
         setBusy(true);
-        paintStatus(NEUTRAL_COLOR, NEUTRAL_BG,
+        // 进度提示，不弹窗。
+        paintStatusBusy(NEUTRAL_COLOR, NEUTRAL_BG,
                 text(UiText.MSG_COPYING, target.toDisplay()));
         statusArea.setForeground(NEUTRAL_COLOR);
         statusArea.setText(text(UiText.MSG_COPYING_BODY,
@@ -1733,12 +1716,46 @@ public final class ConnectionPanel extends JPanel {
     }
 
     /**
-     * 设置状态区标题与配色。
+     * 记下状态标题与配色，并安排把这次结果弹出来。
      *
-     * <p>顺带记下颜色，因为语言切换时要用同一组颜色重画标题——不能因为
-     * 切了语言就把「上次失败是红的」这件事忘掉。
+     * <p>这里是**所有**操作结果的唯一出口：测试连接、保存、删除、载入、生成密钥、
+     * 复制公钥都经过它。所以弹窗也挂在它上面——「连接结果」页删掉之后，如果只在个别
+     * 地方弹窗，另外几个操作的结果就哪儿也看不到了。
+     *
+     * <p>弹窗用 {@code invokeLater} <b>推迟到本次事件处理结束之后</b>，而不是立即弹。
+     * 原因是调用顺序不统一：有的地方先 paintStatus 再写正文，有的反过来（本文件里
+     * 两种都有）。立即弹的话，前者会把<b>上一次</b>的文字弹出来——而且不会报错，
+     * 只是内容对不上。推迟一拍，正文一定已经写完，顺序就不再是问题。
+     *
+     * <p><b>进行中的提示不弹</b>：调用方在处理开头会用 {@link #paintStatusBusy} 说一句
+     * "正在连接…"，那是进度而不是结果。否则用户点一下会先收到一个"正在连接"的窗，
+     * 操作完再收到一个结果窗，等于被打断两次。
+     *
+     * <p>顺带记下颜色：语言切换时要用同一组颜色重画标题，不能因为切了语言就把
+     * 「上次失败是红的」这件事忘掉。
      */
     private void paintStatus(Color fg, Color bg, String text) {
+        statusFg = fg;
+        statusBg = bg;
+        statusLabel.setForeground(fg);
+        statusLabel.setBackground(bg);
+        statusLabel.setText(text);
+        final String title = text;
+        final boolean ok = (fg == OK_COLOR);
+        SwingUtilities.invokeLater(new Runnable() {
+            @Override
+            public void run() {
+                showResultDialog(title, ok);
+            }
+        });
+    }
+
+    /**
+     * 记下状态，但<b>不</b>弹窗——用于"正在做某事"这类进度提示。
+     *
+     * <p>与 {@link #paintStatus} 只差弹不弹窗，所以共用同一份颜色记录逻辑。
+     */
+    private void paintStatusBusy(Color fg, Color bg, String text) {
         statusFg = fg;
         statusBg = bg;
         statusLabel.setForeground(fg);

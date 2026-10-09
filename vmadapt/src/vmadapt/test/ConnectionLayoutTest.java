@@ -56,6 +56,7 @@ public final class ConnectionLayoutTest {
         fieldOrderMatchesLabels(p[0]);
         threeGroupsExist(p[0]);
         testButtonIsPresentOnce(p[0]);
+        resultTabIsGone(p[0]);
 
         System.out.println(failures == 0
                 ? "PASS " + checks + " checks"
@@ -114,6 +115,42 @@ public final class ConnectionLayoutTest {
         check("「测试连接」按钮只有一个（实际 " + n + "）", n == 1);
         int gen = countButtonsNamed(panel, "生成密钥");
         check("「生成密钥」按钮只有一个（实际 " + gen + "）", gen == 1);
+    }
+
+    /**
+     * 「连接结果」页必须已经删掉，只剩「连接配置」与「网络模式速查」两页。
+     *
+     * <p>结果改成弹窗呈现之后，那一页就是多余的：它要求用户先知道结果在哪一页，
+     * 而弹窗把"做完了"和"结果是什么"放在同一处。若哪天它被无意中加回来，这条会红。
+     */
+    private static void resultTabIsGone(ConnectionPanel panel) {
+        javax.swing.JTabbedPane tabs = tabsOf(panel);
+        if (tabs == null) {
+            check("找得到标签页控件", false);
+            return;
+        }
+        check("只有两页（实际 " + tabs.getTabCount() + "）", tabs.getTabCount() == 2);
+        check("第一页是「连接配置」",
+                "连接配置".equals(tabs.getTitleAt(0)));
+        check("第二页是「网络模式速查」",
+                "网络模式速查".equals(tabs.getTitleAt(1)));
+        for (int i = 0; i < tabs.getTabCount(); i++) {
+            check("没有「连接结果」页（第 " + (i + 1) + " 页）",
+                    !"连接结果".equals(tabs.getTitleAt(i)));
+        }
+    }
+
+    /** 取面板内部的标签页控件（生产类没有为测试暴露访问器）。 */
+    private static javax.swing.JTabbedPane tabsOf(ConnectionPanel panel) {
+        try {
+            Field f = ConnectionPanel.class.getDeclaredField("tabs");
+            f.setAccessible(true);
+            Object v = f.get(panel);
+            return (v instanceof javax.swing.JTabbedPane)
+                    ? (javax.swing.JTabbedPane) v : null;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     // ------------------------------------------------------------------

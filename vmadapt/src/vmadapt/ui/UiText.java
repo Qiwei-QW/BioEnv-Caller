@@ -101,12 +101,12 @@ final class UiText {
     // 标签页
     // ==================================================================
 
+    // 只有两页。「连接结果」那一页已删除：结果改由弹窗呈现，见
+    // ConnectionPanel 构造函数里加标签页处的说明。
     static final String TAB_CONNECTION = "tab.connection";
-    static final String TAB_RESULT = "tab.result";
     static final String TAB_NETWORK = "tab.network";
 
     static final String TAB_CONNECTION_TIP = "tab.connection.tip";
-    static final String TAB_RESULT_TIP = "tab.result.tip";
     static final String TAB_NETWORK_TIP = "tab.network.tip";
 
     // ==================================================================
@@ -171,7 +171,6 @@ final class UiText {
 
     static final String SEC_CONNECTION = "sec.connection";
     static final String SEC_ACTIONS = "sec.actions";
-    static final String SEC_PROBE = "sec.probe";
     static final String SEC_NETWORK = "sec.network";
     static final String HINT_BACKGROUND = "hint.background";
 
@@ -188,10 +187,6 @@ final class UiText {
 
     /** 按钮：测试连接进行中的文案。 */
     static final String BTN_TESTING = "btn.testing";
-
-    /** 连接结果弹窗的标题。 */
-    static final String DLG_RESULT_OK = "dlg.resultOk";
-    static final String DLG_RESULT_FAIL = "dlg.resultFail";
 
     /** 选择私钥文件的对话框。 */
     static final String DLG_CHOOSE_KEY = "dlg.choosekey";
@@ -414,15 +409,11 @@ final class UiText {
         // 的字段属于「非法前向引用」，javac 会直接报错：它们不是编译期常量。
         // 它们的 put(...) 放在字段声明之后（见文件末尾）。
         put(TAB_CONNECTION, "Connection", "连接配置");
-        put(TAB_RESULT, "Result", "连接结果");
         put(TAB_NETWORK, "Network modes", "网络模式速查");
 
         put(TAB_CONNECTION_TIP,
                 "Connection settings: host, port, user, key, profile name.",
                 "连接参数：主机、端口、用户名、密钥路径、配置名称。");
-        put(TAB_RESULT_TIP,
-                "Probe results for the last connection attempt.",
-                "最近一次连接探测的结果。");
         put(TAB_NETWORK_TIP,
                 "How VMware NAT, bridged and host-only modes affect SSH.",
                 "VMware 的 NAT、桥接、仅主机三种模式对 SSH 连接的影响。");
@@ -507,15 +498,12 @@ final class UiText {
 
         put(SEC_CONNECTION, "Connection", "连接参数");
         put(SEC_ACTIONS, "Actions", "操作");
-        put(SEC_PROBE, "Probe details", "探测详情");
         put(SEC_NETWORK, "VMware network modes", "VMware 网络模式速查");
 
         put(SEC_MACHINE, "This machine", "这台机器");
         put(SEC_LOGIN, "How to log in", "登录方式");
         put(SEC_SAVEAS, "Save / load a profile", "保存与载入配置");
         put(BTN_TESTING, "Connecting...", "正在连接…");
-        put(DLG_RESULT_OK, "Connection succeeded", "连接成功");
-        put(DLG_RESULT_FAIL, "Connection failed", "连接失败");
         put(HINT_BACKGROUND,
                 "Tip: every long-running task runs on a background thread, "
                         + "so the window stays responsive while connecting.",

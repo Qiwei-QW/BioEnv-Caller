@@ -395,9 +395,20 @@ $vmTestSources = Get-ChildItem (Join-Path $Root 'vmadapt\src') -Recurse -Filter 
     Where-Object { $_.FullName -like '*\test\*' } |
     ForEach-Object { $_.FullName }
 if ($vmTestSources.Count -gt 0) {
+    # 测试单独编到一个目录，不能进 $VmadaptClasses。
+    #
+    # 打包步骤是把 $VmadaptClasses 下的 vmadapt\* 整个复制进 JAR 的，所以测试类一旦
+    # 编进那里就会随插件发布。这不是假设：加上这一步之后包里确实多出了 19 个
+    # vmadapt/test/*.class（其中包含只在本地用的截图工具）。bioenv 那边早就把测试
+    # 编在 $ClassesDir 再用 $shipExcluded 挡掉，vmadapt 原来是"根本没编过测试"，
+    # 所以从没暴露过。
+    $VmadaptTestClasses = Join-Path $BuildDir 'vmadapt-test-classes'
+    if (Test-Path $VmadaptTestClasses) { Remove-Item -Recurse -Force $VmadaptTestClasses }
+    New-Item -ItemType Directory -Path $VmadaptTestClasses -Force | Out-Null
+
     Write-Host ""
     Write-Host "Compiling $($vmTestSources.Count) vmadapt test source file(s)..."
-    & $Javac -encoding UTF-8 -Xlint:-options -d $VmadaptClasses `
+    & $Javac -encoding UTF-8 -Xlint:-options -d $VmadaptTestClasses `
         -cp "$VmadaptClasses;$tbJar" $vmTestSources
     if ($LASTEXITCODE -ne 0) { throw "vmadapt test compilation failed." }
 
@@ -426,7 +437,7 @@ if ($vmTestSources.Count -gt 0) {
     foreach ($t in $vmTests) {
         Push-Location $Root
         try {
-            $out = cmd.exe /c "`"$Java`" -cp `"$VmadaptClasses`" $t 2>&1"
+            $out = cmd.exe /c "`"$Java`" -cp `"$VmadaptTestClasses;$VmadaptClasses`" $t 2>&1"
             if ($LASTEXITCODE -eq 0) {
                 $vmPassed += $t
                 Write-Host "PASS  $t"
@@ -546,6 +557,17 @@ New-Item -ItemType Directory -Path $vmStage -Force | Out-Null
 Copy-Item (Join-Path $VmadaptClasses 'vmadapt\*') $vmStage -Recurse -Force
 if (-not (Test-Path (Join-Path $vmStage 'core\SshTransport.class'))) {
     throw "vmadapt transport classes were not packaged"
+}
+
+# vmadapt 的测试绝不能随插件发布。
+#
+# 上面那条 Copy-Item 是"整个 vmadapt 目录复制过去"，所以 test/ 只要被编进
+# $VmadaptClasses 就会进包。实测漏过 19 个 vmadapt/test/*.class，其中还有只在本地
+# 用的截图工具——这是先前的疏漏：vmadapt 的测试从来没被编过，所以从没暴露。
+# 现在测试编在单独的 $VmadaptTestClasses，这条断言是为了防止哪天又编回来。
+if (Test-Path (Join-Path $vmStage 'test')) {
+    Remove-Item -Recurse -Force (Join-Path $vmStage 'test')
+    throw "vmadapt test classes leaked into the packaged JAR (removed; fix the compile output dir)"
 }
 
 $stubClass = Join-Path $jarStage 'Plugin\PluginInterface.class'

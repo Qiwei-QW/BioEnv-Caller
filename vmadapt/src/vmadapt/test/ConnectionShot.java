@@ -36,13 +36,14 @@ public final class ConnectionShot {
                         System.out.println("failed: 找不到标签页控件，界面结构可能变了");
                         return;
                     }
-                    tabs.setSelectedIndex(0);
-                    shot(panel, out, "conn-tab1-form.png");
-                    tabs.setSelectedIndex(1);
-                    shot(panel, out, "conn-tab2-result.png");
-                    tabs.setSelectedIndex(2);
-                    shot(panel, out, "conn-tab3-network.png");
-                    System.out.println("wrote 3 images to " + out);
+                    // 只有两页：0 连接配置、1 网络模式速查。「连接结果」页已删除
+                    // （结果改由弹窗呈现），所以这里也只画两页。
+                    int pages = Math.min(2, tabs.getTabCount());
+                    for (int i = 0; i < pages; i++) {
+                        tabs.setSelectedIndex(i);
+                        shot(panel, out, "conn-tab" + (i + 1) + ".png");
+                    }
+                    System.out.println("wrote " + pages + " images to " + out);
                 } catch (Exception e) {
                     System.out.println("failed: " + e);
                     e.printStackTrace();
