@@ -301,6 +301,11 @@ try {
         # The same false status was reused on the SSH path. This covers both the
         # first-install branch (guide, do not lie) and the already-linked branch
         # (say "click Detect", do not lie). Needs WSL to reach the real path.
+        #
+        # It also pins WHERE the VM connection dialog may appear: never on the WSL
+        # path, always once the user has chosen the VM mode. Both directions are
+        # asserted, because testing only "does not appear" would pass just as well
+        # if the dialog had been deleted outright.
         'bioenv.test.FirstRunScanTest',
 
         # --- 换风格不得留下上一套的底色 --------------------------------------
