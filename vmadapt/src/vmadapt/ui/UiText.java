@@ -116,63 +116,29 @@ final class UiText {
     static final String LBL_HOST = "lbl.host";
     static final String LBL_PORT = "lbl.port";
     static final String LBL_USER = "lbl.user";
-    static final String LBL_KEY = "lbl.key";
     static final String LBL_NAME = "lbl.name";
-    static final String LBL_NOTE = "lbl.note";
-    static final String LBL_TIMEOUT = "lbl.timeout";
-    static final String LBL_SAVED = "lbl.saved";
 
     // ==================================================================
     // 字段悬停提示
     // ==================================================================
 
-    static final String TIP_HOST = "tip.host";
-    static final String TIP_PORT = "tip.port";
-    static final String TIP_USER = "tip.user";
-    static final String TIP_KEY = "tip.key";
-    static final String TIP_NAME = "tip.name";
-    static final String TIP_NOTE = "tip.note";
-    static final String TIP_TIMEOUT = "tip.timeout";
-    static final String TIP_SAVED = "tip.saved";
 
     // ==================================================================
     // 输入框占位提示
     // ==================================================================
 
-    static final String PH_HOST = "ph.host";
-    static final String PH_USER = "ph.user";
-    static final String PH_KEY = "ph.key";
-    static final String PH_NAME = "ph.name";
-    static final String PH_NOTE = "ph.note";
 
     // ==================================================================
     // 按钮
     // ==================================================================
 
-    static final String BTN_BROWSE = "btn.browse";
-    static final String BTN_LOAD = "btn.load";
-    static final String BTN_TEST = "btn.test";
     static final String BTN_SAVE = "btn.save";
-    static final String BTN_DELETE = "btn.delete";
-    static final String BTN_GEN_KEY = "btn.genkey";
-    static final String BTN_COPY_KEY = "btn.copykey";
 
-    static final String BTN_BROWSE_TIP = "btn.browse.tip";
-    static final String BTN_LOAD_TIP = "btn.load.tip";
-    static final String BTN_TEST_TIP = "btn.test.tip";
-    static final String BTN_SAVE_TIP = "btn.save.tip";
-    static final String BTN_DELETE_TIP = "btn.delete.tip";
-    static final String BTN_GEN_KEY_TIP = "btn.genkey.tip";
-    static final String BTN_COPY_KEY_TIP = "btn.copykey.tip";
 
     // ==================================================================
     // 区块标题与提示
     // ==================================================================
 
-    static final String SEC_CONNECTION = "sec.connection";
-    static final String SEC_ACTIONS = "sec.actions";
-    static final String SEC_NETWORK = "sec.network";
-    static final String HINT_BACKGROUND = "hint.background";
 
     /**
      * 第一页的三个分组标题。
@@ -181,22 +147,13 @@ final class UiText {
      * 判断先填什么、能点哪个。分开之后每组只讲一件事——这台机器是什么、怎么登录、
      * 这条配置叫什么。
      */
-    static final String SEC_MACHINE = "sec.machine";
-    static final String SEC_LOGIN = "sec.login";
-    static final String SEC_SAVEAS = "sec.saveas";
 
     /** 按钮：测试连接进行中的文案。 */
     static final String BTN_TESTING = "btn.testing";
 
     /** 临时：评审用布局变体的文案。选定后保留需要的那些。 */
-    static final String SEC_ADVANCED = "sec.advanced";
-    static final String BTN_ADVANCED = "btn.advanced";
-    static final String BTN_ADVANCED_HIDE = "btn.advancedHide";
-    static final String HINT_TEST_FIRST = "hint.testFirst";
 
     /** 按钮：设置密钥（生成 + 安装到远端，一步完成）。 */
-    static final String BTN_SETUP_KEY = "btn.setupKey";
-    static final String BTN_SETUP_KEY_TIP = "btn.setupKey.tip";
 
     /** 错误：设置密钥时表单还没填全。 */
     static final String MSG_SETUP_NEED_FORM = "msg.setupNeedForm";
@@ -212,29 +169,13 @@ final class UiText {
 
     // 向导各步的标题、提示与按钮。
     static final String DIALOG_CONNECTION_TITLE_WIZARD = "dialog.wizardTitle";
-    static final String WIZ_HOST_TITLE = "wiz.host.title";
     static final String WIZ_HOST_HINT = "wiz.host.hint";
-    static final String WIZ_PORT_TITLE = "wiz.port.title";
     static final String WIZ_PORT_HINT = "wiz.port.hint";
-    static final String WIZ_PORT_PH = "wiz.port.ph";
-    static final String WIZ_USER_TITLE = "wiz.user.title";
     static final String WIZ_USER_HINT = "wiz.user.hint";
-    static final String WIZ_KEY_TITLE = "wiz.key.title";
-    static final String WIZ_KEY_HINT = "wiz.key.hint";
-    static final String WIZ_KEY_PH = "wiz.key.ph";
-    static final String WIZ_KEY_DEFAULT = "wiz.key.default";
-    static final String WIZ_CONFIRM_TITLE = "wiz.confirm.title";
-    static final String WIZ_CONFIRM_HINT = "wiz.confirm.hint";
-    static final String WIZ_PWD_TITLE = "wiz.pwd.title";
     static final String WIZ_PWD_HINT = "wiz.pwd.hint";
-    static final String WIZ_PWD_NOTE = "wiz.pwd.note";
     static final String WIZ_WORKING = "wiz.working";
-    static final String WIZ_OK_TITLE = "wiz.ok.title";
-    static final String WIZ_OK_HINT = "wiz.ok.hint";
     static final String WIZ_NAME_NOTE = "wiz.name.note";
-    static final String WIZ_FAIL_TITLE = "wiz.fail.title";
     static final String WIZ_FAIL_HINT = "wiz.fail.hint";
-    static final String WIZ_MANUAL_TITLE = "wiz.manual.title";
     static final String WIZ_OLD_SSH_TITLE = "wiz.oldSsh.title";
     static final String WIZ_OLD_SSH_REASON = "wiz.oldSsh.reason";
     static final String WIZ_NEED_HOST = "wiz.needHost";
@@ -247,9 +188,18 @@ final class UiText {
     static final String BTN_CLOSE = "btn.close";
     static final String BTN_SKIP = "btn.skip";
 
+    /** 密码那一行的标签。 */
+    static final String LBL_PASSWORD = "lbl.password";
+
+    /**
+     * 密钥须知：密钥那一步的唯一内容。
+     *
+     * <p>这一步不填任何东西，只说明接下来会发生什么，所以文案要完整：会生成什么、
+     * 私钥留在哪、公钥去哪、以及点哪个按钮继续。
+     */
+    static final String WIZ_KEY_NOTICE = "wiz.keyNotice";
+
     /** 选择私钥文件的对话框。 */
-    static final String DLG_CHOOSE_KEY = "dlg.choosekey";
-    static final String FILTER_PRIVKEY = "dlg.filter.privkey";
 
     // ==================================================================
     // 状态区
@@ -262,10 +212,6 @@ final class UiText {
     // 连接过程
     // ==================================================================
 
-    static final String MSG_INCOMPLETE = "msg.incomplete";
-    static final String MSG_CONNECTING_TO = "msg.connectingto";
-    static final String MSG_CONNECTING_BG = "msg.connectingbg";
-    static final String MSG_CONNECT_THREW = "msg.connectthrew";
     static final String MSG_NULL_REPORT = "msg.nullreport";
     static final String MSG_NULL_REPORT_REASON = "msg.nullreport.reason";
     static final String MSG_CONNECTED = "msg.connected";
@@ -314,33 +260,12 @@ final class UiText {
     // 保存 / 删除 / 载入配置
     // ==================================================================
 
-    static final String MSG_NAME_EMPTY = "msg.nameempty";
-    static final String MSG_NAME_EMPTY_REASON = "msg.nameempty.reason";
-    static final String MSG_NO_HOST = "msg.nohost";
-    static final String MSG_NO_HOST_REASON = "msg.nohost.reason";
     static final String MSG_SAVE_FAILED = "msg.savefailed";
     static final String MSG_SAVE_REJECTED = "msg.saverejected";
     static final String MSG_SAVE_REJECTED_REASON = "msg.saverejected.reason";
     static final String MSG_SAVED_TITLE = "msg.saved.title";
     static final String MSG_SAVED_BODY = "msg.saved.body";
-    static final String MSG_SAVED_TARGET = "msg.saved.target";
-    static final String MSG_SAVED_KEY = "msg.saved.key";
-    static final String MSG_SAVED_KEY_NONE = "msg.saved.keynone";
 
-    static final String MSG_NO_SELECTION = "msg.noselection";
-    static final String MSG_NO_SELECTION_DELETE = "msg.noselection.delete";
-    static final String MSG_NO_SELECTION_LOAD = "msg.noselection.load";
-    static final String MSG_CONFIRM_DELETE = "msg.confirmdelete";
-    static final String MSG_CONFIRM_DELETE_TITLE = "msg.confirmdelete.title";
-    static final String MSG_DELETE_FAILED = "msg.deletefailed";
-    static final String MSG_DELETED_TITLE = "msg.deleted.title";
-    static final String MSG_DELETED_BODY = "msg.deleted.body";
-    static final String MSG_MISSING_TITLE = "msg.missing.title";
-    static final String MSG_MISSING_DELETED = "msg.missing.deleted";
-    static final String MSG_LOAD_FAILED = "msg.loadfailed";
-    static final String MSG_MISSING = "msg.missing";
-    static final String MSG_LOADED_TITLE = "msg.loaded.title";
-    static final String MSG_LOADED_BODY = "msg.loaded.body";
 
     // ==================================================================
     // 密钥生成
@@ -383,10 +308,6 @@ final class UiText {
     static final String MSG_NO_PUBFILE_REASON = "msg.nopubfile.reason";
     static final String MSG_NO_SSH = "msg.nossh";
     static final String MSG_NO_SSH_REASON = "msg.nossh.reason";
-    static final String MSG_CONFIRM_COPY = "msg.confirmcopy";
-    static final String MSG_CONFIRM_COPY_TITLE = "msg.confirmcopy.title";
-    static final String MSG_CONFIRM_COPY_PUB = "msg.confirmcopy.pub";
-    static final String MSG_CONFIRM_COPY_TARGET = "msg.confirmcopy.target";
     static final String MSG_COPYING = "msg.copying";
     static final String MSG_COPYING_BODY = "msg.copying.body";
     static final String MSG_READ_PUB_FAILED = "msg.readpubfailed";
@@ -395,7 +316,6 @@ final class UiText {
     static final String MSG_COPY_FAILED_CODE = "msg.copyfailed.code";
     static final String MSG_COPY_OK_TITLE = "msg.copyok.title";
     static final String MSG_COPY_OK_BODY = "msg.copyok.body";
-    static final String MSG_COPY_OK_TAIL = "msg.copyok.tail";
     static final String MSG_CMD_OUTPUT = "msg.cmdoutput";
 
     static final String TIP_COPY_1 = "tipcopy.1";
@@ -408,8 +328,6 @@ final class UiText {
     // 执行失败
     // ==================================================================
 
-    static final String MSG_EXEC_FAILED = "msg.execfailed";
-    static final String MSG_EXEC_CMD = "msg.execcmd";
 
     /** 只当前缀用的短句，拼在异常或命令前面。 */
     static final String PFX_EXEC_FAILED = "pfx.execfailed";
@@ -480,105 +398,15 @@ final class UiText {
         put(LBL_HOST, "Host / IP:", "主机 / IP：");
         put(LBL_PORT, "Port:", "端口：");
         put(LBL_USER, "User:", "用户名：");
-        put(LBL_KEY, "Private key:", "密钥路径：");
         put(LBL_NAME, "Profile name:", "配置名称：");
-        put(LBL_NOTE, "Note:", "备注：");
-        put(LBL_TIMEOUT, "Timeout (s):", "超时（秒）：");
-        put(LBL_SAVED, "Saved profiles:", "已存配置：");
 
-        put(TIP_HOST,
-                "VM IP address or host name. Under VMware NAT, use 127.0.0.1 "
-                        + "with a port forwarding rule in place.",
-                "虚拟机的 IP 或主机名。VMware NAT 模式下填 127.0.0.1 并配好端口转发。");
-        put(TIP_PORT,
-                "SSH port, 22 by default. NAT port forwarding usually maps it to 2222.",
-                "SSH 端口，默认 22。NAT 端口转发常映射成 2222。");
-        put(TIP_USER,
-                "Login user name, for example ubuntu, root or centos.",
-                "登录用户名，例如 ubuntu、root、centos。");
-        put(TIP_KEY,
-                "Private key file (a local Windows path). Leave empty to use the "
-                        + "default ssh keys or ssh-agent.",
-                "私钥文件（Windows 本地路径）。留空则用 ssh 默认密钥或 ssh-agent。");
-        put(TIP_NAME,
-                "A name for this profile; it is the key used when saving, "
-                        + "for example \"seq-analysis-box\".",
-                "给这套配置起的别名，保存时用它做键，例如「测序分析机」。");
-        put(TIP_NOTE,
-                "Free-form note, kept for reference only. Not used for connecting.",
-                "自由备注，只作备忘，不参与连接。");
-        put(TIP_TIMEOUT,
-                "Connection timeout. 15 seconds by default; when the network is "
-                        + "unreachable the wait lasts that long.",
-                "连接超时。默认 15 秒；网络不通时会一直等到这个时间。");
-        put(TIP_SAVED,
-                "Pick a saved profile and load it into the form.",
-                "从本地配置里选一条载入到表单。");
 
-        put(PH_HOST, "e.g. 192.168.1.100   (NAT: 127.0.0.1)",
-                "例：192.168.1.100   （NAT 模式：127.0.0.1）");
-        put(PH_USER, "e.g. ubuntu", "例：ubuntu");
-        put(PH_KEY, "leave empty to use the default key", "留空则使用默认密钥");
-        put(PH_NAME, "e.g. seq-analysis-box", "例：测序分析机");
-        put(PH_NOTE, "optional", "可选");
-
-        put(BTN_BROWSE, "Browse...", "浏览…");
-        put(BTN_LOAD, "Load", "载入");
-        put(BTN_TEST, "Test connection", "测试连接");
         put(BTN_SAVE, "Save", "保存配置");
-        put(BTN_DELETE, "Delete", "删除配置");
-        put(BTN_GEN_KEY, "Generate key", "生成密钥");
-        put(BTN_COPY_KEY, "Copy public key to VM", "复制公钥到远端");
 
-        put(BTN_BROWSE_TIP, "Pick the local private key file to use.",
-                "选择本地私钥文件。");
-        put(BTN_LOAD_TIP, "Load the selected saved profile into the form.",
-                "把选中的已存配置读进表单。");
-        put(BTN_TEST_TIP,
-                "Connect once and report the result on the Result tab. Nothing is saved.",
-                "真的连一次，并把结果写到「连接结果」页；不保存任何东西。");
-        put(BTN_SAVE_TIP,
-                "Save this profile to %USERPROFILE%\\.vmadapt\\connections.json. "
-                        + "Passwords are never written to disk (key-based auth only).",
-                "把这套配置存到 %USERPROFILE%\\.vmadapt\\connections.json。"
-                        + "密码永不落盘（本方案只支持密钥）。");
-        put(BTN_DELETE_TIP,
-                "Delete the selected entry from Saved profiles. "
-                        + "Disabled when nothing is selected.",
-                "删除「已存配置」里选中的那一条。未选中时不可用。");
-        put(BTN_GEN_KEY_TIP,
-                "Run ssh-keygen to create a new key pair. This only creates "
-                        + "the files; nothing is installed on the VM yet.",
-                "调用 ssh-keygen 生成一对新密钥。只是生成文件，还没装到虚拟机上。");
-        put(BTN_COPY_KEY_TIP,
-                "Append the public key to the VM's ~/.ssh/authorized_keys "
-                        + "so passwordless login works.",
-                "把公钥追加到虚拟机的 ~/.ssh/authorized_keys，免密登录才会生效。");
 
-        put(SEC_CONNECTION, "Connection", "连接参数");
-        put(SEC_ACTIONS, "Actions", "操作");
-        put(SEC_NETWORK, "VMware network modes", "VMware 网络模式速查");
-
-        put(SEC_MACHINE, "This machine", "这台机器");
-        put(SEC_LOGIN, "How to log in", "登录方式");
-        put(SEC_SAVEAS, "Save / load a profile", "保存与载入配置");
         put(BTN_TESTING, "Connecting...", "正在连接…");
 
-        put(SEC_ADVANCED, "Advanced", "高级");
-        put(BTN_ADVANCED, "\u25b8 Advanced (timeout, profile name, keys)",
-                "\u25b8 高级（超时、配置名称、密钥工具）");
-        put(BTN_ADVANCED_HIDE, "\u25be Advanced (timeout, profile name, keys)",
-                "\u25be 高级（超时、配置名称、密钥工具）");
-        put(HINT_TEST_FIRST, "(test it first, then save)",
-                "（先测通，再保存）");
 
-        put(BTN_SETUP_KEY, "Set up key", "设置密钥");
-        put(BTN_SETUP_KEY_TIP,
-                "Generate a key if there is none, then install its public half "
-                        + "on the VM so login needs no password. Uses the host, "
-                        + "user and port filled in above.",
-                "还没有密钥就生成一把，然后把公钥装到虚拟机上，之后登录免密。"
-                        + "用上面填好的主机、用户名和端口。");
         put(MSG_SETUP_NEED_FORM, "Set up key needs these first:",
                 "要设置密钥，请先填好：");
 
@@ -597,60 +425,40 @@ final class UiText {
 
         put(DIALOG_CONNECTION_TITLE_WIZARD, "Linux VM connection",
                 "虚拟机连接配置");
-        put(WIZ_HOST_TITLE, "Where is the VM?", "虚拟机在哪里？");
         put(WIZ_HOST_HINT,
-                "Enter the VM's IP address. Run ip addr inside the VM to see it; "
-                        + "it is usually 192.168.x.x.",
-                "填虚拟机的 IP 地址。在虚拟机的终端里执行 ip addr 可以看到，"
-                        + "通常是 192.168.x.x。");
-        put(WIZ_PORT_TITLE, "Which port?", "用哪个端口？");
+                "The VM's IP address depends on its network mode:\n"
+                        + "  NAT: on the host use 127.0.0.1 and set up port "
+                        + "forwarding in VMware; the VM's own IP (192.168.x.x) is not "
+                        + "reachable from the host.\n"
+                        + "  Bridged: the VM has its own address on your LAN - run "
+                        + "ip addr inside the VM and use that 192.168.x.x.\n"
+                        + "  Host-only: the VM is on the vmnet1 subnet; run ip addr "
+                        + "inside the VM and use its 192.168.x.x.",
+                "虚拟机的 IP 取决于它的网络模式，几种模式填法不同：\n"
+                        + "  NAT：宿主机填 127.0.0.1，并在 VMware 里配好端口转发；"
+                        + "虚拟机自己的 IP（192.168.x.x）从宿主机访问不到。\n"
+                        + "  桥接：虚拟机在你所在局域网里有独立 IP，"
+                        + "在虚拟机里执行 ip addr 看到的 192.168.x.x 就可以直接填。\n"
+                        + "  仅主机：虚拟机在 vmnet1 网段，同样用 ip addr 查它的 "
+                        + "192.168.x.x。");
         put(WIZ_PORT_HINT,
                 "SSH is 22 unless you changed it in the VM's sshd config.",
                 "SSH 默认是 22。只有在虚拟机上改过 sshd 配置时才需要改这里。");
-        put(WIZ_PORT_PH, "Default 22", "默认 22");
-        put(WIZ_USER_TITLE, "Which account?", "用哪个账号登录？");
         put(WIZ_USER_HINT,
                 "The login name inside the VM - the one you set when installing it, "
                         + "often ubuntu.",
                 "虚拟机里你的登录名。装系统时设的那个，常见是 ubuntu。");
-        put(WIZ_KEY_TITLE, "Which key?", "用哪个密钥？");
-        put(WIZ_KEY_HINT,
-                "Leave it blank and the plugin generates a dedicated key in ~/.ssh. "
-                        + "If you already have your own key, give its full path.",
-                "可以留空——插件会在 ~/.ssh 下生成一把专用密钥。"
-                        + "已经有自己的密钥时，填它的完整路径。");
-        put(WIZ_KEY_PH, "Leave blank for the default key (recommended)",
-                "留空则使用默认密钥（推荐）");
-        put(WIZ_KEY_DEFAULT, "(default key)", "（使用默认密钥）");
-        put(WIZ_CONFIRM_TITLE, "Check before connecting", "确认一下");
-        put(WIZ_CONFIRM_HINT,
-                "This will create an SSH key pair on this computer. The private key "
-                        + "stays here; the public key is appended to your VM.",
-                "点「开始连接」后：会在本机生成 SSH 密钥对，私钥留在本机，"
-                        + "公钥追加到虚拟机上。");
-        put(WIZ_PWD_TITLE, "Enter the VM login password",
-                "请输入虚拟机登录密码");
         put(WIZ_PWD_HINT,
-                "This is the last time a password is needed. Once the public key is "
-                        + "installed, connections use the key instead.",
-                "这是最后一次需要密码。装上公钥之后，以后连接都用免密。");
-        put(WIZ_PWD_NOTE,
-                "Used once to install the public key. The password is not saved.",
-                "只用于这一次安装公钥，密码不会被保存。");
+                "Enter the VM login password so the public key can be sent to the VM. "
+                        + "The password is not saved.",
+                "请输入虚拟机登陆密码，以便发送公钥到虚拟机。密码不会被保存。");
         put(WIZ_WORKING, "Connecting, please wait...", "正在连接，请稍候…");
-        put(WIZ_OK_TITLE, "Connected", "连接成功");
-        put(WIZ_OK_HINT,
-                "Give this machine a name so you can pick it next time.",
-                "给这台机器起个名字，下次就能直接选它。");
         put(WIZ_NAME_NOTE,
                 "Leave blank to use \"user@host:port\". You can rename it later.",
                 "留空则用「用户名@主机:端口」。以后可以随时改。");
-        put(WIZ_FAIL_TITLE, "Connection failed", "连接失败");
         put(WIZ_FAIL_HINT,
                 "Nothing was changed on the VM. Check the reason below and try again.",
                 "虚拟机上没有做任何改动。请对照下面的原因重试。");
-        put(WIZ_MANUAL_TITLE, "OpenSSH is not usable on this computer",
-                "这台电脑的 OpenSSH 不可用");
         put(WIZ_OLD_SSH_TITLE, "OpenSSH is too old for automatic setup",
                 "OpenSSH 版本太旧，无法自动安装公钥");
         put(WIZ_OLD_SSH_REASON,
@@ -670,17 +478,16 @@ final class UiText {
         put(BTN_CANCEL, "Cancel", "取消");
         put(BTN_CLOSE, "Close", "关闭");
         put(BTN_SKIP, "Skip", "跳过");
-        put(HINT_BACKGROUND,
-                "Tip: every long-running task runs on a background thread, "
-                        + "so the window stays responsive while connecting.",
-                "提示：所有耗时操作都在后台线程执行，连接期间界面不会卡住。");
+        put(LBL_PASSWORD, "Password:", "密码：");
+        put(WIZ_KEY_NOTICE,
+                "This will create an SSH key pair on this computer. The private key "
+                        + "stays here and is used for authentication; the public key is "
+                        + "appended to your VM automatically.\n\n"
+                        + "Click Next to continue.",
+                "此操作将在本机生成 SSH 密钥对，私钥用于身份验证，"
+                        + "公钥将自动追加到你的虚拟机中。\n\n"
+                        + "继续请点击「下一步」。");
 
-        put(DLG_CHOOSE_KEY,
-                "Select the SSH private key file (usually id_rsa, no .pub suffix)",
-                "选择 SSH 私钥文件（通常是 id_rsa，没有 .pub 后缀）");
-        put(FILTER_PRIVKEY,
-                "Private key files (id_rsa, id_ed25519, ...)",
-                "私钥文件（id_rsa / id_ed25519 等）");
 
         put(STATUS_NOT_TESTED, "Not tested yet.", "尚未测试连接。");
         put(STATUS_INTRO,
@@ -690,15 +497,6 @@ final class UiText {
                 "点「测试连接」后，这里会显示 vmadapt.core 探测到的操作系统、"
                         + "内核版本、家目录，以及失败时的排查建议。");
 
-        put(MSG_INCOMPLETE, "Incomplete connection settings", "连接参数不完整");
-        put(MSG_CONNECTING_TO, "Connecting to {0} ...", "正在连接 {0} …");
-        put(MSG_CONNECTING_BG,
-                "Connecting in the background, waiting up to {0} seconds.\n"
-                        + "If nothing happens, check the \"Network modes\" tab first.",
-                "正在后台连接，最长等待 {0} 秒。\n"
-                        + "如果一直没反应，请先看「网络模式速查」页。");
-        put(MSG_CONNECT_THREW, "The connection attempt threw an exception",
-                "连接过程抛出异常");
         put(MSG_NULL_REPORT, "The probe returned no result", "探测没有返回结果");
         put(MSG_NULL_REPORT_REASON, "vmadapt.core returned a null report.",
                 "vmadapt.core 返回了 null 报告。");
@@ -787,15 +585,6 @@ final class UiText {
                         + "backslashes or forward slashes for Windows paths).",
                 "找不到私钥文件：{0}。请确认路径正确（Windows 路径请用反斜杠或正斜杠）。");
 
-        put(MSG_NAME_EMPTY, "The profile name is empty", "配置名称为空");
-        put(MSG_NAME_EMPTY_REASON,
-                "Saving a profile requires a \"Profile name\" first; it identifies "
-                        + "this entry in the local profile store.",
-                "保存配置需要先填「配置名称」，它用来在本地配置里标识这一条记录。");
-        put(MSG_NO_HOST, "No host entered", "主机未填写");
-        put(MSG_NO_HOST_REASON,
-                "Enter the VM's IP address or host name before saving.",
-                "请先填写虚拟机的 IP 或主机名再保存。");
         put(MSG_SAVE_FAILED, "Saving the profile failed", "保存配置失败");
         put(MSG_SAVE_REJECTED, "The profile was rejected", "保存配置被拒绝");
         put(MSG_SAVE_REJECTED_REASON,
@@ -807,38 +596,7 @@ final class UiText {
         put(MSG_SAVED_TITLE, "Saved profile \"{0}\"", "已保存配置「{0}」");
         put(MSG_SAVED_BODY, "Profile \"{0}\" was saved locally.",
                 "配置「{0}」已保存到本地。");
-        put(MSG_SAVED_TARGET, "Target      : {0}", "连接目标：{0}");
-        put(MSG_SAVED_KEY, "Private key : {0}", "私钥路径：{0}");
-        put(MSG_SAVED_KEY_NONE, "(not set)", "(未指定)");
 
-        put(MSG_NO_SELECTION, "No profile selected", "没有选中配置");
-        put(MSG_NO_SELECTION_DELETE,
-                "Select the profile you want to delete under \"Saved profiles\" first.",
-                "请先在「已存配置」里选一条要删除的记录。");
-        put(MSG_NO_SELECTION_LOAD,
-                "Select a profile under \"Saved profiles\" first.",
-                "请先在「已存配置」里选一条记录。");
-        put(MSG_CONFIRM_DELETE,
-                "Delete the profile \"{0}\"? This cannot be undone.",
-                "确定要删除配置「{0}」吗？此操作不可撤销。");
-        put(MSG_CONFIRM_DELETE_TITLE, "Delete profile", "删除配置");
-        put(MSG_DELETE_FAILED, "Deleting the profile failed", "删除配置失败");
-        put(MSG_DELETED_TITLE, "Deleted profile \"{0}\"", "已删除配置「{0}」");
-        put(MSG_DELETED_BODY, "Profile \"{0}\" was removed from the local store.",
-                "配置「{0}」已从本地删除。");
-        put(MSG_MISSING_TITLE, "The profile does not exist", "配置不存在");
-        put(MSG_MISSING_DELETED,
-                "No profile named \"{0}\" was found in the local store; "
-                        + "it may have been deleted already.",
-                "本地配置里没有找到名为「{0}」的记录，可能已被删除。");
-        put(MSG_LOAD_FAILED, "Loading the profile failed", "载入配置失败");
-        put(MSG_MISSING, "No profile named \"{0}\" was found in the local store.",
-                "本地配置里没有找到名为「{0}」的记录。");
-        put(MSG_LOADED_TITLE, "Loaded profile \"{0}\"", "已载入配置「{0}」");
-        put(MSG_LOADED_BODY,
-                "Profile \"{0}\" was loaded into the form; click \"Test connection\" "
-                        + "to verify it.\nTarget: {1}",
-                "配置「{0}」已载入表单，可以点「测试连接」验证。\n连接目标：{1}");
 
         put(MSG_NO_KEYGEN, "ssh-keygen.exe was not found", "找不到 ssh-keygen.exe");
         put(MSG_NO_KEYGEN_REASON,
@@ -932,21 +690,6 @@ final class UiText {
                 "ssh.exe was not found in C:\\WINDOWS\\System32\\OpenSSH\\ or anywhere "
                         + "on PATH.",
                 "在 C:\\WINDOWS\\System32\\OpenSSH\\ 和 PATH 里都没有找到 ssh.exe。");
-        put(MSG_CONFIRM_COPY,
-                "Copy the public key to the VM?\n\n"
-                        + "Public key: {0}\nTarget    : {1}\n\n"
-                        + "This runs on the remote side: mkdir -p ~/.ssh && chmod 700 ~/.ssh && "
-                        + "cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys\n"
-                        + "If the same key is already there, one duplicate line is appended "
-                        + "(harmless).",
-                "把公钥复制到远端？\n\n"
-                        + "公钥：{0}\n目标：{1}\n\n"
-                        + "会在远端执行：mkdir -p ~/.ssh && chmod 700 ~/.ssh && "
-                        + "cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys\n"
-                        + "如果同样的公钥已存在，会重复追加一行（不影响使用）。");
-        put(MSG_CONFIRM_COPY_TITLE, "Copy public key to VM", "复制公钥到远端");
-        put(MSG_CONFIRM_COPY_PUB, "Public key:", "公钥：");
-        put(MSG_CONFIRM_COPY_TARGET, "Target    :", "目标：");
         put(MSG_COPYING, "Copying the public key to {0} ...",
                 "正在把公钥复制到 {0} …");
         put(MSG_COPYING_BODY,
@@ -976,7 +719,6 @@ final class UiText {
                         + "passwordless login works.",
                 "公钥已写入远端 ~/.ssh/authorized_keys。\n"
                         + "现在可以点「测试连接」验证免密登录是否生效。");
-        put(MSG_COPY_OK_TAIL, "Command output:", "命令输出：");
         put(MSG_CMD_OUTPUT, "Command output:", "命令输出：");
 
         put(TIP_COPY_1,
@@ -1007,8 +749,6 @@ final class UiText {
                 "若提示 Permission denied (publickey)，说明私钥和远端已装公钥不配对，"
                         + "可重新生成一对并再次复制。");
 
-        put(MSG_EXEC_FAILED, "Execution failed: {0}", "执行失败：{0}");
-        put(MSG_EXEC_CMD, "Command: {0}", "命令：{0}");
         put(PFX_EXEC_FAILED, "Execution failed: ", "执行失败：");
         put(PFX_EXEC_CMD, "Command: ", "命令：");
 

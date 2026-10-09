@@ -87,7 +87,14 @@ try {
 
         # 可选的联网冒烟测试：没配 VMADAPT_LIVE_* 时打印 SKIP 并以 0 退出。
         # 它的类注释写着"会出现在 build.ps1 的常规列表里"，但两个清单都漏了它。
-        'vmadapt.test.SshLiveTest'
+        'vmadapt.test.SshLiveTest',
+
+        # 密码通道：不需要服务器的几条每次都跑（版本门槛、辅助程序能不能输出密码）。
+        'vmadapt.test.AskpassProbe',
+
+        # 用密码装公钥：不需要服务器的几条（失败分型、classpath 推导）每次都跑；
+        # 端到端部分通过 TBVM_LIVE_* 指定服务器，没配时明确说"本次没有验证"并以 0 退出。
+        'vmadapt.test.KeyInstallLiveTest'
     )) {
         Write-Host ""
         Write-Host "=== $t ==="

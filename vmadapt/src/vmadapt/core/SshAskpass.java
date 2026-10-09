@@ -360,7 +360,8 @@ public final class SshAskpass {
     }
 
     /** 当前 JVM 的 java.exe，用作 askpass 程序。自检也要用它，所以公开。 */
-    public static String javaExe() {        String home = System.getProperty("java.home");
+    public static String javaExe() {
+        String home = System.getProperty("java.home");
         if (home == null || home.trim().isEmpty()) {
             return "java";
         }
@@ -368,7 +369,53 @@ public final class SshAskpass {
         return f.isFile() ? f.getAbsolutePath() : "java";
     }
 
-    static String classpath() {
+    /**
+     * 供子 JVM 定位本类用的 classpath。
+     *
+     * <h2>为什么不能直接用 {@code java.class.path}</h2>
+     *
+     * <p>因为插件是跑在 <b>TBtools 的进程里</b>的，而 TBtools 的 classpath 是它自己的
+     * jar 列表，不含 BioEnvCaller.jar——实测它启动时的 classpath 是：
+     *
+     * <pre>
+     *   D:/TBtoolsDir/TBtools_JRE1.6.jar;...;D:\TBtools\.\win64\*
+     * </pre>
+     *
+     * <p>插件由 TBtools 自己的类加载器装入，因此 {@code java.class.path} 里根本没有
+     * 插件类所在的 jar。拿它去起子进程会得到：
+     *
+     * <pre>
+     *   错误: 找不到或无法加载主类 vmadapt.core.SshAskpass
+     *   原因: java.lang.ClassNotFoundException
+     * </pre>
+     *
+     * <p>这一条是实测出来的，不是推断：模拟 TBtools 的 classpath 起子进程，确实
+     * ClassNotFound。而它失败的表现是"密码框输完，报密码错误"——用户会以为是自己
+     * 打错了，几乎不可能联想到类路径。所以必须从<b>本类自己的来源</b>推导：
+     * {@link java.security.CodeSource} 给的是本类实际被加载的位置，无论谁加载的都对。
+     *
+     * <p>三种情形：
+     * <ul>
+     *   <li>本类在 jar 里 → 返回该 jar 的路径；</li>
+     *   <li>本类在目录里（开发/自检）→ 返回该目录；</li>
+     *   <li>取不到来源 → 退回 {@code java.class.path}，聊胜于无。</li>
+     * </ul>
+     *
+     * @return 可直接交给子 JVM 的 {@code -cp} 值
+     */
+    public static String classpath() {
+        try {
+            java.security.CodeSource cs = SshAskpass.class.getProtectionDomain()
+                    .getCodeSource();
+            if (cs != null && cs.getLocation() != null) {
+                File f = new File(cs.getLocation().toURI());
+                if (f.exists()) {
+                    return f.getAbsolutePath();
+                }
+            }
+        } catch (Exception ignored) {
+            // 安全管理器拒绝、URI 不合法等都退回下面的兜底
+        }
         String cp = System.getProperty("java.class.path");
         return cp == null ? "" : cp;
     }

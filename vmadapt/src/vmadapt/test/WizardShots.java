@@ -12,11 +12,12 @@ import javax.swing.SwingUtilities;
 import vmadapt.ui.SetupWizard;
 
 /**
- * 把「连接虚拟机」向导的每一步画成图，供评审。
+ * 按最终版式画出向导各步，供评审。
  *
  * <p>不是示意图：每步都是真的 {@link SetupWizard} 面板、真的控件、真的文案。
- * 评审措辞与布局时，这比读代码有效——上一版就是因为能画出来，才发现命名窗的
- * 标签和输入框挤成了一团。
+ *
+ * <p>版式：只有一行「标签 + 输入框」，长说明挂在悬停提示上（图里看不到提示，
+ * 所以每张图另外打印它的提示文字，方便对照）。
  *
  * <p>用法：{@code WizardShots <输出目录>}
  */
@@ -30,91 +31,74 @@ public final class WizardShots {
             @Override
             public void run() {
                 try {
-                    int total = 5;
-                    // 1 主机
+                    String hintHost = "虚拟机的 IP 取决于它的网络模式：\n"
+                            + "NAT：宿主机填 127.0.0.1，并在 VMware 里配好端口转发；"
+                            + "虚拟机自己的 IP 从宿主机访问不到。\n"
+                            + "桥接：虚拟机在局域网里有独立 IP，用 ip addr 查到即可。\n"
+                            + "仅主机：虚拟机在 vmnet1 网段，同样用 ip addr 查。";
+
                     SetupWizard.FieldStep s1 = new SetupWizard.FieldStep(
-                            1, total, "虚拟机在哪里？",
-                            "填虚拟机的 IP 地址。在虚拟机的终端里执行 ip addr 可以看到，"
-                                    + "通常是 192.168.x.x。",
-                            "主机 / IP：", "例：192.168.1.100",
-                            "取消", "下一步");
-                    s1.field().setText("192.168.1.100");
-                    shot(s1.panel(), out, "wiz1-host.png");
+                            "主机 / IP：", hintHost, "取消", "下一步");
+                    s1.field().setText("127.0.0.1");
+                    shot(SetupWizard.framed(s1.panel(), "虚拟机连接配置"),
+                            out, "w1-host.png", hintHost);
 
-                    // 2 端口
+                    String hintPort = "SSH 默认是 22。只有在虚拟机上改过 sshd 配置时才需要改这里。";
                     SetupWizard.FieldStep s2 = new SetupWizard.FieldStep(
-                            2, total, "用哪个端口？",
-                            "SSH 默认是 22。只有在虚拟机上改过 sshd 配置时才需要改这里。",
-                            "端口：", "默认 22",
-                            "上一步", "下一步");
+                            "端口：", hintPort, "上一步", "下一步");
                     s2.field().setText("22");
-                    shot(s2.panel(), out, "wiz2-port.png");
+                    shot(SetupWizard.framed(s2.panel(), "虚拟机连接配置"),
+                            out, "w2-port.png", hintPort);
 
-                    // 3 用户名
+                    String hintUser = "虚拟机里你的登录名。装系统时设的那个，常见是 ubuntu。";
                     SetupWizard.FieldStep s3 = new SetupWizard.FieldStep(
-                            3, total, "用哪个账号登录？",
-                            "虚拟机里你的登录名。装 Ubuntu 时设的那个，常见是 ubuntu。",
-                            "用户名：", "例：ubuntu",
-                            "上一步", "下一步");
+                            "用户名：", hintUser, "上一步", "下一步");
                     s3.field().setText("ubuntu");
-                    shot(s3.panel(), out, "wiz3-user.png");
+                    shot(SetupWizard.framed(s3.panel(), "虚拟机连接配置"),
+                            out, "w3-user.png", hintUser);
 
-                    // 4 密钥
-                    SetupWizard.FieldStep s4 = new SetupWizard.FieldStep(
-                            4, total, "用哪个密钥？",
-                            "可以留空——插件会在 ~/.ssh 下生成一把专用密钥。"
-                                    + "已经有自己的密钥时，填它的完整路径。",
-                            "密钥路径：", "留空则使用默认密钥（推荐）",
+                    // 密钥须知：这一步的文字是常驻的，不是提示
+                    SetupWizard.Notice s4 = new SetupWizard.Notice(
+                            "此操作将在本机生成 SSH 密钥对，私钥用于身份验证，"
+                                    + "公钥将自动追加到你的虚拟机中。\n\n"
+                                    + "继续请点击「下一步」。",
                             "上一步", "下一步");
-                    shot(s4.panel(), out, "wiz4-key.png");
+                    shot(SetupWizard.framed(s4.panel(), "虚拟机连接配置"),
+                            out, "w4-key-notice.png", "(常驻显示，无提示)");
 
-                    // 5 确认
-                    SetupWizard.Confirm s5 = new SetupWizard.Confirm(
-                            5, total, "确认一下",
-                            "点「开始连接」后：会在本机生成 SSH 密钥对，私钥留在本机，"
-                                    + "公钥追加到虚拟机上。",
-                            "上一步", "开始连接");
-                    s5.setSummary("主机 / IP：  192.168.1.100\n"
-                            + "端口：       22\n"
-                            + "用户名：     ubuntu\n"
-                            + "密钥路径：   （使用默认密钥）");
-                    shot(s5.panel(), out, "wiz5-confirm.png");
+                    String hintPwd =
+                            "请输入虚拟机登陆密码，以便发送公钥到虚拟机。密码不会被保存。";
+                    SetupWizard.Password s5 = new SetupWizard.Password(
+                            "密码：", hintPwd, "上一步", "开始连接", "取消");
+                    shot(SetupWizard.framed(s5.panel(), "虚拟机连接配置"),
+                            out, "w5-password.png", hintPwd);
 
-                    // 密码（仅当还没有公钥）
-                    SetupWizard.Password pw = new SetupWizard.Password(
-                            6, 7, "请输入虚拟机登录密码",
-                            "这是最后一次需要密码。装上公钥之后，以后连接都用免密。",
-                            "只用于这一次安装公钥，密码不会被保存。",
-                            "上一步", "开始连接", "取消");
-                    shot(pw.panel(), out, "wiz6-password.png");
+                    String hintName = "留空则用「用户名@主机:端口」。以后可以随时改。";
+                    SetupWizard.FieldStep s6 = new SetupWizard.FieldStep(
+                            "配置名称：", hintName, "跳过", "保存");
+                    s6.field().setText("测序分析机");
+                    shot(SetupWizard.framed(s6.panel(), "虚拟机连接配置"),
+                            out, "w6-name.png", hintName);
 
-                    // 进行中
-                    SetupWizard.Progress pr = new SetupWizard.Progress(
-                            6, 6, "正在连接…", "请稍候，这一步通常几秒钟。");
-                    pr.append("生成密钥对 … 完成");
-                    pr.append("把公钥装到 192.168.1.100 … 完成");
-                    pr.append("测试免密登录 …");
-                    shot(pr.panel(), out, "wiz7-progress.png");
-
-                    // 命名
-                    SetupWizard.Name nm = new SetupWizard.Name(
-                            6, 6, "连接成功",
-                            "给这台机器起个名字，下次就能直接选它。",
-                            "配置名称：", "留空则用「ubuntu@192.168.1.100:22」。",
-                            "跳过", "保存");
-                    nm.field().setText("测序分析机");
-                    shot(nm.panel(), out, "wiz8-name.png");
-
-                    // 失败
-                    SetupWizard.Result bad = new SetupWizard.Result(
-                            6, 6, "连接失败",
-                            "密码不对，或者这台机器还不允许你的密钥登录。",
+                    SetupWizard.Result s7 = new SetupWizard.Result(
+                            "连接失败。虚拟机上没有做任何改动。",
                             "Permission denied (publickey,password).\n\n"
                                     + "请检查密码是否输错，然后重试。",
                             false, "关闭");
-                    shot(bad.panel(), out, "wiz9-fail.png");
+                    shot(SetupWizard.framed(s7.panel(), "虚拟机连接配置"),
+                            out, "w7-fail.png", "(常驻显示)");
 
-                    System.out.println("wrote 9 images to " + out);
+                    SetupWizard.Result s8 = new SetupWizard.Result(
+                            "这台电脑的 OpenSSH 版本太旧，无法自动安装公钥。",
+                            "插件需要 OpenSSH 8.4 或更新版本。\n\n"
+                                    + "请把下面这段贴到虚拟机的终端里执行，然后重试：\n"
+                                    + "mkdir -p ~/.ssh && chmod 700 ~/.ssh && \\\n"
+                                    + "  echo 'ssh-rsa AAAAB3Nza...tbvm' >> ~/.ssh/authorized_keys",
+                            false, "关闭");
+                    shot(SetupWizard.framed(s8.panel(), "虚拟机连接配置"),
+                            out, "w8-manual.png", "(常驻显示)");
+
+                    System.out.println("wrote 8 images to " + out);
                 } catch (Exception e) {
                     System.out.println("failed: " + e);
                     e.printStackTrace();
@@ -123,21 +107,74 @@ public final class WizardShots {
         });
     }
 
-    private static void shot(Component c, File dir, String name) throws Exception {
+    private static void shot(Component c, File dir, String name, String tooltip)
+            throws Exception {
         c.setSize(c.getPreferredSize());
         if (c instanceof Container) {
             layoutRecursively((Container) c);
         }
         int w = Math.max(1, c.getWidth());
-        int h = Math.max(1, c.getHeight());
+        int panelH = Math.max(1, c.getHeight());
+
+        // 悬停提示在静态图里天然看不到（要鼠标移上去才出现），但它的文字恰恰是这轮
+        // 评审的重点——说明从界面搬进了提示。所以把它作为图注画在窗口下面，并在图上
+        // 明确标出"悬停提示"，免得看图的人以为那是界面里的字。
+        java.util.List<String> caption = new java.util.ArrayList<String>();
+        if (tooltip != null && !tooltip.isEmpty()) {
+            caption.add("鼠标移到输入框上时显示的提示：");
+            for (String line : wrap(tooltip, 46)) {
+                caption.add(line);
+            }
+        }
+        int capH = caption.isEmpty() ? 0 : (caption.size() * 20 + 14);
+        int h = panelH + capH;
+
         BufferedImage img = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
         Graphics2D g = img.createGraphics();
         g.setColor(java.awt.Color.WHITE);
         g.fillRect(0, 0, w, h);
+        g.setRenderingHint(java.awt.RenderingHints.KEY_TEXT_ANTIALIASING,
+                java.awt.RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
         c.paint(g);
+        if (capH > 0) {
+            g.setColor(new java.awt.Color(0xE8, 0xEE, 0xF6));
+            g.fillRect(0, panelH, w, capH);
+            g.setColor(new java.awt.Color(0x33, 0x44, 0x55));
+            g.setFont(new java.awt.Font(java.awt.Font.SANS_SERIF,
+                    java.awt.Font.PLAIN, 12));
+            int y = panelH + 20;
+            for (String line : caption) {
+                g.drawString(line, 10, y);
+                y += 20;
+            }
+        }
         g.dispose();
         ImageIO.write(img, "png", new File(dir, name));
         System.out.println("  " + name + "  " + w + "x" + h);
+    }
+
+    /** 按显示宽度粗略折行（中文按 2 个宽度算）。 */
+    private static java.util.List<String> wrap(String text, int maxWidth) {
+        java.util.List<String> out = new java.util.ArrayList<String>();
+        for (String para : text.split("\n")) {
+            StringBuilder line = new StringBuilder();
+            int width = 0;
+            for (int i = 0; i < para.length(); i++) {
+                char ch = para.charAt(i);
+                int cw = (ch > 0x2E80) ? 2 : 1;
+                if (width + cw > maxWidth) {
+                    out.add(line.toString());
+                    line.setLength(0);
+                    width = 0;
+                }
+                line.append(ch);
+                width += cw;
+            }
+            if (line.length() > 0) {
+                out.add(line.toString());
+            }
+        }
+        return out;
     }
 
     private static void layoutRecursively(Container c) {

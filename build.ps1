@@ -436,7 +436,16 @@ if ($vmTestSources.Count -gt 0) {
         # 完整的端到端（ssh 真的去调 askpass）需要一台启用了密码认证的 sshd，通过
         # TBVM_ASKPASS_TEST_HOST 指定；没指定时它会说明"跳过端到端"并以 0 退出，
         # 不假装验过。
-        'vmadapt.test.AskpassProbe'
+        'vmadapt.test.AskpassProbe',
+        # 用密码装公钥这条路的验证，分成两半：
+        #
+        # 不需要服务器的一半（失败分型、版本门槛、classpath 推导）每次都跑，它们
+        # 守的是几个容易悄悄坏掉的判断——尤其 classpath：TBtools 的 java.class.path
+        # 里没有插件 jar，用它会 ClassNotFound，而表现是"密码错误"，几乎不可能猜到。
+        #
+        # 需要服务器的一半通过 TBVM_LIVE_HOST/PORT/USER/PASSWORD 指定；没配时会明确
+        # 打印"本次没有验证"，并以 0 退出，不把"没测"说成"测过了"。
+        'vmadapt.test.KeyInstallLiveTest'
     )
     $vmPassed = @()
     $vmFailed = @()

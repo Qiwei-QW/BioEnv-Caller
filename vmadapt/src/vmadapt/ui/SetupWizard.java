@@ -6,13 +6,16 @@ import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
+import java.awt.Insets;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
+import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JPasswordField;
-import javax.swing.JProgressBar;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
@@ -20,96 +23,157 @@ import javax.swing.JTextField;
 /**
  * 「连接虚拟机」向导：一步一个窗，像装软件那样走完。
  *
- * <h2>为什么改成向导</h2>
+ * <h2>为什么是向导</h2>
  *
- * <p>原来是一个表单加八个按钮，用户要自己判断先填什么、能点哪个。而这件事本身是有
- * 固定顺序的：地址 → 端口 → 用户名 → 密钥 → 连接 → 起名字。把顺序写进界面，用户
- * 就不再需要知道顺序；每一步只回答一个问题，也就没有"按钮是灰的，为什么"这种疑问。
+ * <p>原来是一个表单加八个按钮，用户要自己判断先填什么、能点哪个。而这件事本身有固定
+ * 顺序（地址 → 端口 → 用户名 → 密钥 → 连接），把顺序写进界面，用户就不必知道顺序。
  *
- * <h2>每一步都能返回</h2>
+ * <h2>版式</h2>
  *
- * <p>除了第一步，每个窗都有「上一步」，并且<b>把上一步填的值回填</b>——否则返回等于
- * 重填，那就不叫返回了。
+ * <ul>
+ *   <li><b>只有一行「标签 + 输入框」</b>，标签紧贴输入框：两者是一体的，隔开一段空白
+ *       会让人犹豫该看哪边；</li>
+ *   <li><b>不要进度条、不要"第 N / M 步"</b>：五个短步骤不值得一条进度条，而"第几步"
+ *       是给向导自己看的；</li>
+ *   <li><b>不要疑问句标题</b>（"主机 / IP："而不是"虚拟机在哪里？"）：问句读起来像在
+ *       考用户，而这只是让他填一项；</li>
+ *   <li><b>长说明做成悬停提示</b>，不常驻界面。常驻会把窗口撑成一大段字，而多数用户
+ *       填对了就不需要看；需要的人悬停一下就有。</li>
+ * </ul>
  *
- * <h2>为评审而做成面板</h2>
- *
- * <p>每个步骤是一个 {@link JPanel}，不直接开窗。这样无头环境下也能构造、绘制、断言，
- * 评审时看到的是真实控件而不是设想——上一版就是因为能画出来，才发现命名窗的标签和
- * 输入框挤成了一团。
+ * <p>每个步骤是一个 {@link JPanel}，不直接开窗，这样无头环境也能构造、绘制、断言。
  */
 public final class SetupWizard {
 
-    /** 所有步骤共用的文字宽度，窗与窗之间才不会忽宽忽窄。 */
-    public static final int WIDTH = 460;
+    /** 所有步骤共用的宽度。 */
+    public static final int WIDTH = 440;
+
+    private static final int FIELD_H = 26;
+
+    /** 标签列宽：够放下「配置名称：」这类最长标签，又不会把输入框推太远。 */
+    private static final int LABEL_W = 84;
+
+    private static final Color DESC_FG = new Color(0x44, 0x4A, 0x54);
+    private static final Color ACCENT = new Color(0x1A, 0x5F, 0xB4);
 
     private SetupWizard() {
     }
 
     // ------------------------------------------------------------------
-    // 步骤基类：统一"标题 + 说明 + 内容 + 按钮行"的骨架
+    // 步骤基类
     // ------------------------------------------------------------------
 
-    /** 一个步骤的外壳。子类只填中间那块内容。 */
+    /** 一个步骤的外壳：一行「标签 + 输入框」，下面一排按钮。 */
     public abstract static class Step {
 
         private final JPanel root = new JPanel(new BorderLayout(0, 0));
-        private final JPanel content = new JPanel(new BorderLayout(0, 10));
+        private final JPanel center = new JPanel(new BorderLayout(0, 10));
         private final JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
-        private final JLabel stepLabel = new JLabel();
-        private final JLabel titleLabel = new JLabel();
-        private final JTextArea hint = new JTextArea();
-        private final JProgressBar progress = new JProgressBar();
 
-        protected Step(int stepNo, int total, String title, String hintText) {
+        protected Step() {
             root.setName("bioenv.wizard");
-            root.setBorder(BorderFactory.createEmptyBorder(14, 18, 14, 18));
+            root.setBorder(BorderFactory.createEmptyBorder(18, 20, 16, 20));
             root.setBackground(Color.WHITE);
-            content.setOpaque(false);
+            center.setOpaque(false);
             buttons.setOpaque(false);
-
-            JPanel head = new JPanel(new BorderLayout(0, 4));
-            head.setOpaque(false);
-            stepLabel.setText("第 " + stepNo + " / " + total + " 步");
-            stepLabel.setForeground(new Color(0x6C, 0x72, 0x7C));
-            stepLabel.setFont(stepLabel.getFont().deriveFont(Font.PLAIN, 12f));
-            head.add(stepLabel, BorderLayout.NORTH);
-
-            titleLabel.setText(title);
-            titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, 15f));
-            head.add(titleLabel, BorderLayout.CENTER);
-
-            hint.setText(hintText);
-            hint.setEditable(false);
-            hint.setLineWrap(true);
-            hint.setWrapStyleWord(true);
-            hint.setOpaque(false);
-            hint.setForeground(new Color(0x55, 0x5B, 0x64));
-            hint.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12));
-            // 占位尺寸必须有：可换行 JTextArea 在 BorderLayout 里没有宽度来源，
-            // 不给就会压成一列竖排的字（命名窗踩过这个）。
-            hint.setPreferredSize(new Dimension(WIDTH, 32));
-            head.add(hint, BorderLayout.SOUTH);
-
-            JPanel top = new JPanel(new BorderLayout(0, 10));
-            top.setOpaque(false);
-            top.add(head, BorderLayout.NORTH);
-            progress.setMaximum(total);
-            progress.setValue(stepNo);
-            progress.setPreferredSize(new Dimension(WIDTH, 6));
-            progress.setBorderPainted(false);
-            top.add(progress, BorderLayout.SOUTH);
-
-            root.add(top, BorderLayout.NORTH);
-            root.add(content, BorderLayout.CENTER);
+            root.add(center, BorderLayout.CENTER);
             root.add(buttons, BorderLayout.SOUTH);
         }
 
-        /** 子类把内容放进这里（CENTER）。 */
-        protected void setBody(Component c) {
-            content.add(c, BorderLayout.CENTER);
+        /**
+         * 放进「标签 + 输入框」那一行。
+         *
+         * @param hint 悬停提示；null 表示不给。长说明走这里而不是常驻界面。
+         */
+        protected void setFieldRow(Component label, Component field, String hint) {
+            if (hint != null && !hint.trim().isEmpty()) {
+                String html = wrapHtml(hint);
+                applyTooltip(label, html);
+                applyTooltip(field, html);
+            }
+            JPanel row = new JPanel(new GridBagLayout());
+            row.setOpaque(false);
+
+            GridBagConstraints lc = new GridBagConstraints();
+            lc.gridx = 0;
+            lc.gridy = 0;
+            lc.anchor = GridBagConstraints.LINE_END;
+            lc.insets = new Insets(0, 0, 0, 6);
+            row.add(label, lc);
+
+            GridBagConstraints fc = new GridBagConstraints();
+            fc.gridx = 1;
+            fc.gridy = 0;
+            fc.weightx = 1.0;
+            fc.fill = GridBagConstraints.HORIZONTAL;
+            row.add(field, fc);
+
+            JPanel holder = new JPanel(new GridBagLayout());
+            holder.setOpaque(false);
+            GridBagConstraints hc = new GridBagConstraints();
+            hc.gridx = 0;
+            hc.gridy = 0;
+            hc.weightx = 1.0;
+            hc.fill = GridBagConstraints.HORIZONTAL;
+            holder.add(row, hc);
+            center.add(holder, BorderLayout.CENTER);
         }
 
-        /** 子类加按钮；顺序按加入顺序从左到右。 */
+        /** 只放一块正文，没有「标签 + 字段」那一行（须知页、结果页用它）。 */
+        protected void setNoticeBody(Component body) {
+            center.add(body, BorderLayout.CENTER);
+        }
+
+        /** 提示按 HTML 排，长句才会自动换行；否则会撑成一条看不到头的细条。 */
+        private static String wrapHtml(String text) {
+            String body = text.replace("&", "&amp;").replace("<", "&lt;")
+                    .replace(">", "&gt;").replace("\n", "<br>");
+            return "<html><div width='380'>" + body + "</div></html>";
+        }
+
+        /** 递归设提示：组合面板里真正的输入框也要能悬停看到。 */
+        private static void applyTooltip(Component c, String tip) {
+            if (c instanceof JComponent) {
+                ((JComponent) c).setToolTipText(tip);
+            }
+            if (c instanceof java.awt.Container) {
+                for (Component k : ((java.awt.Container) c).getComponents()) {
+                    applyTooltip(k, tip);
+                }
+            }
+        }
+
+        /** 字段标签，宽度固定，保证各类字段对齐。 */
+        protected static JLabel fieldLabel(String text) {
+            JLabel l = new JLabel(text);
+            l.setPreferredSize(new Dimension(LABEL_W, FIELD_H));
+            l.setHorizontalAlignment(JLabel.RIGHT);
+            l.setFont(l.getFont().deriveFont(Font.PLAIN, 13f));
+            return l;
+        }
+
+        /** 统一样式的单行输入框。 */
+        protected static JTextField newField() {
+            JTextField f = new JTextField();
+            f.setPreferredSize(new Dimension(WIDTH - LABEL_W - 12, FIELD_H));
+            return f;
+        }
+
+        /** 一段只读说明，用于须知页与结果页。 */
+        protected static JTextArea notice(String text, Color fg, int height) {
+            JTextArea a = new JTextArea(text);
+            a.setEditable(false);
+            a.setLineWrap(true);
+            a.setWrapStyleWord(true);
+            a.setOpaque(false);
+            a.setForeground(fg);
+            a.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 13));
+            // 占位尺寸必须有：可换行 JTextArea 在 BorderLayout 里没有宽度来源，
+            // 不给就会被压成一列竖排的字。
+            a.setPreferredSize(new Dimension(WIDTH, height));
+            return a;
+        }
+
         protected JButton addButton(String text, String name) {
             JButton b = new JButton(text);
             b.setName(name);
@@ -117,67 +181,39 @@ public final class SetupWizard {
             return b;
         }
 
-        /** 把某个按钮标成主操作（蓝色文字）。 */
         protected static void primary(JButton b) {
-            b.setForeground(new Color(0x1A, 0x5F, 0xB4));
+            b.setForeground(ACCENT);
         }
 
         public JPanel panel() {
             return root;
         }
 
-        public String title() {
-            return titleLabel.getText();
-        }
-
-        public String hint() {
-            return hint.getText();
-        }
-
-        public String stepText() {
-            return stepLabel.getText();
+        JButton button(String name) {
+            return find(panel(), name);
         }
     }
 
     // ------------------------------------------------------------------
-    // 第一步：主机
+    // 单字段步骤（地址 / 端口 / 用户名 / 名称）
     // ------------------------------------------------------------------
 
-    /** 填一个文本框的简单步骤，端口/用户名/密钥/名称都用它。 */
+    /** 标签 + 输入框 + 一排按钮。长说明挂在悬停提示上。 */
     public static final class FieldStep extends Step {
 
-        private final JTextField field = new JTextField();
+        private final JTextField field = newField();
+        private final String backName;
+        private final String nextName;
 
-        public FieldStep(int no, int total, String title, String hintText,
-                         String label, String placeholder,
-                         String back, String next) {
-            super(no, total, title, hintText);
-
-            JPanel row = new JPanel(new BorderLayout(8, 0));
-            row.setOpaque(false);
-            JLabel l = new JLabel(label);
-            l.setPreferredSize(new Dimension(96, 24));
-            row.add(l, BorderLayout.WEST);
-            field.setName("bioenv.wizardField");
-            field.setPreferredSize(new Dimension(WIDTH - 110, 26));
-            row.add(field, BorderLayout.CENTER);
-
-            JPanel box = new JPanel(new BorderLayout(0, 6));
-            box.setOpaque(false);
-            box.add(row, BorderLayout.NORTH);
-            if (placeholder != null && !placeholder.isEmpty()) {
-                JLabel ph = new JLabel(placeholder);
-                ph.setForeground(new Color(0x8A, 0x90, 0x99));
-                ph.setFont(ph.getFont().deriveFont(Font.PLAIN, 12f));
-                box.add(ph, BorderLayout.CENTER);
+        public FieldStep(String label, String tooltip, String back, String next) {
+            super();
+            setFieldRow(fieldLabel(label), field, tooltip);
+            backName = back == null ? null : "bioenv.wizardBack";
+            if (backName != null) {
+                addButton(back, backName);
             }
-            setBody(box);
-
-            if (back != null) {
-                addButton(back, "bioenv.wizardBack");
-            }
-            JButton nx = addButton(next, "bioenv.wizardNext");
-            primary(nx);
+            nextName = "bioenv.wizardNext";
+            primary(addButton(next, nextName));
         }
 
         public JTextField field() {
@@ -185,58 +221,46 @@ public final class SetupWizard {
         }
 
         public JButton back() {
-            return buttonNamed("bioenv.wizardBack");
+            return backName == null ? null : button(backName);
         }
 
         public JButton next() {
-            return buttonNamed("bioenv.wizardNext");
-        }
-
-        JButton buttonNamed(String name) {
-            return find(panel(), name);
+            return button(nextName);
         }
     }
 
     // ------------------------------------------------------------------
-    // 连接前确认
+    // 须知步骤（密钥那一步）
     // ------------------------------------------------------------------
 
-    /** 确认页：把前几步填的摘要列出来，让用户核对一眼。 */
-    public static final class Confirm extends Step {
+    /**
+     * 只有一段说明、没有输入框的步骤。
+     *
+     * <p>密钥那一步用它：不需要用户填任何东西，只需要他知道接下来会发生什么。所以这
+     * 段文字<b>常驻</b>，不做成悬停提示——它是这一步的全部内容，藏起来就等于空窗口。
+     */
+    public static final class Notice extends Step {
 
-        private final JTextArea summary = new JTextArea();
+        private final String backName;
+        private final String nextName;
 
-        public Confirm(int no, int total, String title, String hintText,
-                       String back, String next) {
-            super(no, total, title, hintText);
-            summary.setName("bioenv.wizardSummary");
-            summary.setEditable(false);
-            summary.setOpaque(false);
-            summary.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 13));
-            summary.setPreferredSize(new Dimension(WIDTH, 96));
-            setBody(summary);
-
-            if (back != null) {
-                addButton(back, "bioenv.wizardBack");
+        public Notice(String text, String back, String next) {
+            super();
+            setNoticeBody(notice(text, DESC_FG, 72));
+            backName = back == null ? null : "bioenv.wizardBack";
+            if (backName != null) {
+                addButton(back, backName);
             }
-            JButton nx = addButton(next, "bioenv.wizardNext");
-            primary(nx);
-        }
-
-        public void setSummary(String text) {
-            summary.setText(text);
-        }
-
-        public String summary() {
-            return summary.getText();
+            nextName = "bioenv.wizardNext";
+            primary(addButton(next, nextName));
         }
 
         public JButton back() {
-            return find(panel(), "bioenv.wizardBack");
+            return backName == null ? null : button(backName);
         }
 
         public JButton next() {
-            return find(panel(), "bioenv.wizardNext");
+            return button(nextName);
         }
     }
 
@@ -244,41 +268,30 @@ public final class SetupWizard {
     // 密码
     // ------------------------------------------------------------------
 
-    /** 密码页。密码只留在 JPasswordField 里。 */
+    /** 密码步。密码只留在 {@link JPasswordField} 里。 */
     public static final class Password extends Step {
 
         private final JPasswordField field = new JPasswordField();
+        private final String backName;
+        private final String connectName;
+        private final String cancelName;
 
-        public Password(int no, int total, String title, String hintText,
-                        String note, String back, String connect, String cancel) {
-            super(no, total, title, hintText);
+        public Password(String label, String description,
+                        String back, String connect, String cancel) {
+            super();
+            field.setPreferredSize(new Dimension(WIDTH - LABEL_W - 12, FIELD_H));
+            setFieldRow(fieldLabel(label), field, description);
 
-            JPanel box = new JPanel(new BorderLayout(0, 6));
-            box.setOpaque(false);
-            JPanel row = new JPanel(new BorderLayout(8, 0));
-            row.setOpaque(false);
-            JLabel l = new JLabel("登录密码：");
-            l.setPreferredSize(new Dimension(96, 24));
-            row.add(l, BorderLayout.WEST);
-            field.setName("bioenv.wizardPassword");
-            field.setPreferredSize(new Dimension(WIDTH - 110, 26));
-            row.add(field, BorderLayout.CENTER);
-            box.add(row, BorderLayout.NORTH);
-
-            JLabel tip = new JLabel(note);
-            tip.setForeground(new Color(0x6C, 0x72, 0x7C));
-            tip.setFont(tip.getFont().deriveFont(Font.PLAIN, 12f));
-            box.add(tip, BorderLayout.CENTER);
-            setBody(box);
-
-            if (back != null) {
-                addButton(back, "bioenv.wizardBack");
+            backName = back == null ? null : "bioenv.wizardBack";
+            if (backName != null) {
+                addButton(back, backName);
             }
-            if (cancel != null) {
-                addButton(cancel, "bioenv.wizardCancel");
+            cancelName = cancel == null ? null : "bioenv.wizardCancel";
+            if (cancelName != null) {
+                addButton(cancel, cancelName);
             }
-            JButton c = addButton(connect, "bioenv.wizardConnect");
-            primary(c);
+            connectName = "bioenv.wizardConnect";
+            primary(addButton(connect, connectName));
         }
 
         public JPasswordField field() {
@@ -286,110 +299,31 @@ public final class SetupWizard {
         }
 
         public JButton back() {
-            return find(panel(), "bioenv.wizardBack");
-        }
-
-        public JButton cancel() {
-            return find(panel(), "bioenv.wizardCancel");
+            return backName == null ? null : button(backName);
         }
 
         public JButton connect() {
-            return find(panel(), "bioenv.wizardConnect");
+            return button(connectName);
+        }
+
+        public JButton cancel() {
+            return cancelName == null ? null : button(cancelName);
         }
     }
 
     // ------------------------------------------------------------------
-    // 进行中
+    // 结果（成功 / 失败共用）
     // ------------------------------------------------------------------
 
-    /** 执行页：把正在做的一步一步列出来，让等待有内容可看。 */
-    public static final class Progress extends Step {
-
-        private final JTextArea log = new JTextArea();
-
-        public Progress(int no, int total, String title, String hintText) {
-            super(no, total, title, hintText);
-            log.setName("bioenv.wizardLog");
-            log.setEditable(false);
-            log.setOpaque(false);
-            log.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
-            log.setPreferredSize(new Dimension(WIDTH, 110));
-            setBody(new JScrollPane(log));
-            // 执行中没有按钮：不可取消，取消到一半的公钥安装状态更糟。
-        }
-
-        public void append(String line) {
-            log.append(line + "\n");
-        }
-
-        public String log() {
-            return log.getText();
-        }
-    }
-
-    // ------------------------------------------------------------------
-    // 命名并保存
-    // ------------------------------------------------------------------
-
-    /** 收尾页：给这条配置起名字。 */
-    public static final class Name extends Step {
-
-        private final JTextField field = new JTextField();
-
-        public Name(int no, int total, String title, String hintText,
-                    String label, String note, String skip, String save) {
-            super(no, total, title, hintText);
-
-            JPanel box = new JPanel(new BorderLayout(0, 6));
-            box.setOpaque(false);
-            JPanel row = new JPanel(new BorderLayout(8, 0));
-            row.setOpaque(false);
-            JLabel l = new JLabel(label);
-            l.setPreferredSize(new Dimension(96, 24));
-            row.add(l, BorderLayout.WEST);
-            field.setName("bioenv.wizardName");
-            field.setPreferredSize(new Dimension(WIDTH - 110, 26));
-            row.add(field, BorderLayout.CENTER);
-            box.add(row, BorderLayout.NORTH);
-
-            JLabel tip = new JLabel(note);
-            tip.setForeground(new Color(0x6C, 0x72, 0x7C));
-            tip.setFont(tip.getFont().deriveFont(Font.PLAIN, 12f));
-            box.add(tip, BorderLayout.CENTER);
-            setBody(box);
-
-            if (skip != null) {
-                addButton(skip, "bioenv.wizardSkip");
-            }
-            JButton s = addButton(save, "bioenv.wizardSave");
-            primary(s);
-        }
-
-        public JTextField field() {
-            return field;
-        }
-
-        public JButton skip() {
-            return find(panel(), "bioenv.wizardSkip");
-        }
-
-        public JButton save() {
-            return find(panel(), "bioenv.wizardSave");
-        }
-    }
-
-    // ------------------------------------------------------------------
-    // 结束页（成功 / 失败共用）
-    // ------------------------------------------------------------------
-
-    /** 结果页：一句话结论 + 详情 + 一个关闭按钮。 */
+    /** 结果步：一段结论 + 详情 + 一个关闭按钮。 */
     public static final class Result extends Step {
 
         private final JTextArea detail = new JTextArea();
+        private final String closeName = "bioenv.wizardClose";
 
-        public Result(int no, int total, String title, String hintText,
-                      String detailText, boolean ok, String close) {
-            super(no, total, title, hintText);
+        public Result(String description, String detailText, boolean ok,
+                      String close) {
+            super();
             detail.setName("bioenv.wizardDetail");
             detail.setEditable(false);
             detail.setLineWrap(true);
@@ -398,14 +332,16 @@ public final class SetupWizard {
             detail.setForeground(ok ? new Color(0x1B, 0x7F, 0x3B)
                     : new Color(0xB2, 0x2D, 0x2D));
             detail.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 13));
-            detail.setPreferredSize(new Dimension(WIDTH, 120));
             detail.setText(detailText);
-            setBody(new JScrollPane(detail));
-            addButton(close, "bioenv.wizardClose");
-        }
 
-        public void setDetail(String text) {
-            detail.setText(text);
+            JPanel body = new JPanel(new BorderLayout(0, 8));
+            body.setOpaque(false);
+            body.add(notice(description, DESC_FG, 40), BorderLayout.NORTH);
+            JScrollPane sc = new JScrollPane(detail);
+            sc.setPreferredSize(new Dimension(WIDTH, 110));
+            body.add(sc, BorderLayout.CENTER);
+            setNoticeBody(body);
+            addButton(close, closeName);
         }
 
         public String detail() {
@@ -413,13 +349,13 @@ public final class SetupWizard {
         }
 
         public JButton close() {
-            return find(panel(), "bioenv.wizardClose");
+            return button(closeName);
         }
     }
 
     // ------------------------------------------------------------------
 
-    /** 按名字在控件树里找一个按钮。测试与渲染都要用，所以公开。 */
+    /** 按名字在控件树里找一个按钮。 */
     static JButton find(Component root, String name) {
         if (root instanceof JButton && name.equals(root.getName())) {
             return (JButton) root;

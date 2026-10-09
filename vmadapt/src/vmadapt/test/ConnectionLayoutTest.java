@@ -46,6 +46,7 @@ public final class ConnectionLayoutTest {
                     panelExactlyOneEntry(panel);
                     twoTabsOnly(panel);
                     wizardSteps();
+                    everyStepIsReachable();
                 } catch (Exception e) {
                     check("构造面板不抛异常（" + e + "）", false);
                 }
@@ -91,50 +92,215 @@ public final class ConnectionLayoutTest {
         }
     }
 
-    /** 向导各步的骨架：按钮必须在，文字必须对。 */
+    /** 向导各步的骨架：按钮必须在，版式必须符合约定。 */
     private static void wizardSteps() {
         // 第 1 步：有取消和下一步，没有上一步。
         SetupWizard.FieldStep s1 = new SetupWizard.FieldStep(
-                1, 5, "虚拟机在哪里？", "提示", "主机：", "例：1.2.3.4", "取消", "下一步");
+                "主机 / IP：", "提示文字", "取消", "下一步");
         check("第 1 步有「取消」", s1.back() != null && "取消".equals(s1.back().getText()));
         check("第 1 步有「下一步」", s1.next() != null && "下一步".equals(s1.next().getText()));
-        check("第 1 步显示步数", s1.stepText().contains("1") && s1.stepText().contains("5"));
 
-        // 第 2 步：必须有「上一步」，否则回不去。
+        // 版式约定：界面里不出现进度条，也不出现"第 N / M 步"那种步数标签。
+        // 注意别用「步」这个字做判断——「下一步」按钮里就有它。
+        check("第 1 步没有进度条", countOfType(s1.panel(), javax.swing.JProgressBar.class) == 0);
+        check("第 1 步没有步数标签",
+                !containsText(s1.panel(), "第 1") && !containsText(s1.panel(), "/ 5"));
+        // 说明走悬停提示而不是常驻：界面里不该有第二段说明文字。
+        check("字段带了悬停提示",
+                hasTooltip(s1.panel()));
+
         SetupWizard.FieldStep s2 = new SetupWizard.FieldStep(
-                2, 5, "用哪个端口？", "提示", "端口：", "22", "上一步", "下一步");
+                "端口：", "提示文字", "上一步", "下一步");
         check("第 2 步有「上一步」", s2.back() != null);
         check("第 2 步有「下一步」", s2.next() != null);
 
-        // 确认步：开始连接。
-        SetupWizard.Confirm c = new SetupWizard.Confirm(
-                5, 5, "确认一下", "提示", "上一步", "开始连接");
-        c.setSummary("主机：1.2.3.4\n端口：22\n用户名：ubuntu\n密钥：（默认）");
-        check("确认步回显了摘要", c.summary().contains("1.2.3.4")
-                && c.summary().contains("ubuntu"));
-        check("确认步有「开始连接」",
-                c.next() != null && "开始连接".equals(c.next().getText()));
+        // 密钥须知：只有说明，没有输入框；下一步通向密码步。
+        SetupWizard.Notice n = new SetupWizard.Notice(
+                "此操作将在本机生成 SSH 密钥对。", "上一步", "下一步");
+        check("须知步没有输入框",
+                countOfType(n.panel(), javax.swing.JTextField.class) == 0);
+        check("须知步有「上一步」", n.back() != null);
+        check("须知步有「下一步」", n.next() != null);
+        check("须知步显示说明", containsText(n.panel(), "SSH 密钥对"));
 
-        // 密码步：三个按钮都要有。
+        // 密码步：三个按钮都要有；密码框默认空。
         SetupWizard.Password p = new SetupWizard.Password(
-                5, 5, "请输入虚拟机登录密码", "提示", "不会保存",
+                "密码：", "请输入虚拟机登陆密码，以便发送公钥到虚拟机。密码不会被保存。",
                 "上一步", "开始连接", "取消");
         check("密码步有「上一步」", p.back() != null);
         check("密码步有「取消」", p.cancel() != null);
         check("密码步有「开始连接」", p.connect() != null);
         check("密码框默认是空的", p.field().getPassword().length == 0);
+        check("密码说明走悬停提示（提到「不会被保存」）",
+                hasTooltipContaining(p.panel(), "不会被保存"));
 
         // 命名步：跳过与保存。
-        SetupWizard.Name nm = new SetupWizard.Name(
-                5, 5, "连接成功", "提示", "配置名称：", "留空用默认", "跳过", "保存");
-        check("命名步有「跳过」", nm.skip() != null);
-        check("命名步有「保存」", nm.save() != null);
+        SetupWizard.FieldStep nm = new SetupWizard.FieldStep(
+                "配置名称：", "留空用默认", "跳过", "保存");
+        check("命名步有「跳过」", nm.back() != null && "跳过".equals(nm.back().getText()));
+        check("命名步有「保存」", nm.next() != null && "保存".equals(nm.next().getText()));
 
         // 失败页与手动页都要有关闭按钮，否则窗关不掉。
         SetupWizard.Result r = new SetupWizard.Result(
-                5, 5, "连接失败", "提示", "原因", false, "关闭");
+                "连接失败。", "原因", false, "关闭");
         check("失败页有「关闭」", r.close() != null);
         check("失败页显示原因", r.detail().contains("原因"));
+    }
+
+    // ------------------------------------------------------------------
+    // 版式断言用的小工具
+    // ------------------------------------------------------------------
+
+    /**
+     * 向导流程里的每个方法都必须被调用过。
+     *
+     * <p>这条守的是一个真发生过的 bug：重排步骤时把 {@code stepKeyNotice()} 的「下一步」
+     * 接到了 {@code stepPassword()}，于是 {@code beginConnect()} 再没人调用——它里面的
+     * 环境自检（没有 ssh 或版本太低时改走手动安装）和"已经免密就不问密码"两条逻辑就此
+     * 静默失效。<b>编译完全通过，别的测试也全绿，只有用户会发现"为什么又问我要密码"。</b>
+     *
+     * <p>所以这里做源码级检查：{@code stepXxx()} / {@code beginXxx()} /
+     * {@code finishXxx()} 这些流程方法，除了定义那一行之外，文件里必须还有别处提到
+     * 它们的名字。
+     */
+    private static void everyStepIsReachable() {
+        java.io.File src = findSource("vmadapt/src/vmadapt/ui/ConnectionPanel.java",
+                "ConnectionPanel.java");
+        if (src == null) {
+            check("找得到 ConnectionPanel 源码（跳过可达性检查）", false);
+            return;
+        }
+        String text;
+        try {
+            text = new String(java.nio.file.Files.readAllBytes(src.toPath()), "UTF-8");
+        } catch (Exception e) {
+            check("读得到 ConnectionPanel 源码（" + e + "）", false);
+            return;
+        }
+        String[] lines = text.split("\\R");
+        java.util.regex.Pattern def = java.util.regex.Pattern.compile(
+                "^\\s*private\\s+[\\w<>\\[\\].]+\\s+((?:step|begin|finish)\\w+)\\s*\\(");
+        int found = 0;
+        for (int i = 0; i < lines.length; i++) {
+            java.util.regex.Matcher m = def.matcher(lines[i]);
+            if (!m.find()) {
+                continue;
+            }
+            found++;
+            String name = m.group(1);
+            boolean called = false;
+            for (int j = 0; j < lines.length; j++) {
+                if (j == i) {
+                    continue;
+                }
+                // 跳过注释行。第一版没跳，结果定义旁边那句
+                // 「// 走 beginConnect 而不是直接进密码步」被当成了调用点，
+                // 于是这个检查在最该报错的时候保持沉默——注释里提到方法名不算调用。
+                String t = lines[j].trim();
+                if (t.startsWith("//") || t.startsWith("*") || t.startsWith("/*")) {
+                    continue;
+                }
+                if (lines[j].contains(name + "(")) {
+                    called = true;
+                    break;
+                }
+            }
+            check("流程方法 " + name + "() 有人调用", called);
+        }
+        check("至少找到几个步骤方法（实际 " + found + "）", found >= 4);
+    }
+
+    /** 按几个可能的位置找源码文件；找不到返回 null。 */
+    private static java.io.File findSource(String... candidates) {
+        for (String c : candidates) {
+            java.io.File f = new java.io.File(c);
+            if (f.isFile()) {
+                return f;
+            }
+        }
+        // 从类文件位置往上找仓库根
+        try {
+            java.io.File here = new java.io.File(ConnectionLayoutTest.class
+                    .getProtectionDomain().getCodeSource().getLocation().toURI());
+            java.io.File dir = here;
+            for (int up = 0; up < 6 && dir != null; up++) {
+                java.io.File f = new java.io.File(dir,
+                        "vmadapt/src/vmadapt/ui/ConnectionPanel.java");
+                if (f.isFile()) {
+                    return f;
+                }
+                dir = dir.getParentFile();
+            }
+        } catch (Exception ignored) {
+            // 交给调用方报"找不到"
+        }
+        return null;
+    }
+
+    /** 数某种类型的控件个数。 */
+    private static int countOfType(Component c, Class<?> type) {
+        int n = type.isInstance(c) ? 1 : 0;
+        if (c instanceof Container) {
+            for (Component k : ((Container) c).getComponents()) {
+                n += countOfType(k, type);
+            }
+        }
+        return n;
+    }
+
+    /** 控件树里有没有任何文字包含某片段（按钮、标签、文本域都算）。 */
+    private static boolean containsText(Component c, String needle) {
+        if (c instanceof javax.swing.AbstractButton) {
+            String t = ((javax.swing.AbstractButton) c).getText();
+            if (t != null && t.contains(needle)) {
+                return true;
+            }
+        }
+        if (c instanceof javax.swing.JLabel) {
+            String t = ((javax.swing.JLabel) c).getText();
+            if (t != null && t.contains(needle)) {
+                return true;
+            }
+        }
+        if (c instanceof javax.swing.text.JTextComponent) {
+            String t = ((javax.swing.text.JTextComponent) c).getText();
+            if (t != null && t.contains(needle)) {
+                return true;
+            }
+        }
+        if (c instanceof Container) {
+            for (Component k : ((Container) c).getComponents()) {
+                if (containsText(k, needle)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /** 控件树里有没有设了悬停提示。 */
+    private static boolean hasTooltip(Component c) {
+        return hasTooltipContaining(c, null);
+    }
+
+    /** 控件树里有没有悬停提示包含某片段；needle 为 null 表示只要非空即可。 */
+    private static boolean hasTooltipContaining(Component c, String needle) {
+        if (c instanceof javax.swing.JComponent) {
+            String tip = ((javax.swing.JComponent) c).getToolTipText();
+            if (tip != null && !tip.isEmpty()) {
+                if (needle == null || tip.contains(needle)) {
+                    return true;
+                }
+            }
+        }
+        if (c instanceof Container) {
+            for (Component k : ((Container) c).getComponents()) {
+                if (hasTooltipContaining(k, needle)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     // ------------------------------------------------------------------

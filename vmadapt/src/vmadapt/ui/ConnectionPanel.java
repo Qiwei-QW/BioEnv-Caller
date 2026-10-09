@@ -35,6 +35,7 @@ import javax.swing.SwingWorker;
 import javax.swing.filechooser.FileNameExtensionFilter;
 
 import vmadapt.core.ConnectionStore;
+import vmadapt.core.KeyInstaller;
 import vmadapt.core.RemoteSetup;
 import vmadapt.core.SshAskpass;
 import vmadapt.core.SshTarget;
@@ -501,7 +502,36 @@ public final class ConnectionPanel extends JPanel {
             statusArea.setText(text(UiText.PANEL_NO_TARGET_HINT));
             return;
         }
+        ensureKeyPath();
         stepHost();
+    }
+
+    /**
+     * 把「这次要用哪把密钥」定下来，写进 {@link #keyField}。
+     *
+     * <h2>为什么必须在向导一开始就做</h2>
+     *
+     * <p>{@code keyField} 不只是界面上的一个格子，它是 {@link #readTarget()} 的输入，
+     * 而 {@code SshTarget.usesKey()} 决定后面每条 ssh 命令要不要带 {@code -i}。
+     *
+     * <p>漏掉这一步的后果很隐蔽：公钥照样能装到虚拟机上（装的那一步自己带了
+     * {@code -i}），但随后的验证和真正连接都按<b>默认密钥名</b>去找——而我们的密钥叫
+     * {@code id_rsa_tbvm}，不是 {@code id_rsa}，ssh 根本不会用它。于是表现为
+     * 「公钥装好了，可连接仍然失败或仍然要密码」，几乎不可能猜到原因。
+     *
+     * <p>所以：用户自己填过就沿用他的；没填就用约定的 {@code ~/.ssh/id_rsa_tbvm}，
+     * 并立刻写回 {@code keyField}，让"实际要用的密钥"和"存进配置的密钥"是同一个值。
+     */
+    private void ensureKeyPath() {
+        String existing = SshTarget.normalizeKeyPath(keyField.getText());
+        if (existing != null && !existing.isEmpty()) {
+            return;
+        }
+        File sshDir = sshDirForSetup();
+        if (sshDir == null) {
+            return;
+        }
+        keyField.setText(new File(sshDir, "id_rsa_tbvm").getAbsolutePath());
     }
 
     /** 当前向导窗口，换步骤时复用它，避免一屏闪好几个窗。 */
@@ -534,10 +564,8 @@ public final class ConnectionPanel extends JPanel {
     /** 第 1 步：地址。 */
     private void stepHost() {
         final SetupWizard.FieldStep s = new SetupWizard.FieldStep(
-                1, WIZARD_STEPS, text(UiText.WIZ_HOST_TITLE),
-                text(UiText.WIZ_HOST_HINT), text(UiText.LBL_HOST),
-                text(UiText.PH_HOST), text(UiText.BTN_CANCEL),
-                text(UiText.BTN_NEXT));
+                text(UiText.LBL_HOST), text(UiText.WIZ_HOST_HINT),
+                text(UiText.BTN_CANCEL), text(UiText.BTN_NEXT));
         s.field().setText(hostField.getText());
         s.back().addActionListener(new ActionListener() {
             @Override
@@ -563,10 +591,8 @@ public final class ConnectionPanel extends JPanel {
     /** 第 2 步：端口。 */
     private void stepPort() {
         final SetupWizard.FieldStep s = new SetupWizard.FieldStep(
-                2, WIZARD_STEPS, text(UiText.WIZ_PORT_TITLE),
-                text(UiText.WIZ_PORT_HINT), text(UiText.LBL_PORT),
-                text(UiText.WIZ_PORT_PH), text(UiText.BTN_BACK),
-                text(UiText.BTN_NEXT));
+                text(UiText.LBL_PORT), text(UiText.WIZ_PORT_HINT),
+                text(UiText.BTN_BACK), text(UiText.BTN_NEXT));
         s.field().setText(portField.getText());
         s.back().addActionListener(new ActionListener() {
             @Override
@@ -600,10 +626,8 @@ public final class ConnectionPanel extends JPanel {
     /** 第 3 步：用户名。 */
     private void stepUser() {
         final SetupWizard.FieldStep s = new SetupWizard.FieldStep(
-                3, WIZARD_STEPS, text(UiText.WIZ_USER_TITLE),
-                text(UiText.WIZ_USER_HINT), text(UiText.LBL_USER),
-                text(UiText.PH_USER), text(UiText.BTN_BACK),
-                text(UiText.BTN_NEXT));
+                text(UiText.LBL_USER), text(UiText.WIZ_USER_HINT),
+                text(UiText.BTN_BACK), text(UiText.BTN_NEXT));
         s.field().setText(userField.getText());
         s.back().addActionListener(new ActionListener() {
             @Override
@@ -620,20 +644,27 @@ public final class ConnectionPanel extends JPanel {
                     return;
                 }
                 userField.setText(v);
-                stepKey();
+                stepKeyNotice();
             }
         });
         showWizardStep(s.panel(), text(UiText.DIALOG_CONNECTION_TITLE_WIZARD));
     }
 
-    /** 第 4 步：密钥（可留空）。 */
-    private void stepKey() {
-        final SetupWizard.FieldStep s = new SetupWizard.FieldStep(
-                4, WIZARD_STEPS, text(UiText.WIZ_KEY_TITLE),
-                text(UiText.WIZ_KEY_HINT), text(UiText.LBL_KEY),
-                text(UiText.WIZ_KEY_PH), text(UiText.BTN_BACK),
+    /**
+     * 第 4 步：密钥须知。
+     *
+     * <p>这一步<b>不需要用户填任何东西</b>，所以它是一段说明而不是输入框：密钥路径由
+     * 插件自己决定（生成到 {@code ~/.ssh/id_rsa_tbvm}，或沿用已有的），用户没有需要
+     * 做选择的地方。给他的只是"接下来会发生什么"——会在本机生成密钥对、公钥会装到
+     * 虚拟机上。
+     *
+     * <p>点「下一步」直接进密码步：原来中间还有一步"确认一下"把填过的内容摊出来核对，
+     * 但前面四步每步只填了一项、每步都能返回，再复述一遍只是多一次点击。
+     */
+    private void stepKeyNotice() {
+        final SetupWizard.Notice s = new SetupWizard.Notice(
+                text(UiText.WIZ_KEY_NOTICE), text(UiText.BTN_BACK),
                 text(UiText.BTN_NEXT));
-        s.field().setText(keyField.getText());
         s.back().addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
@@ -643,35 +674,12 @@ public final class ConnectionPanel extends JPanel {
         s.next().addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                keyField.setText(SshTarget.normalizeKeyPath(s.field().getText()));
-                stepConfirm();
-            }
-        });
-        showWizardStep(s.panel(), text(UiText.DIALOG_CONNECTION_TITLE_WIZARD));
-    }
-
-    /** 第 5 步：把前面填的摊出来核对。 */
-    private void stepConfirm() {
-        final SetupWizard.Confirm s = new SetupWizard.Confirm(
-                5, WIZARD_STEPS, text(UiText.WIZ_CONFIRM_TITLE),
-                text(UiText.WIZ_CONFIRM_HINT), text(UiText.BTN_BACK),
-                text(UiText.BTN_START));
-        String key = keyField.getText().trim();
-        wizardSummary = text(UiText.LBL_HOST) + "  " + hostField.getText().trim() + "\n"
-                + text(UiText.LBL_PORT) + "  " + portField.getText().trim() + "\n"
-                + text(UiText.LBL_USER) + "  " + userField.getText().trim() + "\n"
-                + text(UiText.LBL_KEY) + "  "
-                + (key.isEmpty() ? text(UiText.WIZ_KEY_DEFAULT) : key);
-        s.setSummary(wizardSummary);
-        s.back().addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                stepKey();
-            }
-        });
-        s.next().addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
+                // 走 beginConnect 而不是直接进密码步：它要先做两件事——
+                //   ① 环境自检（没有 ssh、或版本低于 8.4 时改走手动那条路，
+                //      而不是弹一个注定失败的密码框）；
+                //   ② 看这台机器是不是已经免密了，是就不问密码，直接连。
+                // 环境正常且还没免密时，它才转到 stepPassword，也就是「下一步」到
+                // 密码框这一步。
                 beginConnect();
             }
         });
@@ -750,29 +758,21 @@ public final class ConnectionPanel extends JPanel {
     /** 一次最小免密探测：能执行 echo 就说明公钥已经装好了。 */
     private boolean canLogInWithoutPassword(String ssh) {
         try {
-            List<String> cmd = new ArrayList<String>();
-            cmd.add(ssh);
-            cmd.add("-o");
-            cmd.add("BatchMode=yes");
-            cmd.add("-o");
-            cmd.add("StrictHostKeyChecking=accept-new");
-            cmd.add("-o");
-            cmd.add("ConnectTimeout=" + timeoutSeconds());
-            cmd.add("-p");
-            cmd.add(portField.getText().trim());
             SshTarget t = readTarget();
-            if (t.usesKey()) {
-                cmd.add("-i");
-                cmd.add(t.keyPath);
-            }
-            cmd.add(userField.getText().trim() + "@" + hostField.getText().trim());
-            cmd.add("echo TBVM_OK");
+            // 与 finishConnect 用同一个组装函数，免得两处对"要不要带 -i"各写一遍。
+            List<String> cmd = KeyInstaller.verifyCommand(
+                    ssh,
+                    hostField.getText().trim(),
+                    parseIntOr(portField.getText().trim(), SshTarget.DEFAULT_PORT),
+                    userField.getText().trim(),
+                    t.usesKey() ? t.keyPath : null,
+                    timeoutSeconds());
             ProcessBuilder pb = new ProcessBuilder(cmd);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             String out = drainText(p.getInputStream());
             p.waitFor();
-            return p.exitValue() == 0 && out.contains("TBVM_OK");
+            return p.exitValue() == 0 && out.contains(KeyInstaller.LOGIN_MARKER);
         } catch (Exception e) {
             return false;
         }
@@ -819,14 +819,13 @@ public final class ConnectionPanel extends JPanel {
      */
     private void stepPassword() {
         final SetupWizard.Password s = new SetupWizard.Password(
-                WIZARD_STEPS, WIZARD_STEPS, text(UiText.WIZ_PWD_TITLE),
-                text(UiText.WIZ_PWD_HINT), text(UiText.WIZ_PWD_NOTE),
+                text(UiText.LBL_PASSWORD), text(UiText.WIZ_PWD_HINT),
                 text(UiText.BTN_BACK), text(UiText.BTN_START),
                 text(UiText.BTN_CANCEL));
         s.back().addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                stepConfirm();
+                stepKeyNotice();
             }
         });
         s.cancel().addActionListener(new ActionListener() {
@@ -873,7 +872,6 @@ public final class ConnectionPanel extends JPanel {
                 + "' >> ~/.ssh/authorized_keys\n"
                 + "chmod 600 ~/.ssh/authorized_keys";
         final SetupWizard.Result s = new SetupWizard.Result(
-                WIZARD_STEPS, WIZARD_STEPS, text(UiText.WIZ_MANUAL_TITLE),
                 reason, detail + "\n\n" + cmd, false,
                 text(UiText.BTN_CLOSE));
         s.close().addActionListener(new ActionListener() {
@@ -979,56 +977,35 @@ public final class ConnectionPanel extends JPanel {
      * @return null 表示成功；否则是失败原因
      */
     private String installPublicKeyWithPassword(String privKeyPath, String password) {
+        File priv = new File(privKeyPath);
+        // 公钥优先读 .pub，读不到就从私钥现推。理由见 KeyInstaller.publicKeyOf：
+        // .pub 可能缺失或为空（用户只拷了私钥、或 ssh-keygen 没能写出 .pub），
+        // 而空公钥装上去只会让人以后每次都被拒。
+        String publicKey = KeyInstaller.publicKeyOf(
+                OpenSsh.locate("ssh-keygen.exe"), priv);
+        if (publicKey == null || publicKey.isEmpty()) {
+            return text(UiText.MSG_NO_PUBFILE_REASON,
+                    new File(privKeyPath + ".pub").getAbsolutePath());
+        }
+        // 真正的机制在 vmadapt.core.KeyInstaller：拼命令、用密码认证、判断结果。
+        // 放在 core 里是为了能对着真实 sshd 测——留在这里的话，测试只能把命令抄一遍，
+        // 抄出来的那份和跑的那份可以各自漂移。
+        KeyInstaller.Outcome r = KeyInstaller.install(
+                OpenSsh.locate("ssh.exe"),
+                hostField.getText().trim(),
+                parseIntOr(portField.getText().trim(), SshTarget.DEFAULT_PORT),
+                userField.getText().trim(),
+                publicKey, password, timeoutSeconds());
+        return r.ok() ? null : r.reason;
+    }
+
+    /** 端口文本转数字；不合法时回退默认值（向导那一步已经校验过，这里只兜底）。 */
+    private static int parseIntOr(String text, int fallback) {
         try {
-            File pub = new File(privKeyPath + ".pub");
-            if (!pub.isFile()) {
-                return text(UiText.MSG_NO_PUBFILE_REASON, pub.getAbsolutePath());
-            }
-            String publicKey = readTextFile(pub).trim();
-            if (publicKey.isEmpty()) {
-                return text(UiText.MSG_PUB_EMPTY, pub.getAbsolutePath());
-            }
-            String ssh = OpenSsh.locate("ssh.exe");
-            String remote = "mkdir -p ~/.ssh && chmod 700 ~/.ssh && "
-                    + "touch ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys && "
-                    + "grep -qxF '" + publicKey + "' ~/.ssh/authorized_keys || "
-                    + "echo '" + publicKey + "' >> ~/.ssh/authorized_keys; "
-                    + "echo TBVM_KEY_INSTALLED";
-
-            List<String> cmd = new ArrayList<String>();
-            cmd.add(ssh);
-            cmd.add("-o");
-            cmd.add("BatchMode=no");
-            cmd.add("-o");
-            cmd.add("StrictHostKeyChecking=accept-new");
-            cmd.add("-o");
-            cmd.add("ConnectTimeout=" + timeoutSeconds());
-            // 只走密码；否则 ssh 会先拿还没装上的公钥试一遍，白等一个来回。
-            cmd.add("-o");
-            cmd.add("PreferredAuthentications=password,keyboard-interactive");
-            cmd.add("-o");
-            cmd.add("NumberOfPasswordPrompts=1");
-            cmd.add("-p");
-            cmd.add(portField.getText().trim());
-            cmd.add(userField.getText().trim() + "@" + hostField.getText().trim());
-            cmd.add(remote);
-
-            ProcessBuilder pb = new ProcessBuilder(cmd);
-            // 关键：通过 SSH_ASKPASS 把密码交给 ssh，绝不放进命令行。
-            pb.environment().clear();
-            pb.environment().putAll(SshAskpass.environmentFor(
-                    System.getenv(), SshAskpass.javaExe(),
-                    System.getProperty("java.class.path"), password));
-            pb.redirectErrorStream(true);
-            Process p = pb.start();
-            String out = drainText(p.getInputStream());
-            p.waitFor();
-            if (p.exitValue() != 0 || !out.contains("TBVM_KEY_INSTALLED")) {
-                return text(UiText.MSG_COPY_FAILED, out.trim());
-            }
-            return null;
-        } catch (Exception e) {
-            return String.valueOf(e);
+            int v = Integer.parseInt(text);
+            return (v > 0 && v <= 65535) ? v : fallback;
+        } catch (NumberFormatException e) {
+            return fallback;
         }
     }
 
@@ -1040,18 +1017,17 @@ public final class ConnectionPanel extends JPanel {
             protected String doInBackground() {
                 String ssh = OpenSsh.locate("ssh.exe");
                 try {
-                    List<String> cmd = new ArrayList<String>();
-                    cmd.add(ssh);
-                    cmd.add("-o");
-                    cmd.add("BatchMode=yes");
-                    cmd.add("-o");
-                    cmd.add("StrictHostKeyChecking=accept-new");
-                    cmd.add("-o");
-                    cmd.add("ConnectTimeout=" + timeoutSeconds());
-                    cmd.add("-p");
-                    cmd.add(portField.getText().trim());
-                    cmd.add(userField.getText().trim() + "@" + hostField.getText().trim());
-                    cmd.add("echo TBVM_OK; uname -sr");
+                    // 命令由 KeyInstaller 组装：它保证"有密钥时带 -i"。
+                    // 我们的密钥叫 id_rsa_tbvm，不在 ssh 默认密钥名里，漏掉 -i 就会
+                    // 出现"公钥装好了却连不上"这种极难定位的现象。
+                    SshTarget t = readTarget();
+                    List<String> cmd = KeyInstaller.verifyCommand(
+                            ssh,
+                            hostField.getText().trim(),
+                            parseIntOr(portField.getText().trim(), SshTarget.DEFAULT_PORT),
+                            userField.getText().trim(),
+                            t.usesKey() ? t.keyPath : null,
+                            timeoutSeconds());
                     ProcessBuilder pb = new ProcessBuilder(cmd);
                     pb.redirectErrorStream(true);
                     Process p = pb.start();
@@ -1094,7 +1070,6 @@ public final class ConnectionPanel extends JPanel {
     /** 失败页。 */
     private void stepFailed(final String detail) {
         final SetupWizard.Result s = new SetupWizard.Result(
-                WIZARD_STEPS, WIZARD_STEPS, text(UiText.WIZ_FAIL_TITLE),
                 text(UiText.WIZ_FAIL_HINT), detail, false,
                 text(UiText.BTN_CLOSE));
         s.close().addActionListener(new ActionListener() {
@@ -1108,19 +1083,18 @@ public final class ConnectionPanel extends JPanel {
 
     /** 命名页：连上了，给这条配置起个名字。 */
     private void stepName() {
-        final SetupWizard.Name s = new SetupWizard.Name(
-                WIZARD_STEPS, WIZARD_STEPS, text(UiText.WIZ_OK_TITLE),
-                text(UiText.WIZ_OK_HINT), text(UiText.LBL_NAME),
-                text(UiText.WIZ_NAME_NOTE), text(UiText.BTN_SKIP),
-                text(UiText.BTN_SAVE));
+        final SetupWizard.FieldStep s = new SetupWizard.FieldStep(
+                text(UiText.LBL_NAME), text(UiText.WIZ_NAME_NOTE),
+                text(UiText.BTN_SKIP), text(UiText.BTN_SAVE));
         s.field().setText(nameField.getText());
-        s.skip().addActionListener(new ActionListener() {
+        s.back().addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
+                // 「跳过」＝不保存这条配置。连接是成功的，只是下次要重填。
                 closeWizard();
             }
         });
-        s.save().addActionListener(new ActionListener() {
+        s.next().addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
                 String v = s.field().getText().trim();
