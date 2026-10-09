@@ -152,7 +152,12 @@ public final class SchemaBuilder {
         }
         Schema child = HelpParser.bestOf(HelpParser.dedupe(outputs),
                 command + " " + sub.name);
-        if (!child.hasOptions()) {
+        // Kept when it has options, and also when it merely has text. A
+        // subcommand that prints help the parser cannot read is still a subcommand
+        // the user may want to read about - and showing nothing at all left them
+        // with no way to see it. A subcommand that printed nothing whatsoever is
+        // still discarded, which is what this guard was originally for.
+        if (!child.hasOptions() && child.rawHelp.trim().isEmpty()) {
             return null;
         }
         child.helpInvocation = command + " " + sub.name + " --help";

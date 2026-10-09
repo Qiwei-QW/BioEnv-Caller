@@ -1757,12 +1757,31 @@ public final class HelpParser {
      * <p>"Richest" is measured by the number of options understood, which is a
      * better signal than exit status: many tools exit non-zero for help, and
      * some print only a stub for one flag but full detail for another.
+     *
+     * <h2>The text is kept even when nothing parses</h2>
+     *
+     * <p>A document that yields no options is still a document, and the user has
+     * to be able to read it: "view raw help" is what makes an unparsed command
+     * usable at all, since it is where the parameters are read by eye. Ranking
+     * purely on option count threw that text away - every candidate scored zero,
+     * so the empty schema the loop starts from stayed in place and its blank
+     * rawHelp was returned. Tools with a structure the parser cannot read (EMBOSS
+     * style "[-infile] infile ..." sections among them) therefore came back with
+     * nothing to show.
+     *
+     * <p>So a candidate wins when it is richer than the best so far, and also when
+     * the best so far has no text to show and this one does. The second condition
+     * only ever decides between equally unparsed candidates, which is why it is
+     * stated as "has text" rather than as a score.
      */
     public static Schema bestOf(List<String> outputs, String command) {
         Schema best = new Schema();
         for (String out : outputs) {
             Schema s = parse(out, command);
-            if (score(s) > score(best)) {
+            boolean richer = score(s) > score(best);
+            boolean onlyTextSoFar = best.rawHelp.trim().isEmpty()
+                    && !s.rawHelp.trim().isEmpty();
+            if (richer || onlyTextSoFar) {
                 best = s;
             }
         }

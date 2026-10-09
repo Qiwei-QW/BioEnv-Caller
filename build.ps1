@@ -277,7 +277,14 @@ try {
         # correction file written before their removal can name them, so this
         # checks the stale entry is dropped while the file's other entries and
         # the parameter itself survive.
-        'bioenv.test.RemovedKindStillLoadsTest'
+        'bioenv.test.RemovedKindStillLoadsTest',
+
+        # --- help must stay readable when it cannot be parsed ----------------
+        # bestOf() ranked candidates on option count from an empty starting
+        # schema, so a document that yielded no options was discarded and its
+        # text with it - leaving "view raw help" with nothing to show for
+        # exactly the tools the user most needs to read it for.
+        'bioenv.test.HelpKeptWhenUnparsedTest'
     )
 
     foreach ($t in $regression) {
