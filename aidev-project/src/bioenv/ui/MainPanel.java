@@ -165,7 +165,21 @@ public final class MainPanel extends JPanel {
     private final JButton clearLogButton = new JButton(I18n.t(Strings.MENU_CLEAR_LOG));
     /** "输出"标题：和清空按钮同处一行。 */
     private JLabel logTitle;
-    private final JButton schemaSourceButton = new JButton(I18n.t(Strings.MENU_VIEW_HELP));
+    /**
+     * Opens the tool assistant: the tool's help on one tab, the user's own notes
+     * on another. Named for what it opens rather than for the first tab, since
+     * the window is no longer only a viewer.
+     */
+    private final JButton toolAssistantButton = new JButton(I18n.t(Strings.ASSISTANT_BUTTON));
+    /**
+     * Where the user's notes about a command are kept.
+     *
+     * <p>Held here, and deliberately not on the registry: the registry is what
+     * builds schemas, and the notes must never reach it. Keeping the two apart
+     * makes "notes cannot change the form" a fact about the wiring rather than a
+     * rule someone has to remember not to break.
+     */
+    private final bioenv.core.ToolNotesStore toolNotes = new bioenv.core.ToolNotesStore();
     private final JButton learnedRulesButton = new JButton(I18n.t(Strings.MENU_EDIT_PARAMS));
     /**
      * Applies initial divider positions once the panel has been laid out.' Puts the command preview back under the form's control. */
@@ -674,7 +688,7 @@ public final class MainPanel extends JPanel {
             runButton.setText(I18n.t(Strings.MENU_RUN));
             stopButton.setText(I18n.t(Strings.MENU_STOP));
             clearLogButton.setText(I18n.t(Strings.MENU_CLEAR_LOG));
-            schemaSourceButton.setText(I18n.t(Strings.MENU_VIEW_HELP));
+            toolAssistantButton.setText(I18n.t(Strings.ASSISTANT_BUTTON));
             learnedRulesButton.setText(I18n.t(Strings.MENU_EDIT_PARAMS));
             rebuildPreviewButton.setText(I18n.t(Strings.MENU_REBUILD_PREVIEW));
             rebuildPreviewButton.setToolTipText(I18n.t(Strings.HINT_REBUILD_PREVIEW));
@@ -1664,9 +1678,9 @@ public final class MainPanel extends JPanel {
 
         // 另外三个按钮各有去处：帮助原文 / 编辑参数 跟着工具名走到中间面板右上角，
         // Clear log 进了输出框（见上面的 logPanel）。
-        UiTheme.ghost(schemaSourceButton);
+        UiTheme.ghost(toolAssistantButton);
         UiTheme.ghost(learnedRulesButton);
-        formPanel.addHeaderAction(schemaSourceButton);
+        formPanel.addHeaderAction(toolAssistantButton);
         formPanel.addHeaderAction(learnedRulesButton);
 
         JPanel top = new JPanel(new BorderLayout(0, 2));
@@ -1933,10 +1947,10 @@ public final class MainPanel extends JPanel {
             }
         });
 
-        schemaSourceButton.addActionListener(new ActionListener() {
+        toolAssistantButton.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                formPanel.showSchemaSource(MainPanel.this);
+                openToolAssistant();
             }
         });
 
@@ -2733,7 +2747,7 @@ public final class MainPanel extends JPanel {
 
     private void updateRunEnabled() {
         runButton.setEnabled(selected != null && runner != null);
-        schemaSourceButton.setEnabled(selected != null);
+        toolAssistantButton.setEnabled(selected != null);
     }
 
     private void startRun() {
@@ -2917,6 +2931,91 @@ public final class MainPanel extends JPanel {
     }
 
     /**
+     * Opens the tool assistant: the tool's help on one tab, the user's notes on
+     * another.
+     *
+     * <p>A frame rather than a dialog, for the same reason the parameter editor is
+     * one: help documents are wide, and maximising is the natural answer to a long
+     * option table. A dialog offers only a close button.
+     *
+     * <p>The notes are saved per scope - the command, and the command plus its
+     * subcommand when one is selected - so writing something about {@code bio
+     * fasta} does not put it under {@code bio gff}, which routinely shares
+     * parameter names.
+     */
+    private void openToolAssistant() {
+        if (selected == null) {
+            javax.swing.JOptionPane.showMessageDialog(this,
+                    I18n.t(Strings.DIALOG_SELECT_TOOL_FIRST));
+            return;
+        }
+        final String command = selected.command;
+        final Schema schema = formPanel.currentSchema();
+        final String scope = formPanel.currentScopeKey();
+
+        // An empty help tab would read as a broken window, so the two ways it can
+        // be empty are spelled out separately: the help has not been read yet, or
+        // the tool was read and printed nothing. The old viewer drew the same
+        // distinction, and it is the difference between "wait" and "there is
+        // nothing to wait for".
+        String raw = formPanel.rawHelpText();
+        final String helpText;
+        if (schema == null) {
+            helpText = I18n.t(Strings.FORM_NO_HELP_YET);
+        } else if (raw.trim().isEmpty()) {
+            helpText = I18n.t(Strings.FORM_NO_HELP_OUTPUT,
+                    command.isEmpty() ? I18n.t(Strings.FORM_THIS_COMMAND) : command);
+        } else {
+            helpText = raw;
+        }
+
+        final ToolAssistantPanel assistant =
+                new ToolAssistantPanel(command, helpText, scope, toolNotes);
+
+        final javax.swing.JFrame window = new javax.swing.JFrame(
+                I18n.t(Strings.ASSISTANT_TITLE, command));
+        window.setName("bioenv.toolAssistantWindow");
+        window.setContentPane(assistant);
+        window.setSize(900, 660);
+        window.setMinimumSize(new Dimension(520, 380));
+        window.setLocationRelativeTo(this);
+        window.setResizable(true);
+        window.setDefaultCloseOperation(
+                javax.swing.WindowConstants.DO_NOTHING_ON_CLOSE);
+
+        assistant.setOnCancel(new Runnable() {
+            @Override
+            public void run() {
+                window.dispose();
+            }
+        });
+        assistant.setOnSave(new Runnable() {
+            @Override
+            public void run() {
+                setStatus(I18n.t(Strings.ASSISTANT_SAVED, command));
+                window.dispose();
+            }
+        });
+
+        window.addWindowListener(new java.awt.event.WindowAdapter() {
+            @Override
+            public void windowClosing(java.awt.event.WindowEvent e) {
+                // The title bar's close is a cancel: the notes are only written by
+                // the Save button, so a half-typed note is not kept by accident.
+                window.dispose();
+            }
+
+            @Override
+            public void windowClosed(java.awt.event.WindowEvent e) {
+                // The panel registered a language listener; without this every
+                // assistant window ever opened would keep refreshing forever.
+                assistant.dispose();
+            }
+        });
+        window.setVisible(true);
+    }
+
+    /**
      * Applies initial divider positions once the panel has been laid out.' Writes the editor's result to the stores and shows it in the option list. */
     private void applyParameterEdits(ParameterEditorPanel editor) {
         if (editor.isReset()) {
@@ -3071,3 +3170,4 @@ public final class MainPanel extends JPanel {
         return sb.toString();
     }
 }
+

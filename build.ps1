@@ -284,7 +284,15 @@ try {
         # schema, so a document that yielded no options was discarded and its
         # text with it - leaving "view raw help" with nothing to show for
         # exactly the tools the user most needs to read it for.
-        'bioenv.test.HelpKeptWhenUnparsedTest'
+        'bioenv.test.HelpKeptWhenUnparsedTest',
+
+        # --- tool assistant: help on one tab, the user's notes on another ----
+        # The requirement these guard: notes are text to read and never an input
+        # to the parser, so writing a parameter list cannot change the form.
+        # ToolNotesTest asserts that by parsing the same help with and without a
+        # note beside it; ToolAssistantTest covers the two tabs and the save.
+        'bioenv.test.ToolNotesTest',
+        'bioenv.test.ToolAssistantTest'
     )
 
     foreach ($t in $regression) {
