@@ -857,7 +857,18 @@ public final class MainPanel extends JPanel {
                 if (pendingNeedsManual) {
                     // 自动路径发现这个发行版还没扫过：不做长任务，退回让用户点一次。
                     appendLog(I18n.t(Strings.LOG_NO_CACHE_MANUAL));
-                    setStatus(I18n.t(Strings.STATUS_NO_CACHE_SCAN));
+                    // 状态栏必须说"要你点一下"，不能说"正在扫描"：这里已经决定不扫了。
+                    // 首次使用还多一步——用户根本不知道该选哪种连接方式，所以先把
+                    // 引导窗打开，而不是让他对着一个"请点扫描"发呆。
+                    if (!LinkState.hasEverConnected()) {
+                        setStatus(I18n.t(Strings.STATUS_FIRST_RUN_GUIDE));
+                        openConnectionDialog();
+                    } else {
+                        setStatus(I18n.t(Strings.STATUS_NEEDS_FIRST_SCAN,
+                                pendingDistro == null
+                                        ? I18n.t(Strings.FORM_THIS_COMMAND)
+                                        : pendingDistro));
+                    }
                     return;
                 }
                 if (pendingRegistry == null) {
@@ -2387,7 +2398,12 @@ public final class MainPanel extends JPanel {
         if (dr.needsManualScan) {
             appendLog(I18n.t(Strings.LOG_ENV_CHECK));
             appendLog(I18n.t(Strings.LOG_NO_CACHE_MANUAL));
-            setStatus(I18n.t(Strings.STATUS_NO_CACHE_SCAN));
+            // 同 WSL 那条路径：这里没有扫描在跑，状态栏就不该说"正在扫描"。
+            // SSH 的引导窗已在 refreshSshList 里按「有没有连过」打开过，所以这里
+            // 只负责把话说准，不重复弹窗。
+            setStatus(I18n.t(Strings.STATUS_NEEDS_FIRST_SCAN,
+                    dr.sshTarget == null ? I18n.t(Strings.FORM_THIS_COMMAND)
+                            : displayNameOf(dr.sshTarget)));
             return;
         }
 
@@ -3170,4 +3186,5 @@ public final class MainPanel extends JPanel {
         return sb.toString();
     }
 }
+
 

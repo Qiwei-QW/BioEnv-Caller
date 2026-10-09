@@ -292,7 +292,16 @@ try {
         # ToolNotesTest asserts that by parsing the same help with and without a
         # note beside it; ToolAssistantTest covers the two tabs and the save.
         'bioenv.test.ToolNotesTest',
-        'bioenv.test.ToolAssistantTest'
+        'bioenv.test.ToolAssistantTest',
+
+        # --- first install must guide, and must not claim a scan it is not doing
+        # The auto path deliberately never scans; when it decided not to scan it
+        # still set the "scanning environments..." status, so a fresh install sat
+        # on a message that would never change and never told the user what to do.
+        # The same false status was reused on the SSH path. This covers both the
+        # first-install branch (guide, do not lie) and the already-linked branch
+        # (say "click Detect", do not lie). Needs WSL to reach the real path.
+        'bioenv.test.FirstRunScanTest'
     )
 
     foreach ($t in $regression) {

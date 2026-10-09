@@ -307,6 +307,18 @@ public final class Strings {
     /** 状态栏：还没有上次结果，开始扫描。 */
     public static final String STATUS_NO_CACHE_SCAN = "status.noCacheScan";
 
+    /**
+     * 状态栏：首次使用，请先选连接方式再扫描。
+     *
+     * <p>与 {@link #STATUS_NO_CACHE_SCAN} 的区别是"说没说到做到"：那一句用在
+     * <b>马上就要调用 scan()</b> 的地方，这一句用在<b>决定不扫、把扫描留给用户</b>
+     * 的地方。曾经两处共用同一句，于是自动路径一边放弃扫描、一边显示"正在扫描"。
+     */
+    public static final String STATUS_FIRST_RUN_GUIDE = "status.firstRunGuide";
+
+    /** 状态栏：这个目标还没扫过，请点扫描（带目标占位）。 */
+    public static final String STATUS_NEEDS_FIRST_SCAN = "status.needsFirstScan";
+
     /** 状态栏：就绪，可用命令数与来源（带数量、来源占位）。 */
     public static final String STATUS_READY_COUNT = "status.readyCount";
 
@@ -1054,6 +1066,14 @@ public final class Strings {
                 "Environments changed since last time; rescanning...");
         put(ZH_TEXT, EN_TEXT, STATUS_NO_CACHE_SCAN, "没有上次结果，正在扫描环境…",
                 "No previous results; scanning environments...");
+        put(ZH_TEXT, EN_TEXT, STATUS_FIRST_RUN_GUIDE,
+                "首次使用：请选择连接方式，然后点「扫描 conda 环境」开始。",
+                "First run: choose how to connect, then click 'Detect conda "
+                        + "environments' to begin.");
+        put(ZH_TEXT, EN_TEXT, STATUS_NEEDS_FIRST_SCAN,
+                "{0} 还没有扫描过，点「扫描 conda 环境」开始（扫完会记住，下次自动恢复）。",
+                "{0} has not been scanned yet. Click 'Detect conda environments' "
+                        + "to begin; the result is remembered and restored next time.");
         put(ZH_TEXT, EN_TEXT, STATUS_READY_COUNT, "就绪。{0} 个命令可用，来自 {1}。",
                 "Ready. {0} command(s) available in {1}.");
         put(ZH_TEXT, EN_TEXT, STATUS_READY_ACROSS, "就绪。{0} 个命令，分布在 {1} 个环境里。",
