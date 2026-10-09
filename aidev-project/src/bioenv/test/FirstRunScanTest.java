@@ -58,6 +58,7 @@ public final class FirstRunScanTest {
 
         firstInstallGuidesAndDoesNotLie();
         secondRunWithNoCacheTellsTheTruth();
+        choosingVmModeOpensTheDialog();
 
         System.out.println(failures == 0
                 ? "PASS " + checks + " checks"
@@ -87,19 +88,31 @@ public final class FirstRunScanTest {
         String status = statusOf(panel);
         String log = logOf(panel);
 
-        // 一、不得谎称正在扫描。这是缺陷本身。
+        // 一、不得谎称正在扫描。这是最初报的缺陷。
         check("首次安装不得显示「正在扫描」", !status.contains("正在扫描"));
 
         // 二、也不得声称有"上次结果"——第一次装上没有上次。
         check("首次安装不得提「上次结果」", !status.contains("上次"));
 
-        // 三、必须出现引导：要么是首次使用提示，要么是无头环境下"对话框打不开"
-        //     的说明（那说明引导确实被尝试过）。
-        check("首次安装出现引导（首次提示或等价说明）",
-                status.contains("首次使用") || status.contains("图形界面")
-                        || status.contains("选择连接方式"));
+        // 三、必须告诉用户下一步做什么。
+        check("首次安装给出可执行的下一步（选择连接方式 / 点扫描）",
+                status.contains("选择连接方式") || status.contains("扫描"));
 
-        // 四、确实没有扫描发生：日志里不该有扫描完成的痕迹。
+        // 四、**不得弹出虚拟机配置窗**。
+        //
+        //     默认方式是 WSL，而那个弹窗是「Linux 虚拟机连接配置」——在 WSL 模式下
+        //     它跟用户当下要做的事无关，弹出来只会打断人。它只该在用户从下拉框里
+        //     主动选了虚拟机方式时出现。
+        //
+        //     无头环境下弹窗会退化成"图形界面打不开"那句状态文案，所以那句话正好
+        //     可以当作"弹窗被尝试过"的探针——这正是上一版测试漏掉的地方：它把
+        //     "对话框打不开"也算成了合格引导，于是掩盖了弹窗被误触发。
+        check("首次安装（WSL 方式）不得弹出虚拟机配置窗",
+                !status.contains("图形界面"));
+        check("状态栏是首次使用引导，而不是弹窗的回退文案",
+                status.contains("首次使用"));
+
+        // 五、确实没有扫描发生：日志里不该有扫描完成的痕迹。
         check("首次安装没有真的扫描",
                 !log.contains("Scanned ") && !log.contains("=== 命令发现 ==="));
 
@@ -135,6 +148,34 @@ public final class FirstRunScanTest {
         check("第二次运行不得显示「正在扫描」", !status.contains("正在扫描"));
         // 已经连过的机器不该再被当成首次使用来引导。
         check("第二次运行不再走首次使用引导", !status.contains("首次使用"));
+        // WSL 方式下同样不该弹虚拟机配置窗。
+        check("第二次运行（WSL 方式）不得弹出虚拟机配置窗",
+                !status.contains("图形界面"));
+
+        deleteRecursively(home);
+    }
+
+    /**
+     * 用户主动切到「虚拟机」方式时，配置窗<b>应该</b>弹出来。
+     *
+     * <p>这是上一条的对偶：WSL 下不许弹，虚拟机下必须弹。只测"不弹"会把弹窗整个
+     * 删掉也算通过，那样用户切到虚拟机方式后就再没人引导他填地址了。
+     */
+    private static void choosingVmModeOpensTheDialog() throws Exception {
+        File home = freshHome("tbvm-vmmode-");
+        System.setProperty("user.home", home.getAbsolutePath());
+        setLinkStateFile(new File(home, ".TBtools/BioEnvCaller/linked.txt"));
+
+        // 上次用的是虚拟机方式：打开面板就该回到它，并给出引导。
+        new bioenv.core.ConnectionModeStore().save(
+                bioenv.core.ConnectionModeStore.MODE_VM);
+
+        MainPanel panel = openPanel();
+        String status = statusOf(panel);
+        System.out.println("虚拟机方式 · 状态栏: " + status);
+
+        // 无头环境下弹窗退化为"图形界面打不开"，说明弹窗确实被尝试过。
+        check("选择虚拟机方式时会尝试弹出配置窗", status.contains("图形界面"));
 
         deleteRecursively(home);
     }

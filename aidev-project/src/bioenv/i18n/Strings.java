@@ -1067,9 +1067,11 @@ public final class Strings {
         put(ZH_TEXT, EN_TEXT, STATUS_NO_CACHE_SCAN, "没有上次结果，正在扫描环境…",
                 "No previous results; scanning environments...");
         put(ZH_TEXT, EN_TEXT, STATUS_FIRST_RUN_GUIDE,
-                "首次使用：请选择连接方式，然后点「扫描 conda 环境」开始。",
-                "First run: choose how to connect, then click 'Detect conda "
-                        + "environments' to begin.");
+                "首次使用：当前是 WSL 方式，点「扫描 conda 环境」开始；"
+                        + "若要用 Linux 虚拟机，请先在上面把连接方式改成「虚拟机」。",
+                "First run: you are on WSL - click 'Detect conda environments' to "
+                        + "begin. To use a Linux VM instead, switch the connection "
+                        + "mode above first.");
         put(ZH_TEXT, EN_TEXT, STATUS_NEEDS_FIRST_SCAN,
                 "{0} 还没有扫描过，点「扫描 conda 环境」开始（扫完会记住，下次自动恢复）。",
                 "{0} has not been scanned yet. Click 'Detect conda environments' "
