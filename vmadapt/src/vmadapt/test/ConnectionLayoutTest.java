@@ -49,6 +49,7 @@ public final class ConnectionLayoutTest {
                     everyStepIsReachable();
                     sshSelection();
                     versionGateDoesNotPreemptProbe();
+                    networkHintsDoNotClaimPortForwardingIsRequired();
                 } catch (Exception e) {
                     check("构造面板不抛异常（" + e + "）", false);
                 }
@@ -310,6 +311,54 @@ public final class ConnectionLayoutTest {
             }
         }
         return null;
+    }
+
+    // ------------------------------------------------------------------
+    // 网络模式文案
+    // ------------------------------------------------------------------
+
+    /**
+     * 文案不能再说"NAT 下填虚拟机的 IP 没用、必须配端口转发"。
+     *
+     * <p>这句话原来是错的，而且错了很久：NAT 模式下宿主机通过自己的 VMnet8 适配器
+     * 就能直连虚拟机的 vmnet8 地址，端口转发只是**备选**（给别的机器进来用，或用在
+     * 宿主机确实到不了那个网段时）。它把用户往最慢、还要管理员权限的那条路上引——
+     * 而且会在用户本来就能连上的时候告诉他"这样连不上"。
+     *
+     * <p>它被改正，是因为有人在真机上试了直连，发现能通。这种事没法靠读代码发现：
+     * 文案错了不会有任何测试变红，只会让用户多绕一圈。所以这里把"不许再出现那种说法"
+     * 钉下来。
+     */
+    private static void networkHintsDoNotClaimPortForwardingIsRequired() {
+        java.io.File src = findSource("vmadapt/src/vmadapt/ui/UiText.java", "UiText.java");
+        if (src == null) {
+            check("找得到 UiText 源码（跳过文案检查）", false);
+            return;
+        }
+        String text;
+        try {
+            text = new String(java.nio.file.Files.readAllBytes(src.toPath()), "UTF-8");
+        } catch (Exception e) {
+            check("读得到 UiText 源码（" + e + "）", false);
+            return;
+        }
+
+        // 必须消失的旧说法。
+        String[] wrong = {
+            "访问不到",                 // NAT 的 IP 从宿主机访问不到
+            "改填虚拟机内网 IP 也没用",
+            "不配端口转发就一定连不上",
+            "does not help either",
+            "without port forwarding the connection cannot work",
+        };
+        for (String w : wrong) {
+            check("文案里不再有「" + w + "」", !text.contains(w));
+        }
+
+        // 必须出现的正确说法。
+        check("说明了三种模式填法相同", text.contains("填法是一样的"));
+        check("说明了端口转发不是必需的", text.contains("端口转发不是宿主机连接所必需的"));
+        check("说明了仅主机模式下虚拟机没有外网", text.contains("虚拟机没有外网"));
     }
 
     // ------------------------------------------------------------------
