@@ -80,6 +80,18 @@ public final class MainPanel extends JPanel {
             new String[]{I18n.t(Strings.MODE_WSL), I18n.t(Strings.MODE_VM)});
     private final JComboBox<String> distroBox = new JComboBox<String>();
     private final JButton detectButton = new JButton(I18n.t(Strings.MENU_DETECT));
+
+    /**
+     * 删除下拉框里选中的那条已保存配置。
+     *
+     * <p>删除要有个入口，是因为保存这一侧本来就没有对手：{@code ConnectionStore.remove}
+     * 一直存在，但界面上没有任何地方调用它。配置只进不出，攒到后来没人敢清。
+     *
+     * <p>放在下拉框旁边而不是连接对话框里，是因为<b>列表就在下拉框里</b>。用户在这儿
+     * 看得见、选得中，删除就该在同一个地方；放进对话框还要先连上那台机器，而"删掉一台
+     * 已经不用了的机器"恰恰是不想再连它的时候。
+     */
+    private final JButton deleteProfileButton = new JButton(I18n.t(Strings.BTN_PROFILE_DELETE));
     private final JTextField filterField = new JTextField();
     /**
      * Applies initial divider positions once the panel has been laid out.' The label before the source box; its text follows the connection mode. */
@@ -685,6 +697,8 @@ public final class MainPanel extends JPanel {
         @Override
         public void run() {
             detectButton.setText(I18n.t(Strings.MENU_DETECT));
+            deleteProfileButton.setText(I18n.t(Strings.BTN_PROFILE_DELETE));
+            deleteProfileButton.setToolTipText(I18n.t(Strings.HINT_PROFILE_DELETE));
             runButton.setText(I18n.t(Strings.MENU_RUN));
             stopButton.setText(I18n.t(Strings.MENU_STOP));
             clearLogButton.setText(I18n.t(Strings.MENU_CLEAR_LOG));
@@ -1039,6 +1053,78 @@ public final class MainPanel extends JPanel {
             distroLabel.setText(I18n.t(ssh ? Strings.CONN_LABEL_SAVED : Strings.CONN_LABEL_WSL));
         }
         distroBox.setToolTipText(I18n.t(ssh ? Strings.HINT_PROFILE_BOX : Strings.HINT_DISTRO_BOX));
+        // 删除按钮跟着走：WSL 方式下这个框里装的是发行版，对它谈"删除配置"没有意义，
+        // 所以整个按钮收起来，而不是留一个按不动的灰块让人猜。
+        deleteProfileButton.setText(I18n.t(Strings.BTN_PROFILE_DELETE));
+        deleteProfileButton.setToolTipText(I18n.t(Strings.HINT_PROFILE_DELETE));
+        deleteProfileButton.setVisible(ssh);
+        updateDeleteProfileEnabled();
+    }
+
+    /**
+     * 决定删除按钮能不能按。
+     *
+     * <p>只有「虚拟机」方式、且确实有配置可删时才可用。注意<b>不</b>要求下拉框可见：
+     * 只有一条配置时下拉框是隐藏的（一条时它没有可选的余地），但那条配置仍然要能删。
+     */
+    private void updateDeleteProfileEnabled() {
+        boolean canDelete = isSshMode()
+                && distroBox.getItemCount() > 0
+                && distroBox.getSelectedItem() != null;
+        deleteProfileButton.setEnabled(canDelete);
+        // 提示里带上要删的是哪一条。只有一条配置时下拉框是隐藏的，光看按钮说不清
+        // 它会删掉什么；把名字写进提示，不管框在不在都能看清目标。
+        Object sel = distroBox.getSelectedItem();
+        deleteProfileButton.setToolTipText(canDelete && sel != null
+                ? I18n.t(Strings.HINT_PROFILE_DELETE) + "\n\n"
+                        + I18n.t(Strings.LABEL_PROFILE_DELETE_TARGET, sel.toString())
+                : I18n.t(Strings.HINT_PROFILE_DELETE));
+    }
+
+    /**
+     * 删掉下拉框里选中的那条配置。
+     *
+     * <p>按<b>下拉框里显示的那个名字</b>精确定位，找到哪条删哪条，而不是把名字交给
+     * {@code ConnectionStore.remove} 让它在别名、地址、主机名之间挨个试。那个"最后比
+     * 主机名"的兜底在这里是危险的：同一个主机上的两条配置（不同用户或不同端口）会被
+     * 认成同一条，删掉的可能不是用户选的那条。界面上既然已经选中了一条，就按选中的删。
+     */
+    private void deleteSelectedProfile() {
+        if (!isSshMode()) {
+            return;
+        }
+        Object sel = distroBox.getSelectedItem();
+        String name = sel == null ? null : sel.toString().trim();
+        if (name == null || name.isEmpty()) {
+            return;
+        }
+
+        int answer = javax.swing.JOptionPane.showConfirmDialog(this,
+                I18n.t(Strings.CONFIRM_PROFILE_DELETE, name),
+                I18n.t(Strings.CONFIRM_PROFILE_DELETE_TITLE),
+                javax.swing.JOptionPane.OK_CANCEL_OPTION,
+                javax.swing.JOptionPane.WARNING_MESSAGE);
+        if (answer != javax.swing.JOptionPane.OK_OPTION) {
+            return;
+        }
+
+        try {
+            vmadapt.core.ConnectionStore store = new vmadapt.core.ConnectionStore();
+            if (store.removeDisplayed(name)) {
+                setStatus(I18n.t(Strings.STATUS_PROFILE_DELETED, name));
+            } else {
+                // 没删成有两种原因：文件写不进去，或那条已经不在了（另开一个窗口删过）。
+                // 两者都如实说"删除失败"，不假装成功。
+                setStatus(I18n.t(Strings.ERR_PROFILE_DELETE_FAILED, name));
+            }
+        } catch (Exception ex) {
+            setStatus(I18n.t(Strings.ERR_PROFILE_DELETE_FAILED, name) + " " + ex.getMessage());
+        }
+
+        // 删掉的可能正是当前选中的那台，所以要重新读一遍列表，让它按真实内容重填。
+        // mayGuide=false：删到一条不剩时不该顺势弹出连接向导——用户刚说的是"删掉"，
+        // 不是"给我新建一个"。
+        refreshSshList(false, false);
     }
 
     /**
@@ -1117,6 +1203,10 @@ public final class MainPanel extends JPanel {
                 if (distroLabel != null) {
                     distroLabel.setVisible(many);
                 }
+                // 列表刚换过，删除按钮的目标也随之变了。放在这里而不是跟着
+                // distroBox 的可见性走：只有一条配置时下拉框是隐藏的，但那条
+                // 仍然要能删——刷新完必须重新判一次它能不能按。
+                updateDeleteProfileEnabled();
                 if (all.isEmpty()) {
                     setStatus(I18n.t(Strings.STATUS_NO_PROFILE));
                 } else {
@@ -1200,11 +1290,8 @@ public final class MainPanel extends JPanel {
      * 取值，而不是把下拉框里的字符串直接当主机用。
      */
     private static String displayNameOf(vmadapt.core.SshTarget t) {
-        if (t == null) {
-            return "";
-        }
-        String label = t.label == null ? "" : t.label.trim();
-        return label.isEmpty() ? t.toDisplay() : label;
+        // 规则由存储层提供，界面和"按显示名删除"用的是同一条，不会两边分岔。
+        return vmadapt.core.ConnectionStore.displayName(t);
     }
 
     /**
@@ -1468,13 +1555,21 @@ public final class MainPanel extends JPanel {
         distroBox.setPreferredSize(new Dimension(150, distroBox.getPreferredSize().height));
         applySourceLabels(false);
         bar.add(distroBox, g);
+        // 紧挨着下拉框：解除的是"删除"这件事本身，而列表就在左边那个框里。
+        //
+        // 它不能只在"配置多于一条"时出现——只有一条配置时下拉框是隐藏的
+        // （见 refreshSshList：一条时下拉框留着纯属碍眼），那时按钮仍要能删掉
+        // 那唯一一条，否则单配置的用户永远清不掉它。
+        g.gridx = 4;
+        deleteProfileButton.setName("bioenv.deleteProfile");
+        bar.add(deleteProfileButton, g);
         // No separate "configure" button: the connection dialog opens by itself the
         // moment there is a Linux VM profile to create or edit. A button that mostly
         // duplicated that moment was one more thing to explain, and it was dead in
         // WSL mode anyway.
-        g.gridx = 4;
-        bar.add(detectButton, g);
         g.gridx = 5;
+        bar.add(detectButton, g);
+        g.gridx = 6;
         // 工具检索搬去了左侧工具树（见 buildCenter）。这里保留一个透明的弹性空列，
         // 语言按钮仍然被顶在右边缘 —— 撑开的宽度全在这一列左边。
         JPanel stretch = new JPanel();
@@ -1485,13 +1580,13 @@ public final class MainPanel extends JPanel {
         // Language switch, last column, no weight: it takes its natural width and the
         // unused space stays with the filler above. anchor=EAST pins it to the right
         // even if the column is ever given more room than the button needs.
-        g.gridx = 6;
+        g.gridx = 7;
         g.weightx = 0;
         g.fill = GridBagConstraints.NONE;
         g.anchor = GridBagConstraints.EAST;
         // 风格切换器挨着语言按钮：两者都是"这个面板怎么显示"，放一起顺理成章。
         bar.add(themeSwitcher, g);
-        g.gridx = 7;
+        g.gridx = 8;
         bar.add(langToggle, g);
 
         // 工具条整体跟着主题走；标签用次级灰，别和内容抢。
@@ -1793,6 +1888,13 @@ public final class MainPanel extends JPanel {
             }
         });
 
+        deleteProfileButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                deleteSelectedProfile();
+            }
+        });
+
         filterField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
             @Override
             public void insertUpdate(javax.swing.event.DocumentEvent e) {
@@ -1955,6 +2057,8 @@ public final class MainPanel extends JPanel {
                 if (fillingDistros || adjustingMode) {
                     return;
                 }
+                // 用户换了选中的配置：删除按钮跟着换目标。
+                updateDeleteProfileEnabled();
                 Object sel = distroBox.getSelectedItem();
                 if (sel == null) {
                     return;

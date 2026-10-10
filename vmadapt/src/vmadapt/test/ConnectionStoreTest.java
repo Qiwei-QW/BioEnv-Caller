@@ -243,6 +243,101 @@ public final class ConnectionStoreTest {
             List<SshTarget> defList = defStore.list();
             check("默认位置可读且不抛异常", defList != null);
 
+            // -----------------------------------------------------------
+            // 11. 按显示名精确删除（界面上那个删除按钮）
+            // -----------------------------------------------------------
+            //
+            // 这里守的是一个会造成"删错机器"的区别。
+            // ConnectionStore.remove(name) 的匹配顺序是「别名 → 地址 → 主机名」，
+            // 最后那个主机名兜底会让**同一个主机上的两条配置**互相顶替：用户在下拉框
+            // 里选中了 A，删掉的却是先出现的 B。removeDisplayed 只比显示名，不猜。
+            Path delFile = dir.resolve("del.json");
+            ConnectionStore delStore = new ConnectionStore(delFile);
+
+            // 同一台主机、不同用户：只按主机名找的话这两条分不开。
+            SshTarget alpha = new SshTarget("10.9.9.9", 22, "alpha", null);
+            alpha.label = "alpha-box";
+            SshTarget beta = new SshTarget("10.9.9.9", 22, "beta", null);
+            beta.label = "beta-box";
+            check("存入两条同主机配置", delStore.save(alpha) && delStore.save(beta));
+            eq("两条都在", "2", String.valueOf(delStore.list().size()));
+
+            eq("显示名用别名", "alpha-box",
+                    ConnectionStore.displayName(delStore.list().get(0)));
+            check("删掉 beta 那条", delStore.removeDisplayed("beta-box"));
+            List<SshTarget> afterDel = delStore.list();
+            eq("删掉一条后剩一条", "1", String.valueOf(afterDel.size()));
+            eq("剩下的是 alpha（没删错同主机的那条）", "alpha-box",
+                    ConnectionStore.displayName(afterDel.get(0)));
+            eq("剩下的用户仍是 alpha", "alpha", afterDel.get(0).user);
+
+            // 别名留空时，显示名退化成 user@host:port。
+            SshTarget noLabel = new SshTarget("10.8.8.8", 2222, "carol", null);
+            check("存入无别名的一条", delStore.save(noLabel));
+            eq("无别名时显示名是 user@host:port", "carol@10.8.8.8:2222",
+                    ConnectionStore.displayName(
+                            delStore.list().get(delStore.list().size() - 1)));
+            check("按 user@host:port 也能删",
+                    delStore.removeDisplayed("carol@10.8.8.8:2222"));
+            eq("删完只剩 alpha", "1", String.valueOf(delStore.list().size()));
+            eq("剩下还是 alpha", "alpha-box",
+                    ConnectionStore.displayName(delStore.list().get(0)));
+
+            // 删不存在的不该动到别人。
+            check("删不存在的返回 false", !delStore.removeDisplayed("no-such-box"));
+            check("删空名字返回 false", !delStore.removeDisplayed("   "));
+            check("删 null 返回 false", !delStore.removeDisplayed(null));
+            eq("失败后条数不变", "1", String.valueOf(delStore.list().size()));
+
+            // 删掉最后一条之后要真的空，不能留下残影。
+            // （save 会按身份覆盖同一条，所以这里用整表覆盖来造"只剩一条"的起点。）
+            check("删掉最后一条", delStore.removeDisplayed("alpha-box"));
+            check("全删完为空", delStore.list().isEmpty());
+            // 空表也要能再存——删到空之后文件仍须是合法 JSON。
+            check("删空后还能再存", delStore.save(alpha));
+            eq("再存后一条", "1", String.valueOf(delStore.list().size()));
+
+            // -----------------------------------------------------------
+            // 12. 这一条专门把 removeDisplayed 和 remove 分开
+            // -----------------------------------------------------------
+            //
+            // 上面那些用例其实用 remove(name) 也能过。真正会分岔的是这一种：
+            // 有人拿主机地址当别名。于是那条配置的显示名正好等于另一条配置的主机名，
+            // remove() 的「主机名兜底」就会先命中"另一条"，把没被选中的那条删掉。
+            // removeDisplayed 只比显示名，所以选谁删谁。
+            Path trapFile = dir.resolve("trap.json");
+            ConnectionStore trap = new ConnectionStore(trapFile);
+
+            // ① 无别名，主机 10.9.9.9 → 显示名是 dave@10.9.9.9:22
+            SshTarget dave = new SshTarget("10.9.9.9", 22, "dave", null);
+            // ② 别名写成 10.9.9.9，主机却是别处 → 显示名就是 10.9.9.9
+            SshTarget named = new SshTarget("7.7.7.7", 22, "erin", null);
+            named.label = "10.9.9.9";
+            check("存入会被误删的两条", trap.save(dave) && trap.save(named));
+            eq("两条都在", "2", String.valueOf(trap.list().size()));
+
+            check("删显示名为 10.9.9.9 的那条", trap.removeDisplayed("10.9.9.9"));
+            List<SshTarget> left = trap.list();
+            eq("只剩一条", "1", String.valueOf(left.size()));
+            eq("剩下的必须是 dave（不能被主机名兜底误删）", "dave@10.9.9.9:22",
+                    ConnectionStore.displayName(left.get(0)));
+            eq("剩下的用户是 dave", "dave", left.get(0).user);
+
+            // 反面确认：remove() 在同一份数据上确实会删错。把这一点钉下来，
+            // 是为了说明 removeDisplayed 不是"换个名字的同一个方法"。
+            Path trap2File = dir.resolve("trap2.json");
+            ConnectionStore trap2 = new ConnectionStore(trap2File);
+            SshTarget dave2 = new SshTarget("10.9.9.9", 22, "dave", null);
+            SshTarget named2 = new SshTarget("7.7.7.7", 22, "erin", null);
+            named2.label = "10.9.9.9";
+            trap2.save(dave2);
+            trap2.save(named2);
+            check("remove() 也能删到一条（正因为它会误命中，不能用来做按选中项删除）",
+                    trap2.remove("10.9.9.9"));
+            List<SshTarget> left2 = trap2.list();
+            eq("remove() 之后剩的是 named（说明它删错了那条）", "10.9.9.9",
+                    ConnectionStore.displayName(left2.get(0)));
+
         } finally {
             deleteRecursively(dir);
         }

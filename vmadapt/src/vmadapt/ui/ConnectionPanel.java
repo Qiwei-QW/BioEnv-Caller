@@ -19,7 +19,6 @@ import java.util.List;
 import javax.swing.BorderFactory;
 import javax.swing.DefaultComboBoxModel;
 import javax.swing.JButton;
-import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JFileChooser;
 import javax.swing.JLabel;
@@ -104,9 +103,6 @@ public final class ConnectionPanel extends JPanel {
      * <p>面板上原来有八个按钮，现在填写与连接全在向导里完成，这里只负责开始。
      */
     private final JButton connectButton = new JButton();
-
-    /** 「已存配置」下拉框。暂留：向导尚未接管"选回旧机器"这件事。 */
-    private final JComboBox<String> savedBox = new JComboBox<String>();
 
     /** 「网络模式速查」页那块的标题边框。 */
     private final javax.swing.border.TitledBorder networkBorder;

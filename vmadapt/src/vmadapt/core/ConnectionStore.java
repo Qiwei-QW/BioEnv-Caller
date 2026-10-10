@@ -196,6 +196,58 @@ public final class ConnectionStore {
     }
 
     /**
+     * 一条配置在界面上显示的名字：有别名就用别名，没有就用 {@code user@host:port}。
+     *
+     * <p>这个规则原先只写在界面的 {@code MainPanel.displayNameOf} 里，于是"删除"要想
+     * 按显示的名字删，就得在界面里重写一遍匹配逻辑。放在这里，界面和存储用的是同一条
+     * 规则，不会两边慢慢分岔。
+     */
+    public static String displayName(SshTarget t) {
+        if (t == null) {
+            return "";
+        }
+        String label = t.label == null ? "" : t.label.trim();
+        return label.isEmpty() ? t.toDisplay() : label;
+    }
+
+    /**
+     * 按界面上显示的名字精确删除一条。
+     *
+     * <h2>为什么不用 {@link #remove(String)}</h2>
+     *
+     * <p>{@code remove} 的匹配顺序是「别名 → 地址 → <b>主机名</b>」，那个主机名兜底在这里
+     * 是有害的：同一个主机上的两条配置（不同用户、或不同端口）会被认成同一条，于是
+     * 用户在下拉框里选中了 A，删掉的却是先出现的 B。
+     *
+     * <p>界面上既然已经明确选中了一条，就该按<b>那一条</b>删，不猜。所以这里只比显示名，
+     * 而且只删第一个完全匹配的。
+     *
+     * @param display 界面上显示的名字
+     * @return 是否删掉了一条
+     */
+    public boolean removeDisplayed(String display) {
+        if (display == null || display.trim().isEmpty()) {
+            return false;
+        }
+        String want = display.trim();
+        List<SshTarget> all = list();
+        List<SshTarget> kept = new ArrayList<SshTarget>();
+        boolean removed = false;
+        for (int i = 0; i < all.size(); i++) {
+            SshTarget t = all.get(i);
+            if (!removed && displayName(t).equals(want)) {
+                removed = true;
+                continue;
+            }
+            kept.add(t);
+        }
+        if (!removed) {
+            return false;
+        }
+        return writeAll(kept);
+    }
+
+    /**
      * 按名称载入一个连接。
      *
      * @param name 别名或地址

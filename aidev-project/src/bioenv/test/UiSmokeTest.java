@@ -171,7 +171,52 @@ public final class UiSmokeTest {
         System.out.println("PASS  PluginInject.generatePanel() -> "
                 + produced.getClass().getName());
 
+        // 删除配置按钮：必须真的加进了工具条，而且只在「虚拟机」方式下出现。
+        //
+        // 这里刻意不切换方式。切方式会走 applyConnectionMode，而它会把这次选择写进
+        // 「上次用的方式」——跑一次门禁就把用户下次打开插件的默认方式改掉，这种事不能干。
+        // 所以只验证"当前可见性与当前方式一致"，足够抓住"忘了加进布局"和"可见性没跟
+        // 方式走"这两类错，又不产生副作用。
+        javax.swing.JButton deleteProfile =
+                (javax.swing.JButton) findByName(panel, "bioenv.deleteProfile");
+        if (deleteProfile == null) {
+            throw new IllegalStateException("delete-profile button is not in the panel");
+        }
+        System.out.println("PASS  delete-profile button is in the bar");
+        javax.swing.JComboBox<?> modeBox =
+                (javax.swing.JComboBox<?>) fieldOf(panel, "modeBox");
+        boolean vmMode = modeBox.getSelectedIndex() == 1;
+        if (deleteProfile.isVisible() != vmMode) {
+            throw new IllegalStateException("delete-profile visibility ("
+                    + deleteProfile.isVisible() + ") does not match the mode (vm="
+                    + vmMode + ")");
+        }
+        System.out.println("PASS  delete-profile visibility follows the connection mode");
+
         System.out.println("=== UI smoke test complete ===");
+    }
+
+    /** 按名字在控件树里找一个组件。 */
+    private static java.awt.Component findByName(java.awt.Component root, String name) {
+        if (name.equals(root.getName())) {
+            return root;
+        }
+        if (root instanceof java.awt.Container) {
+            for (java.awt.Component c : ((java.awt.Container) root).getComponents()) {
+                java.awt.Component hit = findByName(c, name);
+                if (hit != null) {
+                    return hit;
+                }
+            }
+        }
+        return null;
+    }
+
+    /** 读一个私有字段。 */
+    private static Object fieldOf(Object target, String name) throws Exception {
+        java.lang.reflect.Field f = target.getClass().getDeclaredField(name);
+        f.setAccessible(true);
+        return f.get(target);
     }
 
     private static bioenv.core.Schema.Option option(String flag, String arg,

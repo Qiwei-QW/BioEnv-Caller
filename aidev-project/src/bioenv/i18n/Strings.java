@@ -111,6 +111,32 @@ public final class Strings {
     /** 错误：所选连接配置已不存在（带配置名占位）。 */
     public static final String ERR_PROFILE_MISSING = "err.profileMissing";
 
+    /**
+     * 按钮：删除下拉框里选中的那条已保存配置。
+     *
+     * <p>它只出现在「虚拟机」方式下——WSL 方式时同一个下拉框里装的是发行版，
+     * 对发行版谈"删除配置"没有意义。
+     */
+    public static final String BTN_PROFILE_DELETE = "btn.profileDelete";
+
+    /** 提示：删除按钮的说明。 */
+    public static final String HINT_PROFILE_DELETE = "hint.profileDelete";
+
+    /** 提示：删除按钮当前的目标（带配置名占位）。 */
+    public static final String LABEL_PROFILE_DELETE_TARGET = "label.profileDeleteTarget";
+
+    /** 确认对话框：标题。 */
+    public static final String CONFIRM_PROFILE_DELETE_TITLE = "confirm.profileDeleteTitle";
+
+    /** 确认对话框：正文（带配置名占位）。 */
+    public static final String CONFIRM_PROFILE_DELETE = "confirm.profileDelete";
+
+    /** 状态：已删除某条配置（带配置名占位）。 */
+    public static final String STATUS_PROFILE_DELETED = "status.profileDeleted";
+
+    /** 错误：删除配置失败（带配置名占位）。 */
+    public static final String ERR_PROFILE_DELETE_FAILED = "err.profileDeleteFailed";
+
     /** 提示：连接方式下拉框的说明。 */
     public static final String HINT_MODE_BOX = "hint.modeBox";
 
@@ -953,6 +979,25 @@ public final class Strings {
                 "Choose a saved Linux VM profile first.");
         put(ZH_TEXT, EN_TEXT, ERR_PROFILE_MISSING, "配置「{0}」已不存在，请另选一个。",
                 "Profile \"{0}\" no longer exists. Pick another one.");
+        put(ZH_TEXT, EN_TEXT, BTN_PROFILE_DELETE, "删除配置", "Delete profile");
+        put(ZH_TEXT, EN_TEXT, HINT_PROFILE_DELETE,
+                "把下拉框里选中的那条配置删掉。只删除这条记录，不影响虚拟机上已经装好的公钥。",
+                "Deletes the profile selected in the box. Only this record is removed; "
+                        + "the public key already installed on the VM is left alone.");
+        put(ZH_TEXT, EN_TEXT, LABEL_PROFILE_DELETE_TARGET, "将删除：{0}",
+                "Will delete: {0}");
+        put(ZH_TEXT, EN_TEXT, CONFIRM_PROFILE_DELETE_TITLE, "删除配置",
+                "Delete profile");
+        put(ZH_TEXT, EN_TEXT, CONFIRM_PROFILE_DELETE,
+                "要删除配置「{0}」吗？\n\n这只删掉本机保存的这条记录，"
+                        + "虚拟机上已经装好的公钥不受影响。",
+                "Delete the profile \"{0}\"?\n\nThis only removes the saved record on "
+                        + "this computer; the public key already installed on the VM "
+                        + "is left alone.");
+        put(ZH_TEXT, EN_TEXT, STATUS_PROFILE_DELETED, "已删除配置「{0}」。",
+                "Deleted profile \"{0}\".");
+        put(ZH_TEXT, EN_TEXT, ERR_PROFILE_DELETE_FAILED, "删除配置「{0}」失败，文件可能不可写。",
+                "Could not delete profile \"{0}\"; the file may not be writable.");
 
         put(ZH_TEXT, EN_TEXT, HINT_MODE_BOX, "命令在哪里执行：本机 WSL，或通过 SSH 连接 Linux 虚拟机。",
                 "Where commands run: local WSL, or a Linux VM over SSH.");
