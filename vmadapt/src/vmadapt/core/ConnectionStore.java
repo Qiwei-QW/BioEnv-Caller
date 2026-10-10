@@ -248,6 +248,76 @@ public final class ConnectionStore {
     }
 
     /**
+     * 重命名的结果。
+     *
+     * <p>分开判"没找到"和"重名"，是因为界面要说不同的话：前者是那条配置已经不在了
+     * （另一个窗口删过），后者是名字撞了、让用户换一个。合成一个 false 就只能说
+     * "重命名失败"，用户不知道该改什么。
+     */
+    public enum RenameResult {
+        /** 改好了（新旧名字相同也算，用户没改）。 */
+        OK,
+        /** 界面上那条已经不在了。 */
+        NOT_FOUND,
+        /** 新名字和另一条配置撞了。 */
+        DUPLICATE,
+        /** 文件写不进去。 */
+        WRITE_FAILED
+    }
+
+    /**
+     * 改一条配置的别名（也就是界面上显示的名字）。
+     *
+     * <h2>为什么不直接用 save()</h2>
+     *
+     * <p>{@link #save(SshTarget)} 是按<b>身份</b>去重后写入的，而身份就是别名（没别名
+     * 时才是地址）。改了别名再调 save，会被当成<b>另一条</b>记录存进去，原来那条还留在
+     * 原地——用户看到的是"重命名之后多出来一条"。
+     *
+     * <p>也不允许改成与别人重名：下拉框里两条一模一样的名字分不出谁是谁，
+     * 之后点连接、点删除都成了看运气。
+     *
+     * @param display  界面上显示的名字（要改的那条）
+     * @param newLabel 新别名；空白表示清掉别名，显示名退回 {@code user@host:port}
+     * @return 结果
+     */
+    public RenameResult rename(String display, String newLabel) {
+        if (display == null || display.trim().isEmpty()) {
+            return RenameResult.NOT_FOUND;
+        }
+        String want = display.trim();
+        String label = newLabel == null ? "" : newLabel.trim();
+
+        List<SshTarget> all = list();
+        int target = -1;
+        for (int i = 0; i < all.size(); i++) {
+            if (displayName(all.get(i)).equals(want)) {
+                target = i;
+                break;
+            }
+        }
+        if (target < 0) {
+            return RenameResult.NOT_FOUND;
+        }
+
+        if (!label.isEmpty()) {
+            for (int i = 0; i < all.size(); i++) {
+                if (i != target && label.equals(displayName(all.get(i)))) {
+                    return RenameResult.DUPLICATE;
+                }
+            }
+        }
+
+        SshTarget t = all.get(target);
+        String current = t.label == null ? "" : t.label.trim();
+        if (current.equals(label)) {
+            return RenameResult.OK; // 没改动，不必写盘
+        }
+        t.label = label;
+        return writeAll(all) ? RenameResult.OK : RenameResult.WRITE_FAILED;
+    }
+
+    /**
      * 按名称载入一个连接。
      *
      * @param name 别名或地址

@@ -82,16 +82,18 @@ public final class MainPanel extends JPanel {
     private final JButton detectButton = new JButton(I18n.t(Strings.MENU_DETECT));
 
     /**
-     * 删除下拉框里选中的那条已保存配置。
+     * 已保存配置的右键菜单：重命名 / 删除。
      *
-     * <p>删除要有个入口，是因为保存这一侧本来就没有对手：{@code ConnectionStore.remove}
-     * 一直存在，但界面上没有任何地方调用它。配置只进不出，攒到后来没人敢清。
+     * <h2>为什么是右键菜单而不是一个按钮</h2>
      *
-     * <p>放在下拉框旁边而不是连接对话框里，是因为<b>列表就在下拉框里</b>。用户在这儿
-     * 看得见、选得中，删除就该在同一个地方；放进对话框还要先连上那台机器，而"删掉一台
-     * 已经不用了的机器"恰恰是不想再连它的时候。
+     * <p>这两件事都是"对这一条配置"的操作，而"这一条"是由下拉框的当前选择决定的。
+     * 做成常驻按钮就得占工具条一格，而且只有一个配置时下拉框是隐藏的，按钮旁边空无一物，
+     * 用户看不出它会作用于谁。右键菜单挂在选择本身所在的控件上，作用于什么不言自明。
+     *
+     * <p>菜单里的动作只有在这个下拉框真的装着配置（也就是「虚拟机」方式）时才可用，
+     * 所以菜单本身也只在该方式下弹出，见 {@code wireDistroBoxPopup()}。
      */
-    private final JButton deleteProfileButton = new JButton(I18n.t(Strings.BTN_PROFILE_DELETE));
+    private final javax.swing.JPopupMenu profileMenu = new javax.swing.JPopupMenu();
     private final JTextField filterField = new JTextField();
     /**
      * Applies initial divider positions once the panel has been laid out.' The label before the source box; its text follows the connection mode. */
@@ -697,8 +699,7 @@ public final class MainPanel extends JPanel {
         @Override
         public void run() {
             detectButton.setText(I18n.t(Strings.MENU_DETECT));
-            deleteProfileButton.setText(I18n.t(Strings.BTN_PROFILE_DELETE));
-            deleteProfileButton.setToolTipText(I18n.t(Strings.HINT_PROFILE_DELETE));
+            rebuildProfileMenu();
             runButton.setText(I18n.t(Strings.MENU_RUN));
             stopButton.setText(I18n.t(Strings.MENU_STOP));
             clearLogButton.setText(I18n.t(Strings.MENU_CLEAR_LOG));
@@ -1053,32 +1054,128 @@ public final class MainPanel extends JPanel {
             distroLabel.setText(I18n.t(ssh ? Strings.CONN_LABEL_SAVED : Strings.CONN_LABEL_WSL));
         }
         distroBox.setToolTipText(I18n.t(ssh ? Strings.HINT_PROFILE_BOX : Strings.HINT_DISTRO_BOX));
-        // 删除按钮跟着走：WSL 方式下这个框里装的是发行版，对它谈"删除配置"没有意义，
-        // 所以整个按钮收起来，而不是留一个按不动的灰块让人猜。
-        deleteProfileButton.setText(I18n.t(Strings.BTN_PROFILE_DELETE));
-        deleteProfileButton.setToolTipText(I18n.t(Strings.HINT_PROFILE_DELETE));
-        deleteProfileButton.setVisible(ssh);
-        updateDeleteProfileEnabled();
     }
 
     /**
-     * 决定删除按钮能不能按。
-     *
-     * <p>只有「虚拟机」方式、且确实有配置可删时才可用。注意<b>不</b>要求下拉框可见：
-     * 只有一条配置时下拉框是隐藏的（一条时它没有可选的余地），但那条配置仍然要能删。
+     * 建好右键菜单的两项。语言切换时会重建，所以文案取当前语言。
      */
-    private void updateDeleteProfileEnabled() {
-        boolean canDelete = isSshMode()
-                && distroBox.getItemCount() > 0
-                && distroBox.getSelectedItem() != null;
-        deleteProfileButton.setEnabled(canDelete);
-        // 提示里带上要删的是哪一条。只有一条配置时下拉框是隐藏的，光看按钮说不清
-        // 它会删掉什么；把名字写进提示，不管框在不在都能看清目标。
+    private void rebuildProfileMenu() {
+        profileMenu.removeAll();
+        javax.swing.JMenuItem rename = new javax.swing.JMenuItem(
+                I18n.t(Strings.MENU_PROFILE_RENAME));
+        rename.setName("bioenv.profileRename");
+        rename.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                renameSelectedProfile();
+            }
+        });
+        profileMenu.add(rename);
+
+        javax.swing.JMenuItem delete = new javax.swing.JMenuItem(
+                I18n.t(Strings.BTN_PROFILE_DELETE));
+        delete.setName("bioenv.profileDelete");
+        delete.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                deleteSelectedProfile();
+            }
+        });
+        profileMenu.add(delete);
+        profileMenu.setName("bioenv.profileMenu");
+    }
+
+    /**
+     * 给配置下拉框装上右键菜单：重命名 / 删除。
+     *
+     * <p>只在「虚拟机」方式、且框里真有配置时弹菜单。WSL 方式下同一个框里装的是发行版，
+     * 对它谈"重命名配置"没有意义——弹一个点不动的菜单比不弹更让人困惑。
+     *
+     * <p>作用对象始终是<b>当前选中的那一条</b>，而不是右键点到的位置：下拉框一次只显示
+     * 一条，所见即所选，这样不会出现"我点在这里，改的却是那里"。
+     */
+    private void wireDistroBoxPopup() {
+        java.awt.event.MouseListener popup = new java.awt.event.MouseAdapter() {
+            @Override
+            public void mousePressed(java.awt.event.MouseEvent e) {
+                maybeShowProfileMenu(e);
+            }
+
+            @Override
+            public void mouseReleased(java.awt.event.MouseEvent e) {
+                maybeShowProfileMenu(e);
+            }
+        };
+        // pressed 与 released 都挂：哪个触发取决于平台，只挂一个会在某些系统上失灵。
+        distroBox.addMouseListener(popup);
+        if (distroLabel != null) {
+            distroLabel.addMouseListener(popup);
+        }
+    }
+
+    private void maybeShowProfileMenu(java.awt.event.MouseEvent e) {
+        if (!e.isPopupTrigger() || !isSshMode() || distroBox.getItemCount() == 0) {
+            return;
+        }
+        if (distroBox.getSelectedItem() == null) {
+            return;
+        }
+        profileMenu.show(e.getComponent(), e.getX(), e.getY());
+    }
+
+    /**
+     * 改掉当前选中配置的别名。
+     *
+     * <p>名字留空是允许的：那表示不要别名，显示名退回 {@code user@host:port}——
+     * 相当于"把别名清掉"，这比强迫用户想个新名字合理。
+     */
+    private void renameSelectedProfile() {
+        if (!isSshMode()) {
+            return;
+        }
         Object sel = distroBox.getSelectedItem();
-        deleteProfileButton.setToolTipText(canDelete && sel != null
-                ? I18n.t(Strings.HINT_PROFILE_DELETE) + "\n\n"
-                        + I18n.t(Strings.LABEL_PROFILE_DELETE_TARGET, sel.toString())
-                : I18n.t(Strings.HINT_PROFILE_DELETE));
+        String name = sel == null ? null : sel.toString().trim();
+        if (name == null || name.isEmpty()) {
+            return;
+        }
+
+        String typed = (String) javax.swing.JOptionPane.showInputDialog(this,
+                I18n.t(Strings.DLG_PROFILE_RENAME, name),
+                I18n.t(Strings.DLG_PROFILE_RENAME_TITLE),
+                javax.swing.JOptionPane.QUESTION_MESSAGE,
+                null, null, name);
+        if (typed == null) {
+            return; // 取消
+        }
+        String newName = typed.trim();
+
+        try {
+            vmadapt.core.ConnectionStore.RenameResult r =
+                    new vmadapt.core.ConnectionStore().rename(name, newName);
+            switch (r) {
+                case OK:
+                    // 显示名变了，重新读一遍列表，让框里显示新名字。
+                    setStatus(I18n.t(Strings.STATUS_PROFILE_RENAMED, name,
+                            newName.isEmpty() ? name : newName));
+                    // 记住的那台也要跟着改名，否则"上次用的机器"会指向一个不存在的名字。
+                    if (name.equals(targetMemory.vmProfile())) {
+                        targetMemory.rememberVmProfile(newName);
+                    }
+                    break;
+                case DUPLICATE:
+                    setStatus(I18n.t(Strings.ERR_PROFILE_RENAME_DUPLICATE, newName));
+                    break;
+                case NOT_FOUND:
+                    setStatus(I18n.t(Strings.ERR_PROFILE_RENAME_MISSING, name));
+                    break;
+                default:
+                    setStatus(I18n.t(Strings.ERR_PROFILE_RENAME_FAILED, name));
+                    break;
+            }
+        } catch (Exception ex) {
+            setStatus(I18n.t(Strings.ERR_PROFILE_RENAME_FAILED, name) + " " + ex.getMessage());
+        }
+        refreshSshList(false, false);
     }
 
     /**
@@ -1196,17 +1293,17 @@ public final class MainPanel extends JPanel {
                 } finally {
                     adjustingMode = false;
                 }
-                // 只有一个目标时下拉框纯属碍眼：没有可选的余地，还白占一行。
-                // 多台机器的人照样能用，只是不再被一个「只能选一个」的框挡着。
-                boolean many = all.size() > 1;
-                distroBox.setVisible(many);
+                // 只有一个配置时也<b>要显示</b>这个下拉框。
+                //
+                // 原来一条时把它藏起来（"没有可选的余地，还白占一行"）。但重命名和删除
+                // 现在挂在它的右键上，藏起来就等于：只有一台机器的用户，那唯一一条配置
+                // 既改不了名字也删不掉。它的角色从"选择器"变成了"这条配置的把手"，
+                // 一条时正是最需要这个把手的时候。
+                boolean show = !all.isEmpty();
+                distroBox.setVisible(show);
                 if (distroLabel != null) {
-                    distroLabel.setVisible(many);
+                    distroLabel.setVisible(show);
                 }
-                // 列表刚换过，删除按钮的目标也随之变了。放在这里而不是跟着
-                // distroBox 的可见性走：只有一条配置时下拉框是隐藏的，但那条
-                // 仍然要能删——刷新完必须重新判一次它能不能按。
-                updateDeleteProfileEnabled();
                 if (all.isEmpty()) {
                     setStatus(I18n.t(Strings.STATUS_NO_PROFILE));
                 } else {
@@ -1555,21 +1652,13 @@ public final class MainPanel extends JPanel {
         distroBox.setPreferredSize(new Dimension(150, distroBox.getPreferredSize().height));
         applySourceLabels(false);
         bar.add(distroBox, g);
-        // 紧挨着下拉框：解除的是"删除"这件事本身，而列表就在左边那个框里。
-        //
-        // 它不能只在"配置多于一条"时出现——只有一条配置时下拉框是隐藏的
-        // （见 refreshSshList：一条时下拉框留着纯属碍眼），那时按钮仍要能删掉
-        // 那唯一一条，否则单配置的用户永远清不掉它。
-        g.gridx = 4;
-        deleteProfileButton.setName("bioenv.deleteProfile");
-        bar.add(deleteProfileButton, g);
         // No separate "configure" button: the connection dialog opens by itself the
         // moment there is a Linux VM profile to create or edit. A button that mostly
         // duplicated that moment was one more thing to explain, and it was dead in
         // WSL mode anyway.
-        g.gridx = 5;
+        g.gridx = 4;
         bar.add(detectButton, g);
-        g.gridx = 6;
+        g.gridx = 5;
         // 工具检索搬去了左侧工具树（见 buildCenter）。这里保留一个透明的弹性空列，
         // 语言按钮仍然被顶在右边缘 —— 撑开的宽度全在这一列左边。
         JPanel stretch = new JPanel();
@@ -1580,13 +1669,13 @@ public final class MainPanel extends JPanel {
         // Language switch, last column, no weight: it takes its natural width and the
         // unused space stays with the filler above. anchor=EAST pins it to the right
         // even if the column is ever given more room than the button needs.
-        g.gridx = 7;
+        g.gridx = 6;
         g.weightx = 0;
         g.fill = GridBagConstraints.NONE;
         g.anchor = GridBagConstraints.EAST;
         // 风格切换器挨着语言按钮：两者都是"这个面板怎么显示"，放一起顺理成章。
         bar.add(themeSwitcher, g);
-        g.gridx = 8;
+        g.gridx = 7;
         bar.add(langToggle, g);
 
         // 工具条整体跟着主题走；标签用次级灰，别和内容抢。
@@ -1888,12 +1977,8 @@ public final class MainPanel extends JPanel {
             }
         });
 
-        deleteProfileButton.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                deleteSelectedProfile();
-            }
-        });
+        rebuildProfileMenu();
+        wireDistroBoxPopup();
 
         filterField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
             @Override
@@ -2057,8 +2142,6 @@ public final class MainPanel extends JPanel {
                 if (fillingDistros || adjustingMode) {
                     return;
                 }
-                // 用户换了选中的配置：删除按钮跟着换目标。
-                updateDeleteProfileEnabled();
                 Object sel = distroBox.getSelectedItem();
                 if (sel == null) {
                     return;

@@ -171,27 +171,42 @@ public final class UiSmokeTest {
         System.out.println("PASS  PluginInject.generatePanel() -> "
                 + produced.getClass().getName());
 
-        // 删除配置按钮：必须真的加进了工具条，而且只在「虚拟机」方式下出现。
+        // 已保存配置的右键菜单：必须真的建好，并且两项都在。
         //
         // 这里刻意不切换方式。切方式会走 applyConnectionMode，而它会把这次选择写进
         // 「上次用的方式」——跑一次门禁就把用户下次打开插件的默认方式改掉，这种事不能干。
-        // 所以只验证"当前可见性与当前方式一致"，足够抓住"忘了加进布局"和"可见性没跟
-        // 方式走"这两类错，又不产生副作用。
-        javax.swing.JButton deleteProfile =
-                (javax.swing.JButton) findByName(panel, "bioenv.deleteProfile");
-        if (deleteProfile == null) {
-            throw new IllegalStateException("delete-profile button is not in the panel");
+        javax.swing.JPopupMenu profileMenu =
+                (javax.swing.JPopupMenu) fieldOf(panel, "profileMenu");
+        if (profileMenu == null) {
+            throw new IllegalStateException("profile popup menu is missing");
         }
-        System.out.println("PASS  delete-profile button is in the bar");
-        javax.swing.JComboBox<?> modeBox =
-                (javax.swing.JComboBox<?>) fieldOf(panel, "modeBox");
-        boolean vmMode = modeBox.getSelectedIndex() == 1;
-        if (deleteProfile.isVisible() != vmMode) {
-            throw new IllegalStateException("delete-profile visibility ("
-                    + deleteProfile.isVisible() + ") does not match the mode (vm="
-                    + vmMode + ")");
+        if (profileMenu.getComponentCount() != 2) {
+            throw new IllegalStateException("profile menu should have 2 items, has "
+                    + profileMenu.getComponentCount());
         }
-        System.out.println("PASS  delete-profile visibility follows the connection mode");
+        String[] wantNames = { "bioenv.profileRename", "bioenv.profileDelete" };
+        for (int i = 0; i < wantNames.length; i++) {
+            java.awt.Component item = profileMenu.getComponent(i);
+            if (!wantNames[i].equals(item.getName())) {
+                throw new IllegalStateException("profile menu item " + i + " is "
+                        + item.getName() + ", expected " + wantNames[i]);
+            }
+        }
+        System.out.println("PASS  profile menu has rename + delete");
+
+        // 菜单挂在配置下拉框上，否则右键点不出东西来。
+        javax.swing.JComboBox<?> sourceBox =
+                (javax.swing.JComboBox<?>) fieldOf(panel, "distroBox");
+        boolean hasPopupListener = false;
+        for (java.awt.event.MouseListener l : sourceBox.getMouseListeners()) {
+            if (l.getClass().getName().contains("MainPanel")) {
+                hasPopupListener = true;
+            }
+        }
+        if (!hasPopupListener) {
+            throw new IllegalStateException("distroBox has no popup mouse listener");
+        }
+        System.out.println("PASS  profile menu is attached to the profile box");
 
         System.out.println("=== UI smoke test complete ===");
     }

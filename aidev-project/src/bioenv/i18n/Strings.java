@@ -119,11 +119,24 @@ public final class Strings {
      */
     public static final String BTN_PROFILE_DELETE = "btn.profileDelete";
 
-    /** 提示：删除按钮的说明。 */
-    public static final String HINT_PROFILE_DELETE = "hint.profileDelete";
+    /** 右键菜单：重命名。 */
+    public static final String MENU_PROFILE_RENAME = "menu.profileRename";
 
-    /** 提示：删除按钮当前的目标（带配置名占位）。 */
-    public static final String LABEL_PROFILE_DELETE_TARGET = "label.profileDeleteTarget";
+    /** 重命名对话框：标题与正文（正文带当前名字占位）。 */
+    public static final String DLG_PROFILE_RENAME_TITLE = "dlg.profileRenameTitle";
+    public static final String DLG_PROFILE_RENAME = "dlg.profileRename";
+
+    /** 状态：重命名成功（带旧名与新名占位）。 */
+    public static final String STATUS_PROFILE_RENAMED = "status.profileRenamed";
+
+    /** 错误：新名字和另一条配置重名（带名字占位）。 */
+    public static final String ERR_PROFILE_RENAME_DUPLICATE = "err.profileRenameDuplicate";
+
+    /** 错误：重命名失败（带名字占位）。 */
+    public static final String ERR_PROFILE_RENAME_FAILED = "err.profileRenameFailed";
+
+    /** 错误：要重命名的那条已经不在了（带名字占位）。 */
+    public static final String ERR_PROFILE_RENAME_MISSING = "err.profileRenameMissing";
 
     /** 确认对话框：标题。 */
     public static final String CONFIRM_PROFILE_DELETE_TITLE = "confirm.profileDeleteTitle";
@@ -980,12 +993,22 @@ public final class Strings {
         put(ZH_TEXT, EN_TEXT, ERR_PROFILE_MISSING, "配置「{0}」已不存在，请另选一个。",
                 "Profile \"{0}\" no longer exists. Pick another one.");
         put(ZH_TEXT, EN_TEXT, BTN_PROFILE_DELETE, "删除配置", "Delete profile");
-        put(ZH_TEXT, EN_TEXT, HINT_PROFILE_DELETE,
-                "把下拉框里选中的那条配置删掉。只删除这条记录，不影响虚拟机上已经装好的公钥。",
-                "Deletes the profile selected in the box. Only this record is removed; "
-                        + "the public key already installed on the VM is left alone.");
-        put(ZH_TEXT, EN_TEXT, LABEL_PROFILE_DELETE_TARGET, "将删除：{0}",
-                "Will delete: {0}");
+        put(ZH_TEXT, EN_TEXT, MENU_PROFILE_RENAME, "重命名…", "Rename...");
+        put(ZH_TEXT, EN_TEXT, DLG_PROFILE_RENAME_TITLE, "重命名配置", "Rename profile");
+        put(ZH_TEXT, EN_TEXT, DLG_PROFILE_RENAME,
+                "配置「{0}」的新名字：\n\n留空表示不起别名，显示为 用户名@主机:端口。",
+                "New name for profile \"{0}\":\n\nLeave it blank to drop the alias and "
+                        + "show user@host:port instead.");
+        put(ZH_TEXT, EN_TEXT, STATUS_PROFILE_RENAMED, "配置「{0}」已改名为「{1}」。",
+                "Renamed profile \"{0}\" to \"{1}\".");
+        put(ZH_TEXT, EN_TEXT, ERR_PROFILE_RENAME_DUPLICATE,
+                "已经有另一条配置叫「{0}」了，请换一个名字。",
+                "Another profile is already called \"{0}\". Pick a different name.");
+        put(ZH_TEXT, EN_TEXT, ERR_PROFILE_RENAME_FAILED, "重命名「{0}」失败，文件可能不可写。",
+                "Could not rename \"{0}\"; the file may not be writable.");
+        put(ZH_TEXT, EN_TEXT, ERR_PROFILE_RENAME_MISSING,
+                "配置「{0}」已不存在，请重新选择。",
+                "Profile \"{0}\" no longer exists. Pick another one.");
         put(ZH_TEXT, EN_TEXT, CONFIRM_PROFILE_DELETE_TITLE, "删除配置",
                 "Delete profile");
         put(ZH_TEXT, EN_TEXT, CONFIRM_PROFILE_DELETE,
@@ -1053,9 +1076,11 @@ public final class Strings {
         put(ZH_TEXT, EN_TEXT, HINT_DISTRO_BOX, "要使用的 WSL 发行版。",
                 "The WSL distribution to use.");
         put(ZH_TEXT, EN_TEXT, HINT_PROFILE_BOX,
-                "选一台已保存的虚拟机配置。第一次切到虚拟机方式时会自动建一条。",
+                "选一台已保存的虚拟机配置。第一次切到虚拟机方式时会自动建一条。\n"
+                        + "右键点这里可以重命名或删除选中的那条。",
                 "Pick a saved Linux VM profile. One is created automatically "
-                        + "the first time you switch to Linux VM.");
+                        + "the first time you switch to Linux VM.\n"
+                        + "Right-click here to rename or delete the selected one.");
 
         // --- MainPanel：状态栏 ---
         put(ZH_TEXT, EN_TEXT, STATUS_PREPARING_CONNECTION, "正在准备连接…",
