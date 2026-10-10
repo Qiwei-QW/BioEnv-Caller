@@ -58,7 +58,8 @@ public final class FirstRunScanTest {
 
         firstInstallGuidesAndDoesNotLie();
         secondRunWithNoCacheTellsTheTruth();
-        choosingVmModeOpensTheDialog();
+        reopeningInVmModeDoesNotPopTheDialog();
+        pickingVmModeOpensTheDialog();
 
         System.out.println(failures == 0
                 ? "PASS " + checks + " checks"
@@ -156,28 +157,83 @@ public final class FirstRunScanTest {
     }
 
     /**
-     * 用户主动切到「虚拟机」方式时，配置窗<b>应该</b>弹出来。
+     * 上次用的是虚拟机方式，这次<b>只是打开面板</b>：不许自动弹配置窗。
      *
-     * <p>这是上一条的对偶：WSL 下不许弹，虚拟机下必须弹。只测"不弹"会把弹窗整个
-     * 删掉也算通过，那样用户切到虚拟机方式后就再没人引导他填地址了。
+     * <h2>回归的缺陷</h2>
+     *
+     * <p>"要不要弹窗"只看两件事：方式是虚拟机、这台机器从没连成功过。于是只要用户
+     * 上次用过虚拟机方式，之后<b>每次打开插件都会弹</b>——即使他只是想看看命令列表。
+     *
+     * <p>这与最初那条要求相冲突：弹窗应当由"用户主动从下拉框里选了虚拟机方式"触发，
+     * 而不是由"上次恰好用的是虚拟机方式"触发。恢复上次的选择是<b>便利</b>，不该顺带
+     * 变成一次打断。
+     *
+     * <p>区分这两条路径靠的是调用来源：打开面板走 {@code loadDistroAsync}，用户改下拉框
+     * 走 {@code applyConnectionMode}。两者最终都会读配置列表，但只有后者该弹出引导。
      */
-    private static void choosingVmModeOpensTheDialog() throws Exception {
-        File home = freshHome("tbvm-vmmode-");
+    private static void reopeningInVmModeDoesNotPopTheDialog() throws Exception {
+        File home = freshHome("tbvm-reopen-");
         System.setProperty("user.home", home.getAbsolutePath());
+        // 从没连过：这是弹窗的另一个前提条件，必须成立才能验出"打开面板不弹"。
         setLinkStateFile(new File(home, ".TBtools/BioEnvCaller/linked.txt"));
 
-        // 上次用的是虚拟机方式：打开面板就该回到它，并给出引导。
         new bioenv.core.ConnectionModeStore().save(
                 bioenv.core.ConnectionModeStore.MODE_VM);
 
         MainPanel panel = openPanel();
         String status = statusOf(panel);
-        System.out.println("虚拟机方式 · 状态栏: " + status);
+        System.out.println("上次是虚拟机方式 · 状态栏: " + status);
 
-        // 无头环境下弹窗退化为"图形界面打不开"，说明弹窗确实被尝试过。
-        check("选择虚拟机方式时会尝试弹出配置窗", status.contains("图形界面"));
+        check("只是打开面板，不得弹出配置窗", !status.contains("图形界面"));
 
         deleteRecursively(home);
+    }
+
+    /**
+     * 用户主动把下拉框改成「虚拟机」：这时<b>应该</b>弹配置窗。
+     *
+     * <p>与上一条成对：只测"打开面板不弹"的话，把弹窗整个删掉也能通过——那样第一次
+     * 想用虚拟机的人就再没人引导他填地址了。
+     */
+    private static void pickingVmModeOpensTheDialog() throws Exception {
+        File home = freshHome("tbvm-pick-");
+        System.setProperty("user.home", home.getAbsolutePath());
+        setLinkStateFile(new File(home, ".TBtools/BioEnvCaller/linked.txt"));
+
+        // 启动时是 WSL（默认），然后由测试模拟用户去改下拉框。
+        new bioenv.core.ConnectionModeStore().save(
+                bioenv.core.ConnectionModeStore.MODE_WSL);
+
+        MainPanel panel = openPanel();
+        check("WSL 下打开面板不弹窗", !statusOf(panel).contains("图形界面"));
+
+        // 模拟用户在下拉框里选「Linux 虚拟机」。
+        selectVmMode(panel);
+        Thread.sleep(4000);
+
+        String status = statusOf(panel);
+        System.out.println("用户切到虚拟机方式 · 状态栏: " + status);
+        // 无头环境下弹窗退化为"图形界面打不开"，说明弹窗确实被尝试过。
+        check("用户主动选虚拟机方式时弹出配置窗", status.contains("图形界面"));
+
+        deleteRecursively(home);
+    }
+
+    /** 把「连接方式」下拉框切到虚拟机，走的是和用户点选一样的那条监听。 */
+    private static void selectVmMode(MainPanel panel) throws Exception {
+        final java.lang.reflect.Field f =
+                MainPanel.class.getDeclaredField("modeBox");
+        f.setAccessible(true);
+        SwingUtilities.invokeAndWait(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    ((javax.swing.JComboBox<?>) f.get(panel)).setSelectedIndex(1);
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+            }
+        });
     }
 
     private static MainPanel openPanel() throws Exception {

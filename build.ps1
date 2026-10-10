@@ -383,6 +383,97 @@ if ($failed.Count -gt 0) {
     throw ("Regression tests failed: " + ($failed -join ', '))
 }
 
+# --- vmadapt tests ----------------------------------------------------
+# 这一步曾经不存在，而 vmadapt 的 UI 是**打进插件**的：BioEnvCaller.jar 里有
+# vmadapt/ui/ConnectionPanel.class，可根门禁只编译 vmadapt 的产品代码（上面那条
+# Get-ChildItem 排除了 \test\），也从不运行它的测试。结果是：改一个会随插件发布的
+# 界面类，根门禁全绿也说明不了任何事——它根本没看过那些测试。
+#
+# 所以这里补上：编译 vmadapt 的测试，然后逐个运行。它们跑在 vmadapt 自己的 classpath
+# 上（不需要 TBtools 的 JAR），和 vmadapt/build.ps1 里的跑法一致。
+$vmTestSources = Get-ChildItem (Join-Path $Root 'vmadapt\src') -Recurse -Filter *.java |
+    Where-Object { $_.FullName -like '*\test\*' } |
+    ForEach-Object { $_.FullName }
+if ($vmTestSources.Count -gt 0) {
+    # 测试单独编到一个目录，不能进 $VmadaptClasses。
+    #
+    # 打包步骤是把 $VmadaptClasses 下的 vmadapt\* 整个复制进 JAR 的，所以测试类一旦
+    # 编进那里就会随插件发布。这不是假设：加上这一步之后包里确实多出了 19 个
+    # vmadapt/test/*.class（其中包含只在本地用的截图工具）。bioenv 那边早就把测试
+    # 编在 $ClassesDir 再用 $shipExcluded 挡掉，vmadapt 原来是"根本没编过测试"，
+    # 所以从没暴露过。
+    $VmadaptTestClasses = Join-Path $BuildDir 'vmadapt-test-classes'
+    if (Test-Path $VmadaptTestClasses) { Remove-Item -Recurse -Force $VmadaptTestClasses }
+    New-Item -ItemType Directory -Path $VmadaptTestClasses -Force | Out-Null
+
+    Write-Host ""
+    Write-Host "Compiling $($vmTestSources.Count) vmadapt test source file(s)..."
+    & $Javac -encoding UTF-8 -Xlint:-options -d $VmadaptTestClasses `
+        -cp "$VmadaptClasses;$tbJar" $vmTestSources
+    if ($LASTEXITCODE -ne 0) { throw "vmadapt test compilation failed." }
+
+    $vmTests = @(
+        'vmadapt.test.ShellQuoteTest',
+        'vmadapt.test.SshTargetTest',
+        'vmadapt.test.ConnectionStoreTest',
+        'vmadapt.test.SshCommandTest',
+        'vmadapt.test.RemotePathTest',
+        'vmadapt.test.UploadPlanTest',
+        'vmadapt.test.ProbeScriptTest',
+        'vmadapt.test.KeygenCommandTest',
+        'vmadapt.test.CommandTimeoutTest',
+        'vmadapt.test.ReachabilityTest',
+        'vmadapt.test.RemoteWorkdirTest',
+        # 连接面板的分组布局与标签顺序：分组之后标签曾整体错位一格。
+        'vmadapt.test.ConnectionLayoutTest',
+        # 可选的联网冒烟测试：没配环境变量时打印 SKIP 并以 0 退出，所以放进常规列表
+        # 是安全的。它的类注释本来就写着"会出现在 build.ps1 的常规列表里"，但两个
+        # 清单都没有它——配了虚拟机的人因此永远跑不到它。
+        'vmadapt.test.SshLiveTest',
+        # 密码通道的自检：验 ssh 版本够不够、以及 askpass 辅助程序能不能把密码打到
+        # stdout。这两条不需要任何服务器，所以每次都跑。
+        #
+        # 完整的端到端（ssh 真的去调 askpass）需要一台启用了密码认证的 sshd，通过
+        # TBVM_ASKPASS_TEST_HOST 指定；没指定时它会说明"跳过端到端"并以 0 退出，
+        # 不假装验过。
+        'vmadapt.test.AskpassProbe',
+        # 用密码装公钥这条路的验证，分成两半：
+        #
+        # 不需要服务器的一半（失败分型、版本门槛、classpath 推导）每次都跑，它们
+        # 守的是几个容易悄悄坏掉的判断——尤其 classpath：TBtools 的 java.class.path
+        # 里没有插件 jar，用它会 ClassNotFound，而表现是"密码错误"，几乎不可能猜到。
+        #
+        # 需要服务器的一半通过 TBVM_LIVE_HOST/PORT/USER/PASSWORD 指定；没配时会明确
+        # 打印"本次没有验证"，并以 0 退出，不把"没测"说成"测过了"。
+        'vmadapt.test.KeyInstallLiveTest'
+    )
+    $vmPassed = @()
+    $vmFailed = @()
+    $env:JAVA_TOOL_OPTIONS = '-Djava.awt.headless=true'
+    foreach ($t in $vmTests) {
+        Push-Location $Root
+        try {
+            $out = cmd.exe /c "`"$Java`" -cp `"$VmadaptTestClasses;$VmadaptClasses`" $t 2>&1"
+            if ($LASTEXITCODE -eq 0) {
+                $vmPassed += $t
+                Write-Host "PASS  $t"
+            } else {
+                $vmFailed += $t
+                Write-Host "FAIL  $t"
+                $out | Select-Object -Last 12 | ForEach-Object { Write-Host "        $_" }
+            }
+        } finally {
+            Pop-Location
+        }
+    }
+    Remove-Item Env:\JAVA_TOOL_OPTIONS -ErrorAction SilentlyContinue
+    Write-Host ""
+    Write-Host "vmadapt: $($vmPassed.Count) passed, $($vmFailed.Count) failed"
+    if ($vmFailed.Count -gt 0) {
+        throw ("vmadapt tests failed: " + ($vmFailed -join ', '))
+    }
+}
+
 # --- package ----------------------------------------------------------
 # Layout mirrors the official FASTA Merge.plugin:
 #   <Name>/<Name>.jar + MenuConfig.ini + AiDevBuild.txt + aidev-project/
@@ -482,6 +573,17 @@ New-Item -ItemType Directory -Path $vmStage -Force | Out-Null
 Copy-Item (Join-Path $VmadaptClasses 'vmadapt\*') $vmStage -Recurse -Force
 if (-not (Test-Path (Join-Path $vmStage 'core\SshTransport.class'))) {
     throw "vmadapt transport classes were not packaged"
+}
+
+# vmadapt 的测试绝不能随插件发布。
+#
+# 上面那条 Copy-Item 是"整个 vmadapt 目录复制过去"，所以 test/ 只要被编进
+# $VmadaptClasses 就会进包。实测漏过 19 个 vmadapt/test/*.class，其中还有只在本地
+# 用的截图工具——这是先前的疏漏：vmadapt 的测试从来没被编过，所以从没暴露。
+# 现在测试编在单独的 $VmadaptTestClasses，这条断言是为了防止哪天又编回来。
+if (Test-Path (Join-Path $vmStage 'test')) {
+    Remove-Item -Recurse -Force (Join-Path $vmStage 'test')
+    throw "vmadapt test classes leaked into the packaged JAR (removed; fix the compile output dir)"
 }
 
 $stubClass = Join-Path $jarStage 'Plugin\PluginInterface.class'

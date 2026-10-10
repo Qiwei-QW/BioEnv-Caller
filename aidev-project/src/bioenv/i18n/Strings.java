@@ -111,6 +111,45 @@ public final class Strings {
     /** 错误：所选连接配置已不存在（带配置名占位）。 */
     public static final String ERR_PROFILE_MISSING = "err.profileMissing";
 
+    /**
+     * 按钮：删除下拉框里选中的那条已保存配置。
+     *
+     * <p>它只出现在「虚拟机」方式下——WSL 方式时同一个下拉框里装的是发行版，
+     * 对发行版谈"删除配置"没有意义。
+     */
+    public static final String BTN_PROFILE_DELETE = "btn.profileDelete";
+
+    /** 右键菜单：重命名。 */
+    public static final String MENU_PROFILE_RENAME = "menu.profileRename";
+
+    /** 重命名对话框：标题与正文（正文带当前名字占位）。 */
+    public static final String DLG_PROFILE_RENAME_TITLE = "dlg.profileRenameTitle";
+    public static final String DLG_PROFILE_RENAME = "dlg.profileRename";
+
+    /** 状态：重命名成功（带旧名与新名占位）。 */
+    public static final String STATUS_PROFILE_RENAMED = "status.profileRenamed";
+
+    /** 错误：新名字和另一条配置重名（带名字占位）。 */
+    public static final String ERR_PROFILE_RENAME_DUPLICATE = "err.profileRenameDuplicate";
+
+    /** 错误：重命名失败（带名字占位）。 */
+    public static final String ERR_PROFILE_RENAME_FAILED = "err.profileRenameFailed";
+
+    /** 错误：要重命名的那条已经不在了（带名字占位）。 */
+    public static final String ERR_PROFILE_RENAME_MISSING = "err.profileRenameMissing";
+
+    /** 确认对话框：标题。 */
+    public static final String CONFIRM_PROFILE_DELETE_TITLE = "confirm.profileDeleteTitle";
+
+    /** 确认对话框：正文（带配置名占位）。 */
+    public static final String CONFIRM_PROFILE_DELETE = "confirm.profileDelete";
+
+    /** 状态：已删除某条配置（带配置名占位）。 */
+    public static final String STATUS_PROFILE_DELETED = "status.profileDeleted";
+
+    /** 错误：删除配置失败（带配置名占位）。 */
+    public static final String ERR_PROFILE_DELETE_FAILED = "err.profileDeleteFailed";
+
     /** 提示：连接方式下拉框的说明。 */
     public static final String HINT_MODE_BOX = "hint.modeBox";
 
@@ -953,6 +992,35 @@ public final class Strings {
                 "Choose a saved Linux VM profile first.");
         put(ZH_TEXT, EN_TEXT, ERR_PROFILE_MISSING, "配置「{0}」已不存在，请另选一个。",
                 "Profile \"{0}\" no longer exists. Pick another one.");
+        put(ZH_TEXT, EN_TEXT, BTN_PROFILE_DELETE, "删除配置", "Delete profile");
+        put(ZH_TEXT, EN_TEXT, MENU_PROFILE_RENAME, "重命名…", "Rename...");
+        put(ZH_TEXT, EN_TEXT, DLG_PROFILE_RENAME_TITLE, "重命名配置", "Rename profile");
+        put(ZH_TEXT, EN_TEXT, DLG_PROFILE_RENAME,
+                "配置「{0}」的新名字：\n\n留空表示不起别名，显示为 用户名@主机:端口。",
+                "New name for profile \"{0}\":\n\nLeave it blank to drop the alias and "
+                        + "show user@host:port instead.");
+        put(ZH_TEXT, EN_TEXT, STATUS_PROFILE_RENAMED, "配置「{0}」已改名为「{1}」。",
+                "Renamed profile \"{0}\" to \"{1}\".");
+        put(ZH_TEXT, EN_TEXT, ERR_PROFILE_RENAME_DUPLICATE,
+                "已经有另一条配置叫「{0}」了，请换一个名字。",
+                "Another profile is already called \"{0}\". Pick a different name.");
+        put(ZH_TEXT, EN_TEXT, ERR_PROFILE_RENAME_FAILED, "重命名「{0}」失败，文件可能不可写。",
+                "Could not rename \"{0}\"; the file may not be writable.");
+        put(ZH_TEXT, EN_TEXT, ERR_PROFILE_RENAME_MISSING,
+                "配置「{0}」已不存在，请重新选择。",
+                "Profile \"{0}\" no longer exists. Pick another one.");
+        put(ZH_TEXT, EN_TEXT, CONFIRM_PROFILE_DELETE_TITLE, "删除配置",
+                "Delete profile");
+        put(ZH_TEXT, EN_TEXT, CONFIRM_PROFILE_DELETE,
+                "要删除配置「{0}」吗？\n\n这只删掉本机保存的这条记录，"
+                        + "虚拟机上已经装好的公钥不受影响。",
+                "Delete the profile \"{0}\"?\n\nThis only removes the saved record on "
+                        + "this computer; the public key already installed on the VM "
+                        + "is left alone.");
+        put(ZH_TEXT, EN_TEXT, STATUS_PROFILE_DELETED, "已删除配置「{0}」。",
+                "Deleted profile \"{0}\".");
+        put(ZH_TEXT, EN_TEXT, ERR_PROFILE_DELETE_FAILED, "删除配置「{0}」失败，文件可能不可写。",
+                "Could not delete profile \"{0}\"; the file may not be writable.");
 
         put(ZH_TEXT, EN_TEXT, HINT_MODE_BOX, "命令在哪里执行：本机 WSL，或通过 SSH 连接 Linux 虚拟机。",
                 "Where commands run: local WSL, or a Linux VM over SSH.");
@@ -1008,9 +1076,11 @@ public final class Strings {
         put(ZH_TEXT, EN_TEXT, HINT_DISTRO_BOX, "要使用的 WSL 发行版。",
                 "The WSL distribution to use.");
         put(ZH_TEXT, EN_TEXT, HINT_PROFILE_BOX,
-                "选一台已保存的虚拟机配置。第一次切到虚拟机方式时会自动建一条。",
+                "选一台已保存的虚拟机配置。第一次切到虚拟机方式时会自动建一条。\n"
+                        + "右键点这里可以重命名或删除选中的那条。",
                 "Pick a saved Linux VM profile. One is created automatically "
-                        + "the first time you switch to Linux VM.");
+                        + "the first time you switch to Linux VM.\n"
+                        + "Right-click here to rename or delete the selected one.");
 
         // --- MainPanel：状态栏 ---
         put(ZH_TEXT, EN_TEXT, STATUS_PREPARING_CONNECTION, "正在准备连接…",

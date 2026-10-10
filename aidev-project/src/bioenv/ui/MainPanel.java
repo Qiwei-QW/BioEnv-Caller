@@ -80,6 +80,20 @@ public final class MainPanel extends JPanel {
             new String[]{I18n.t(Strings.MODE_WSL), I18n.t(Strings.MODE_VM)});
     private final JComboBox<String> distroBox = new JComboBox<String>();
     private final JButton detectButton = new JButton(I18n.t(Strings.MENU_DETECT));
+
+    /**
+     * 已保存配置的右键菜单：重命名 / 删除。
+     *
+     * <h2>为什么是右键菜单而不是一个按钮</h2>
+     *
+     * <p>这两件事都是"对这一条配置"的操作，而"这一条"是由下拉框的当前选择决定的。
+     * 做成常驻按钮就得占工具条一格，而且只有一个配置时下拉框是隐藏的，按钮旁边空无一物，
+     * 用户看不出它会作用于谁。右键菜单挂在选择本身所在的控件上，作用于什么不言自明。
+     *
+     * <p>菜单里的动作只有在这个下拉框真的装着配置（也就是「虚拟机」方式）时才可用，
+     * 所以菜单本身也只在该方式下弹出，见 {@code wireDistroBoxPopup()}。
+     */
+    private final javax.swing.JPopupMenu profileMenu = new javax.swing.JPopupMenu();
     private final JTextField filterField = new JTextField();
     /**
      * Applies initial divider positions once the panel has been laid out.' The label before the source box; its text follows the connection mode. */
@@ -685,6 +699,7 @@ public final class MainPanel extends JPanel {
         @Override
         public void run() {
             detectButton.setText(I18n.t(Strings.MENU_DETECT));
+            rebuildProfileMenu();
             runButton.setText(I18n.t(Strings.MENU_RUN));
             stopButton.setText(I18n.t(Strings.MENU_STOP));
             clearLogButton.setText(I18n.t(Strings.MENU_CLEAR_LOG));
@@ -783,7 +798,10 @@ public final class MainPanel extends JPanel {
         if (isSshMode()) {
             // No SSH equivalent of "the machine's own default": every target needs
             // an address the user supplied. Only offer what is already saved.
-            refreshSshList(true);
+            //
+            // 这里刻意不给"可以弹引导窗"的许可：打开面板时回到上次用的方式只是便利，
+            // 不是用户当下要连虚拟机。见 refreshSshList(boolean, boolean)。
+            refreshSshList(true, false);
             return;
         }
         setStatus(I18n.t(Strings.STATUS_LOOKING_WSL));
@@ -1014,7 +1032,10 @@ public final class MainPanel extends JPanel {
             // again on this machine, which is precisely the behaviour being fixed.
             dialogDismissedByUser = false;
             setStatus(I18n.t(Strings.STATUS_READING_PROFILES));
-            refreshSshList(true);
+            // 用户把下拉框改成了「虚拟机」——他明确要连虚拟机，这时该引导他填配置。
+            // 这是 applyConnectionMode 才有的许可：打开面板恢复上次方式时走的是
+            // loadDistroAsync，那里传的是 false。
+            refreshSshList(true, true);
         } else {
             setStatus(I18n.t(Strings.STATUS_LOOKING_WSL));
             loadDistroAsync(null);
@@ -1033,6 +1054,174 @@ public final class MainPanel extends JPanel {
             distroLabel.setText(I18n.t(ssh ? Strings.CONN_LABEL_SAVED : Strings.CONN_LABEL_WSL));
         }
         distroBox.setToolTipText(I18n.t(ssh ? Strings.HINT_PROFILE_BOX : Strings.HINT_DISTRO_BOX));
+    }
+
+    /**
+     * 建好右键菜单的两项。语言切换时会重建，所以文案取当前语言。
+     */
+    private void rebuildProfileMenu() {
+        profileMenu.removeAll();
+        javax.swing.JMenuItem rename = new javax.swing.JMenuItem(
+                I18n.t(Strings.MENU_PROFILE_RENAME));
+        rename.setName("bioenv.profileRename");
+        rename.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                renameSelectedProfile();
+            }
+        });
+        profileMenu.add(rename);
+
+        javax.swing.JMenuItem delete = new javax.swing.JMenuItem(
+                I18n.t(Strings.BTN_PROFILE_DELETE));
+        delete.setName("bioenv.profileDelete");
+        delete.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                deleteSelectedProfile();
+            }
+        });
+        profileMenu.add(delete);
+        profileMenu.setName("bioenv.profileMenu");
+    }
+
+    /**
+     * 给配置下拉框装上右键菜单：重命名 / 删除。
+     *
+     * <p>只在「虚拟机」方式、且框里真有配置时弹菜单。WSL 方式下同一个框里装的是发行版，
+     * 对它谈"重命名配置"没有意义——弹一个点不动的菜单比不弹更让人困惑。
+     *
+     * <p>作用对象始终是<b>当前选中的那一条</b>，而不是右键点到的位置：下拉框一次只显示
+     * 一条，所见即所选，这样不会出现"我点在这里，改的却是那里"。
+     */
+    private void wireDistroBoxPopup() {
+        java.awt.event.MouseListener popup = new java.awt.event.MouseAdapter() {
+            @Override
+            public void mousePressed(java.awt.event.MouseEvent e) {
+                maybeShowProfileMenu(e);
+            }
+
+            @Override
+            public void mouseReleased(java.awt.event.MouseEvent e) {
+                maybeShowProfileMenu(e);
+            }
+        };
+        // pressed 与 released 都挂：哪个触发取决于平台，只挂一个会在某些系统上失灵。
+        distroBox.addMouseListener(popup);
+        if (distroLabel != null) {
+            distroLabel.addMouseListener(popup);
+        }
+    }
+
+    private void maybeShowProfileMenu(java.awt.event.MouseEvent e) {
+        if (!e.isPopupTrigger() || !isSshMode() || distroBox.getItemCount() == 0) {
+            return;
+        }
+        if (distroBox.getSelectedItem() == null) {
+            return;
+        }
+        profileMenu.show(e.getComponent(), e.getX(), e.getY());
+    }
+
+    /**
+     * 改掉当前选中配置的别名。
+     *
+     * <p>名字留空是允许的：那表示不要别名，显示名退回 {@code user@host:port}——
+     * 相当于"把别名清掉"，这比强迫用户想个新名字合理。
+     */
+    private void renameSelectedProfile() {
+        if (!isSshMode()) {
+            return;
+        }
+        Object sel = distroBox.getSelectedItem();
+        String name = sel == null ? null : sel.toString().trim();
+        if (name == null || name.isEmpty()) {
+            return;
+        }
+
+        String typed = (String) javax.swing.JOptionPane.showInputDialog(this,
+                I18n.t(Strings.DLG_PROFILE_RENAME, name),
+                I18n.t(Strings.DLG_PROFILE_RENAME_TITLE),
+                javax.swing.JOptionPane.QUESTION_MESSAGE,
+                null, null, name);
+        if (typed == null) {
+            return; // 取消
+        }
+        String newName = typed.trim();
+
+        try {
+            vmadapt.core.ConnectionStore.RenameResult r =
+                    new vmadapt.core.ConnectionStore().rename(name, newName);
+            switch (r) {
+                case OK:
+                    // 显示名变了，重新读一遍列表，让框里显示新名字。
+                    setStatus(I18n.t(Strings.STATUS_PROFILE_RENAMED, name,
+                            newName.isEmpty() ? name : newName));
+                    // 记住的那台也要跟着改名，否则"上次用的机器"会指向一个不存在的名字。
+                    if (name.equals(targetMemory.vmProfile())) {
+                        targetMemory.rememberVmProfile(newName);
+                    }
+                    break;
+                case DUPLICATE:
+                    setStatus(I18n.t(Strings.ERR_PROFILE_RENAME_DUPLICATE, newName));
+                    break;
+                case NOT_FOUND:
+                    setStatus(I18n.t(Strings.ERR_PROFILE_RENAME_MISSING, name));
+                    break;
+                default:
+                    setStatus(I18n.t(Strings.ERR_PROFILE_RENAME_FAILED, name));
+                    break;
+            }
+        } catch (Exception ex) {
+            setStatus(I18n.t(Strings.ERR_PROFILE_RENAME_FAILED, name) + " " + ex.getMessage());
+        }
+        refreshSshList(false, false);
+    }
+
+    /**
+     * 删掉下拉框里选中的那条配置。
+     *
+     * <p>按<b>下拉框里显示的那个名字</b>精确定位，找到哪条删哪条，而不是把名字交给
+     * {@code ConnectionStore.remove} 让它在别名、地址、主机名之间挨个试。那个"最后比
+     * 主机名"的兜底在这里是危险的：同一个主机上的两条配置（不同用户或不同端口）会被
+     * 认成同一条，删掉的可能不是用户选的那条。界面上既然已经选中了一条，就按选中的删。
+     */
+    private void deleteSelectedProfile() {
+        if (!isSshMode()) {
+            return;
+        }
+        Object sel = distroBox.getSelectedItem();
+        String name = sel == null ? null : sel.toString().trim();
+        if (name == null || name.isEmpty()) {
+            return;
+        }
+
+        int answer = javax.swing.JOptionPane.showConfirmDialog(this,
+                I18n.t(Strings.CONFIRM_PROFILE_DELETE, name),
+                I18n.t(Strings.CONFIRM_PROFILE_DELETE_TITLE),
+                javax.swing.JOptionPane.OK_CANCEL_OPTION,
+                javax.swing.JOptionPane.WARNING_MESSAGE);
+        if (answer != javax.swing.JOptionPane.OK_OPTION) {
+            return;
+        }
+
+        try {
+            vmadapt.core.ConnectionStore store = new vmadapt.core.ConnectionStore();
+            if (store.removeDisplayed(name)) {
+                setStatus(I18n.t(Strings.STATUS_PROFILE_DELETED, name));
+            } else {
+                // 没删成有两种原因：文件写不进去，或那条已经不在了（另开一个窗口删过）。
+                // 两者都如实说"删除失败"，不假装成功。
+                setStatus(I18n.t(Strings.ERR_PROFILE_DELETE_FAILED, name));
+            }
+        } catch (Exception ex) {
+            setStatus(I18n.t(Strings.ERR_PROFILE_DELETE_FAILED, name) + " " + ex.getMessage());
+        }
+
+        // 删掉的可能正是当前选中的那台，所以要重新读一遍列表，让它按真实内容重填。
+        // mayGuide=false：删到一条不剩时不该顺势弹出连接向导——用户刚说的是"删掉"，
+        // 不是"给我新建一个"。
+        refreshSshList(false, false);
     }
 
     /**
@@ -1056,6 +1245,26 @@ public final class MainPanel extends JPanel {
      *             紧接着就去连一台机器会很突兀。
      */
     private void refreshSshList(final boolean auto) {
+        refreshSshList(auto, true);
+    }
+
+    /**
+     * @param auto   同 {@link #refreshSshList(boolean)}
+     * @param mayGuide 是否允许在"从没连过"时自动弹出连接配置窗。
+     *
+     * <p>为什么要有这个参数：读配置列表这件事有两条来源，而它们对弹窗的期望相反。
+     *
+     * <ul>
+     *   <li><b>用户把下拉框改成「虚拟机」</b>——他明确要连虚拟机了，这时该引导，
+     *       传 {@code true}；</li>
+     *   <li><b>打开面板、回到上次用的方式</b>——用户只是想看看命令列表，恢复上次的
+     *       选择是便利，不是他要连虚拟机。传 {@code false}，不弹。</li>
+     * </ul>
+     *
+     * <p>这两条以前共用同一个入口，于是"上次用过虚拟机方式"就等价于"每次打开都弹窗"，
+     * 而弹窗本该由用户主动选虚拟机方式触发。
+     */
+    private void refreshSshList(final boolean auto, final boolean mayGuide) {
         final int mine = ++loadGeneration;
         new SwingWorker<java.util.List<vmadapt.core.SshTarget>, Void>() {
             @Override
@@ -1084,12 +1293,16 @@ public final class MainPanel extends JPanel {
                 } finally {
                     adjustingMode = false;
                 }
-                // 只有一个目标时下拉框纯属碍眼：没有可选的余地，还白占一行。
-                // 多台机器的人照样能用，只是不再被一个「只能选一个」的框挡着。
-                boolean many = all.size() > 1;
-                distroBox.setVisible(many);
+                // 只有一个配置时也<b>要显示</b>这个下拉框。
+                //
+                // 原来一条时把它藏起来（"没有可选的余地，还白占一行"）。但重命名和删除
+                // 现在挂在它的右键上，藏起来就等于：只有一台机器的用户，那唯一一条配置
+                // 既改不了名字也删不掉。它的角色从"选择器"变成了"这条配置的把手"，
+                // 一条时正是最需要这个把手的时候。
+                boolean show = !all.isEmpty();
+                distroBox.setVisible(show);
                 if (distroLabel != null) {
-                    distroLabel.setVisible(many);
+                    distroLabel.setVisible(show);
                 }
                 if (all.isEmpty()) {
                     setStatus(I18n.t(Strings.STATUS_NO_PROFILE));
@@ -1126,7 +1339,10 @@ public final class MainPanel extends JPanel {
                 //     and can open it deliberately.
                 // dismissGuard handles the separate, session-scoped concern of not
                 // reopening the thing the user just closed.
-                if (shouldAutoOpenDialog()) {
+                //
+                // mayGuide 另外把关：只有"用户主动选了虚拟机方式"这一条来源才允许弹。
+                // 打开面板时恢复上次的选择不算，否则上次用过虚拟机就会每次开插件都弹。
+                if (mayGuide && shouldAutoOpenDialog()) {
                     openConnectionDialog();
                 } else if (auto && !all.isEmpty()) {
                     // 自动连接：先做可达性检查，能连上就恢复缓存。
@@ -1171,11 +1387,8 @@ public final class MainPanel extends JPanel {
      * 取值，而不是把下拉框里的字符串直接当主机用。
      */
     private static String displayNameOf(vmadapt.core.SshTarget t) {
-        if (t == null) {
-            return "";
-        }
-        String label = t.label == null ? "" : t.label.trim();
-        return label.isEmpty() ? t.toDisplay() : label;
+        // 规则由存储层提供，界面和"按显示名删除"用的是同一条，不会两边分岔。
+        return vmadapt.core.ConnectionStore.displayName(t);
     }
 
     /**
@@ -1258,7 +1471,9 @@ public final class MainPanel extends JPanel {
                     dialogDismissedByUser = true;
                     if (isSshMode()) {
                         // The user may have added or deleted configs in there.
-                        refreshSshList();
+                        // mayGuide=false：这是他刚关掉那个窗之后的刷新，再弹一次
+                        // 就是"关了又开"的死循环。
+                        refreshSshList(false, false);
                     }
                 }
             });
@@ -1761,6 +1976,9 @@ public final class MainPanel extends JPanel {
                 startDiscovery();
             }
         });
+
+        rebuildProfileMenu();
+        wireDistroBoxPopup();
 
         filterField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
             @Override
