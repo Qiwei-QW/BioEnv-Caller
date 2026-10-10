@@ -715,16 +715,16 @@ public final class ConnectionPanel extends JPanel {
             stepManual(text(UiText.MSG_NO_SSH), text(UiText.MSG_NO_SSH_REASON));
             return;
         }
-        String ver = SshAskpass.versionOf(ssh);
-        int major = SshAskpass.majorOf(ver);
-        int minor = SshAskpass.minorOf(ver);
-        if (!SshAskpass.supportsAskpassRequire(major, minor)) {
-            stepManual(text(UiText.WIZ_OLD_SSH_TITLE),
-                    text(UiText.WIZ_OLD_SSH_REASON, ver));
-            return;
-        }
 
-        // 已经能免密吗？能就直接测试，不问密码。
+        // ① 先看能不能直接免密登录。
+        //
+        // 顺序很要紧。版本门槛只是「用密码把公钥装上去」那条路的要求，与密钥登录本身
+        // 无关——密钥登录任何版本都能用。
+        //
+        // 曾经是先判版本再探测，后果是：8.1p1 的机器上，哪怕密钥早就装好、免密登录
+        // 明明工作得很好，向导也会直接跳到「OpenSSH 太旧」那一页，**永远不做连接测试**。
+        // 而 Windows 10 自带的就是 8.1p1，走这条路的人很多，所以这不是边角情况：
+        // 用户明明已经配好了，插件却一直说"你的 OpenSSH 太旧"。
         setBusy(true);
         final javax.swing.JDialog wait = progressDialog();
         new SwingWorker<Boolean, Void>() {
@@ -749,10 +749,30 @@ public final class ConnectionPanel extends JPanel {
                     // 免密已可用：不需要密码，直接做一次完整测试。
                     finishConnect();
                 } else {
-                    stepPassword();
+                    // 免密不行，才轮到密码那条路；这时才需要问"这个 ssh 支持吗"。
+                    needPassword(ssh);
                 }
             }
         }.execute();
+    }
+
+    /**
+     * 免密登录走不通时才到这里：先确认密码通道在当前 ssh 上可用，再弹密码框。
+     *
+     * <p>{@code SSH_ASKPASS_REQUIRE} 是 8.4 才有的，所以版本不够时密码这条路注定
+     * 失败——那时不给密码框，改给手动安装页。这个判断放在这里（而不是
+     * {@link #beginConnect()} 的开头）正是为了避免它把"本来能连上"的情况也拦掉。
+     */
+    private void needPassword(String ssh) {
+        String ver = SshAskpass.versionOf(ssh);
+        int major = SshAskpass.majorOf(ver);
+        int minor = SshAskpass.minorOf(ver);
+        if (!SshAskpass.supportsAskpassRequire(major, minor)) {
+            stepManual(text(UiText.WIZ_OLD_SSH_TITLE),
+                    text(UiText.WIZ_OLD_SSH_REASON, ver));
+            return;
+        }
+        stepPassword();
     }
 
     /** 一次最小免密探测：能执行 echo 就说明公钥已经装好了。 */
@@ -2025,13 +2045,110 @@ public final class ConnectionPanel extends JPanel {
         }
 
         /**
+         * 在多个候选里选出要用的 ssh.exe，并把结果缓存下来。
+         *
+         * <h2>为什么不能"第一个找到就用"</h2>
+         *
+         * <p>原来 {@link #locate} 是按 {@link DIRS} 的顺序返回第一个存在的文件，而
+         * System32 排在最前。这带来一个很别扭的后果：<b>用户按微软的官方做法升级
+         * OpenSSH 之后，插件仍然用旧的。</b>
+         *
+         * <p>微软的文档写得很清楚：系统自带的那份在
+         * {@code C:\Windows\System32\OpenSSH}（Windows 10 上经常是 7.7p1 / 8.1p1），
+         * 而 GitHub 上的 Win32-OpenSSH 装到 {@code C:\Program Files\OpenSSH}，
+         * 版本新得多。于是"装了新版却仍然用旧版"几乎必然发生——用户升级完发现插件的
+         * 提示一点没变，只会以为升级没成功。
+         *
+         * <p>所以改成：<b>在候选里挑版本最高的那个</b>。Windows 10 自带 8.1p1 而用户
+         * 装了 9.x 时，选 9.x；什么都只有一份时，行为与以前一致。
+         *
+         * <p>拿不到版本的一律当作最低优先，但不能因此让"唯一存在的那个"落选——
+         * 所以只在<b>确实比不出来</b>时保留先找到的。
+         */
+        private static String sshExe;
+        private static boolean sshExeResolved;
+
+        static synchronized String sshExe() {
+            if (sshExeResolved) {
+                return sshExe;
+            }
+            sshExeResolved = true;
+            String best = null;
+            int bestMajor = -1;
+            int bestMinor = -1;
+            for (String dir : candidates()) {
+                File f = new File(dir, "ssh.exe");
+                if (!f.isFile()) {
+                    continue;
+                }
+                String ver = SshAskpass.versionOf(f.getAbsolutePath());
+                int major = SshAskpass.majorOf(ver);
+                int minor = SshAskpass.minorOf(ver);
+                if (best == null || newer(major, minor, bestMajor, bestMinor)) {
+                    best = f.getAbsolutePath();
+                    bestMajor = major;
+                    bestMinor = minor;
+                }
+            }
+            sshExe = best;
+            return sshExe;
+        }
+
+        /** 版本比较；解析不出（-1,-1）时视为最旧。 */
+        private static boolean newer(int major, int minor, int bestMajor, int bestMinor) {
+            if (major > bestMajor) {
+                return true;
+            }
+            if (major < bestMajor) {
+                return false;
+            }
+            return minor > bestMinor;
+        }
+
+        /** 所有候选目录：标准安装位置 + PATH 的各个目录。 */
+        private static List<String> candidates() {
+            List<String> out = new ArrayList<String>();
+            for (String d : DIRS) {
+                out.add(d);
+            }
+            String path = System.getenv("PATH");
+            if (path != null) {
+                for (String part : path.split(File.pathSeparator)) {
+                    if (part != null && !part.trim().isEmpty()) {
+                        out.add(part.trim());
+                    }
+                }
+            }
+            return out;
+        }
+
+        /**
          * 找一个 openssh 可执行文件的绝对路径。
          *
-         * <p>先看标准安装目录，再回退到 PATH。返回 null 表示没找到。
+         * <p>对 {@code ssh.exe} 之外的工具（典型是 {@code ssh-keygen.exe}），
+         * <b>优先取与 ssh 同一个目录里的那份</b>：两者必须同源。混用不同版本的
+         * ssh 与 ssh-keygen 至少是没道理的，而新老版本的密钥格式、默认参数都可能不同。
+         *
+         * <p>取不到才回退到标准目录 / PATH 的顺序查找。返回 null 表示没找到。
          *
          * @param exe 可执行文件名，例如 ssh.exe
          */
         static String locate(String exe) {
+            // 先用与选定 ssh 同目录的那份。
+            if (!"ssh.exe".equalsIgnoreCase(exe)) {
+                String ssh = sshExe();
+                if (ssh != null) {
+                    File sibling = new File(new File(ssh).getParentFile(), exe);
+                    if (sibling.isFile()) {
+                        return sibling.getAbsolutePath();
+                    }
+                }
+            } else {
+                String ssh = sshExe();
+                if (ssh != null) {
+                    return ssh;
+                }
+            }
             for (String dir : DIRS) {
                 File f = new File(dir, exe);
                 if (f.isFile()) {

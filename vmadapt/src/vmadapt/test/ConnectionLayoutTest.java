@@ -47,6 +47,8 @@ public final class ConnectionLayoutTest {
                     twoTabsOnly(panel);
                     wizardSteps();
                     everyStepIsReachable();
+                    sshSelection();
+                    versionGateDoesNotPreemptProbe();
                 } catch (Exception e) {
                     check("构造面板不抛异常（" + e + "）", false);
                 }
@@ -145,6 +147,169 @@ public final class ConnectionLayoutTest {
                 "连接失败。", "原因", false, "关闭");
         check("失败页有「关闭」", r.close() != null);
         check("失败页显示原因", r.detail().contains("原因"));
+    }
+
+    // ------------------------------------------------------------------
+    // 选哪个 ssh.exe
+    // ------------------------------------------------------------------
+
+    /**
+     * 挑 ssh 时必须是"版本最高者胜"，不能是"先找到的胜"。
+     *
+     * <p>这条守的是一个会让用户白忙一场的问题：Windows 10 自带的那份在
+     * {@code System32\OpenSSH}（常见 7.7p1 / 8.1p1），而微软文档推荐的升级做法是把
+     * GitHub 上的 Win32-OpenSSH 装到 {@code C:\Program Files\OpenSSH}（9.x）。
+     * 如果按目录顺序取第一个，升级完插件仍然用旧的那份——用户看到提示毫无变化，
+     * 只会以为是自己升级失败。
+     */
+    private static void sshSelection() {
+        Class<?> os = null;
+        for (Class<?> c : ConnectionPanel.class.getDeclaredClasses()) {
+            if ("OpenSsh".equals(c.getSimpleName())) {
+                os = c;
+            }
+        }
+        if (os == null) {
+            check("找得到 OpenSsh 内部类", false);
+            return;
+        }
+
+        // 真正选出来的必须是个存在的文件。
+        try {
+            java.lang.reflect.Method m = os.getDeclaredMethod("sshExe");
+            m.setAccessible(true);
+            Object picked = m.invoke(null);
+            check("选出 ssh.exe（" + picked + "）",
+                    picked != null && new java.io.File(String.valueOf(picked)).isFile());
+        } catch (Exception e) {
+            check("调用 sshExe()（" + e + "）", false);
+        }
+
+        // 版本比较的取向：高版本必须胜出，解析不出的一律最旧。
+        try {
+            java.lang.reflect.Method newer =
+                    os.getDeclaredMethod("newer", int.class, int.class, int.class, int.class);
+            newer.setAccessible(true);
+            check("9.5 胜过 8.1",
+                    (Boolean) newer.invoke(null, 9, 5, 8, 1));
+            check("8.4 胜过 8.1",
+                    (Boolean) newer.invoke(null, 8, 4, 8, 1));
+            check("8.1 不胜过 9.5",
+                    !(Boolean) newer.invoke(null, 8, 1, 9, 5));
+            check("8.1 不胜过 8.4",
+                    !(Boolean) newer.invoke(null, 8, 1, 8, 4));
+            check("9.10 胜过 9.9（按数值不比字面）",
+                    (Boolean) newer.invoke(null, 9, 10, 9, 9));
+            check("解析不出的版本（-1）当最旧",
+                    !(Boolean) newer.invoke(null, -1, -1, 8, 1));
+            // 版本相同时不替换：
+            // 「第一个候选一定被采用」不是由 newer 决定的，而是循环里
+            // `best == null ||` 这个短路保证的——所以上面那条 -1 当最旧，
+            // 不会让"唯一存在的、但版本解析不出的"那份落选。
+            check("版本相同不替换（保持先找到的那份）",
+                    !(Boolean) newer.invoke(null, -1, -1, -1, -1));
+            check("版本相同不替换（8.1 vs 8.1）",
+                    !(Boolean) newer.invoke(null, 8, 1, 8, 1));
+        } catch (Exception e) {
+            check("调用 newer()（" + e + "）", false);
+        }
+
+        // ssh-keygen 必须和 ssh 同源。
+        try {
+            java.lang.reflect.Method locate =
+                    os.getDeclaredMethod("locate", String.class);
+            locate.setAccessible(true);
+            java.lang.reflect.Method m = os.getDeclaredMethod("sshExe");
+            m.setAccessible(true);
+            Object ssh = m.invoke(null);
+            Object keygen = locate.invoke(null, "ssh-keygen.exe");
+            if (ssh == null || keygen == null) {
+                check("同时找得到 ssh 与 ssh-keygen", false);
+            } else {
+                java.io.File sshDir = new java.io.File(String.valueOf(ssh)).getParentFile();
+                java.io.File kgDir = new java.io.File(String.valueOf(keygen)).getParentFile();
+                check("ssh-keygen 与 ssh 在同一目录（避免混用两个版本）",
+                        sshDir != null && sshDir.equals(kgDir));
+            }
+        } catch (Exception e) {
+            check("调用 locate(ssh-keygen.exe)（" + e + "）", false);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // 版本门槛的位置
+    // ------------------------------------------------------------------
+
+    /**
+     * 版本判断必须在"免密探测"之后，不能挡在它前面。
+     *
+     * <p>这条守的是刚修掉的一个真 bug：{@code beginConnect()} 开头就先判
+     * {@code SSH_ASKPASS_REQUIRE} 的版本门槛，不够就跳手动页并 return。后果是
+     * <b>8.1p1 的机器上，哪怕密钥早就装好、免密登录明明能用，向导也永远只显示
+     * 「OpenSSH 太旧」，从不做连接测试</b>。而 Windows 10 自带的就是 8.1p1。
+     *
+     * <p>版本门槛只是"用密码装公钥"那条路的要求；密钥登录与版本无关。所以它应当
+     * 只在免密失败、确实要走密码时才判断。
+     *
+     * <p>这是源码级断言：光看行为测不出来（要一台 8.1p1 且已配好的机器），
+     * 而顺序恰恰就是出错的地方。
+     */
+    private static void versionGateDoesNotPreemptProbe() {
+        java.io.File src = findSource("vmadapt/src/vmadapt/ui/ConnectionPanel.java",
+                "ConnectionPanel.java");
+        if (src == null) {
+            check("找得到 ConnectionPanel 源码（跳过顺序检查）", false);
+            return;
+        }
+        String text;
+        try {
+            text = new String(java.nio.file.Files.readAllBytes(src.toPath()), "UTF-8");
+        } catch (Exception e) {
+            check("读得到 ConnectionPanel 源码（" + e + "）", false);
+            return;
+        }
+        String begin = body(text, "private void beginConnect(");
+        String need = body(text, "private void needPassword(");
+        check("找得到 beginConnect 的方法体", begin != null);
+        check("找得到 needPassword 的方法体", need != null);
+        if (begin == null || need == null) {
+            return;
+        }
+        check("beginConnect 里不再有版本门槛",
+                !begin.contains("supportsAskpassRequire"));
+        check("beginConnect 会去探测免密",
+                begin.contains("canLogInWithoutPassword"));
+        check("版本门槛搬到了 needPassword",
+                need.contains("supportsAskpassRequire"));
+        check("版本不够时走手动页，不是密码框",
+                need.contains("stepManual"));
+    }
+
+    /**
+     * 取一个方法的方法体（从一个 {@code private ... name(} 到配平的右花括号）。
+     *
+     * <p>先把注释行去掉再找，否则文档里提到的方法名会把边界搞错。
+     */
+    private static String body(String text, String signature) {
+        int start = text.indexOf(signature);
+        if (start < 0) {
+            return null;
+        }
+        int depth = 0;
+        boolean opened = false;
+        for (int i = start; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (c == '{') {
+                depth++;
+                opened = true;
+            } else if (c == '}') {
+                depth--;
+                if (opened && depth == 0) {
+                    return text.substring(start, i + 1);
+                }
+            }
+        }
+        return null;
     }
 
     // ------------------------------------------------------------------
