@@ -988,8 +988,8 @@ public final class Strings {
 
         put(ZH_TEXT, EN_TEXT, ERR_PORT_INVALID, "端口号必须在 1 到 65535 之间，当前是 {0}。",
                 "The port must be between 1 and 65535; it is currently {0}.");
-        put(ZH_TEXT, EN_TEXT, ERR_CHOOSE_PROFILE, "请先选择一个已保存的 Linux 虚拟机配置。",
-                "Choose a saved Linux VM profile first.");
+        put(ZH_TEXT, EN_TEXT, ERR_CHOOSE_PROFILE, "请先选择一个已保存的 SSH 连接。",
+                "Choose a saved SSH connection first.");
         put(ZH_TEXT, EN_TEXT, ERR_PROFILE_MISSING, "配置「{0}」已不存在，请另选一个。",
                 "Profile \"{0}\" no longer exists. Pick another one.");
         put(ZH_TEXT, EN_TEXT, BTN_PROFILE_DELETE, "删除配置", "Delete profile");
@@ -1013,17 +1013,17 @@ public final class Strings {
                 "Delete profile");
         put(ZH_TEXT, EN_TEXT, CONFIRM_PROFILE_DELETE,
                 "要删除配置「{0}」吗？\n\n这只删掉本机保存的这条记录，"
-                        + "虚拟机上已经装好的公钥不受影响。",
+                        + "目标机器上已经装好的公钥不受影响。",
                 "Delete the profile \"{0}\"?\n\nThis only removes the saved record on "
-                        + "this computer; the public key already installed on the VM "
+                        + "this computer; the public key already installed on the target "
                         + "is left alone.");
         put(ZH_TEXT, EN_TEXT, STATUS_PROFILE_DELETED, "已删除配置「{0}」。",
                 "Deleted profile \"{0}\".");
         put(ZH_TEXT, EN_TEXT, ERR_PROFILE_DELETE_FAILED, "删除配置「{0}」失败，文件可能不可写。",
                 "Could not delete profile \"{0}\"; the file may not be writable.");
 
-        put(ZH_TEXT, EN_TEXT, HINT_MODE_BOX, "命令在哪里执行：本机 WSL，或通过 SSH 连接 Linux 虚拟机。",
-                "Where commands run: local WSL, or a Linux VM over SSH.");
+        put(ZH_TEXT, EN_TEXT, HINT_MODE_BOX, "命令在哪里执行：本机 WSL，或通过 SSH 连接到远程机器。",
+                "Where commands run: local WSL, or a remote machine over SSH.");
         put(ZH_TEXT, EN_TEXT, HINT_FILTER_FIELD, "只显示名称包含此文本的命令。",
                 "Show only commands whose name contains this text.");
         put(ZH_TEXT, EN_TEXT, HINT_MANUAL_EDIT,
@@ -1048,7 +1048,7 @@ public final class Strings {
         // --- MainPanel：发现栏与面板标题 ---
         put(ZH_TEXT, EN_TEXT, CONN_MODE_LABEL, "连接方式", "Connection");
         put(ZH_TEXT, EN_TEXT, MODE_WSL, "WSL", "WSL");
-        put(ZH_TEXT, EN_TEXT, MODE_VM, "Linux 虚拟机", "Linux VM");
+        put(ZH_TEXT, EN_TEXT, MODE_VM, "SSH 远程", "SSH Remote");
         put(ZH_TEXT, EN_TEXT, CONN_LABEL_WSL, "WSL 发行版", "WSL distro");
         put(ZH_TEXT, EN_TEXT, CONN_LABEL_SAVED, "已保存配置", "Saved profile");
         put(ZH_TEXT, EN_TEXT, LABEL_FILTER, "工具检索", "Tool search");
@@ -1076,10 +1076,10 @@ public final class Strings {
         put(ZH_TEXT, EN_TEXT, HINT_DISTRO_BOX, "要使用的 WSL 发行版。",
                 "The WSL distribution to use.");
         put(ZH_TEXT, EN_TEXT, HINT_PROFILE_BOX,
-                "选一台已保存的虚拟机配置。第一次切到虚拟机方式时会自动建一条。\n"
+                "选一台已保存的 SSH 连接。第一次切到该方式时会自动建一条。\n"
                         + "右键点这里可以重命名或删除选中的那条。",
-                "Pick a saved Linux VM profile. One is created automatically "
-                        + "the first time you switch to Linux VM.\n"
+                "Pick a saved SSH connection. One is created automatically "
+                        + "the first time you switch to it.\n"
                         + "Right-click here to rename or delete the selected one.");
 
         // --- MainPanel：状态栏 ---
@@ -1105,17 +1105,17 @@ public final class Strings {
                 "Using distro: {0}");
         put(ZH_TEXT, EN_TEXT, STATUS_NO_CONDA, "没有找到可用的 conda 安装。",
                 "No usable conda installation found.");
-        put(ZH_TEXT, EN_TEXT, STATUS_NO_CONNECTION, "连不上 Linux 虚拟机，详见日志中的排查建议。",
-                "Could not connect to the Linux VM. See the hints in the log.");
+        put(ZH_TEXT, EN_TEXT, STATUS_NO_CONNECTION, "连不上目标机器，详见日志中的排查建议。",
+                "Could not connect to the target. See the hints in the log.");
         put(ZH_TEXT, EN_TEXT, STATUS_NO_PROFILE_TO_SCAN,
-                "还没有可用的 Linux 虚拟机配置，请先在上面选一个，或新建并保存一个。",
-                "No Linux VM profile is available yet. Pick one above, or create and save one.");
+                "还没有可用的 SSH 连接，请先在上面选一个，或新建并保存一个。",
+                "No SSH connection is available yet. Pick one above, or create and save one.");
         put(ZH_TEXT, EN_TEXT, STATUS_PROFILE_SELECTED, "已选择 {0}，点「扫描 conda 环境」开始扫描。",
                 "Selected {0}. Click Detect to scan.");
         put(ZH_TEXT, EN_TEXT, STATUS_PROFILE_READ_FAILED, "读取连接配置失败：{0}",
                 "Could not read connection profiles: {0}");
         put(ZH_TEXT, EN_TEXT, STATUS_NO_PROFILE, "还没有保存任何配置，填好后会创建一条：",
-                "No saved Linux VM profile yet. Fill this in to create one:");
+                "No saved SSH connection yet. Fill this in to create one:");
         put(ZH_TEXT, EN_TEXT, STATUS_PROFILES_LOADED, "已载入 {0} 个连接配置。选一个再点「扫描 conda 环境」。",
                 "Loaded {0} connection profile(s). Pick one, then click Detect.");
         put(ZH_TEXT, EN_TEXT, STATUS_CANCELLING, "正在请求取消…", "Cancellation requested...");
@@ -1138,9 +1138,9 @@ public final class Strings {
                 "No previous results; scanning environments...");
         put(ZH_TEXT, EN_TEXT, STATUS_FIRST_RUN_GUIDE,
                 "首次使用：当前是 WSL 方式，点「扫描 conda 环境」开始；"
-                        + "若要用 Linux 虚拟机，请先在上面把连接方式改成「虚拟机」。",
+                        + "若要用 SSH 远程，请先在上面把连接方式改成「SSH 远程」。",
                 "First run: you are on WSL - click 'Detect conda environments' to "
-                        + "begin. To use a Linux VM instead, switch the connection "
+                        + "begin. To use an SSH connection instead, switch the connection "
                         + "mode above first.");
         put(ZH_TEXT, EN_TEXT, STATUS_NEEDS_FIRST_SCAN,
                 "{0} 还没有扫描过，点「扫描 conda 环境」开始（扫完会记住，下次自动恢复）。",
@@ -1204,20 +1204,20 @@ public final class Strings {
                         + "Click Detect to scan it once; from then on it is remembered "
                         + "and restored automatically.");
         put(ZH_TEXT, EN_TEXT, STATUS_VM_NOT_REACHABLE,
-                "虚拟机不可达，未自动连接。详见日志。",
-                "The Linux VM is not reachable, so nothing was connected. See the log.");
+                "目标机器不可达，未自动连接。详见日志。",
+                "The target is not reachable, so nothing was connected. See the log.");
         put(ZH_TEXT, EN_TEXT, LOG_REACH_HEAD,
-                "自动连接前先检查虚拟机是否可达：",
-                "Checking whether the VM is reachable before connecting automatically:");
+                "自动连接前先检查目标机器是否可达：",
+                "Checking whether the target is reachable before connecting automatically:");
         put(ZH_TEXT, EN_TEXT, LOG_REACH_REFUSED,
                 "  主机是活的，但 {0} 上没有服务在听——sshd 多半还没启动完。"
                         + "等几秒再点「扫描 conda 环境」即可。",
                 "  The host is up, but nothing is listening on {0} - sshd has probably "
                         + "not finished starting. Wait a few seconds, then click Detect.");
         put(ZH_TEXT, EN_TEXT, LOG_REACH_TIMEOUT,
-                "  连不上 {0}，对端没有应答。常见原因：虚拟机没开机、还在启动中、"
+                "  连不上 {0}，对端没有应答。常见原因：目标机器没开机、还在启动中、"
                         + "IP 变了、或被防火墙丢弃。确认之后点「扫描 conda 环境」重试。",
-                "  No answer from {0}. Usual causes: the VM is powered off, still "
+                "  No answer from {0}. Usual causes: the target is powered off, still "
                         + "booting, its address changed, or a firewall is dropping the "
                         + "traffic. Once it is up, click Detect to retry.");
         put(ZH_TEXT, EN_TEXT, LOG_REACH_UNRESOLVED,
@@ -1233,10 +1233,10 @@ public final class Strings {
                 "点「扫描 conda 环境」可以拾取新装的工具。",
                 "Click 'Detect conda environments' to pick up newly installed tools.");
         put(ZH_TEXT, EN_TEXT, LOG_NO_CONDA_VM,
-                "虚拟机 {0} 上没有找到 conda 安装，所以没有可列出的命令。请在虚拟机里装好 "
+                "目标机器 {0} 上没有找到 conda 安装，所以没有可列出的命令。请在目标机器里装好 "
                         + "Miniconda 并至少创建一个环境，然后重新扫描。",
-                "No conda installation was found on Linux VM {0}, so there is nothing "
-                        + "to list. Install Miniconda inside the VM and create at least "
+                "No conda installation was found on {0}, so there is nothing "
+                        + "to list. Install Miniconda on the target and create at least "
                         + "one environment, then detect again.");
         put(ZH_TEXT, EN_TEXT, LOG_NO_CONDA_WSL,
                 "WSL 里没有找到 conda 安装，所以没有可列出的命令。请在 WSL 里装好 "
@@ -1245,13 +1245,13 @@ public final class Strings {
                         + "Install Miniconda inside WSL and create at least one "
                         + "environment, then detect again.");
         put(ZH_TEXT, EN_TEXT, LOG_UNREACHABLE_VM,
-                "无法扫描：连不上虚拟机 {0}。请按上面的提示排查，然后重新扫描。",
-                "Could not scan: no connection to Linux VM {0}. "
+                "无法扫描：连不上目标机器 {0}。请按上面的提示排查，然后重新扫描。",
+                "Could not scan: no connection to {0}. "
                         + "Work through the hints above, then detect again.");
         put(ZH_TEXT, EN_TEXT, LOG_NO_PROFILE,
-                "无法扫描：还没有选中可用的 Linux 虚拟机配置。请先在「已保存配置」里选一个"
+                "无法扫描：还没有选中可用的 SSH 连接。请先在「已保存配置」里选一个"
                         + "（没有就点连接窗口里的「保存配置」新建一个），然后重新扫描。",
-                "Could not scan: no usable Linux VM profile is selected. Choose one in the "
+                "Could not scan: no usable SSH connection is selected. Choose one in the "
                         + "\"Saved profiles\" box first (or create one with \"Save\" in the "
                         + "connection window), then detect again.");
         put(ZH_TEXT, EN_TEXT, LOG_UNREACHABLE_WSL,
@@ -1294,13 +1294,13 @@ public final class Strings {
                         + "engine's own system ({0}), which has no bash. "
                         + "Install a real one: 'wsl --install -d Ubuntu'.");
         put(ZH_TEXT, EN_TEXT, HINT_NO_CONNECTION,
-                "请确认虚拟机的 IP、端口、用户名，以及虚拟机处于开机状态。",
-                "Check the VM's IP, port and user, and that the VM is powered on.");
-        put(ZH_TEXT, EN_TEXT, NOTE_VM_UNREACHABLE, "无法连接到虚拟机 {0}。",
-                "Could not connect to Linux VM {0}.");
+                "请确认目标机器的 IP、端口、用户名，以及目标机器处于开机状态。",
+                "Check the target's IP, port and user, and that it is powered on.");
+        put(ZH_TEXT, EN_TEXT, NOTE_VM_UNREACHABLE, "无法连接到目标机器 {0}。",
+                "Could not connect to {0}.");
         put(ZH_TEXT, EN_TEXT, HINT_SSH_SSHD,
-                "检查虚拟机里 sshd 是否在运行：systemctl status ssh（或 service ssh status）。",
-                "Check that sshd is running inside the VM: systemctl status ssh "
+                "检查目标机器里 sshd 是否在运行：systemctl status ssh（或 service ssh status）。",
+                "Check that sshd is running on the target: systemctl status ssh "
                         + "(or: service ssh status).");
         put(ZH_TEXT, EN_TEXT, HINT_SSH_PING,
                 "检查宿主机能否 ping 通 {0}；不通多半是 VMware 网络模式问题（NAT 需要端口转发）。",
@@ -1315,7 +1315,7 @@ public final class Strings {
                 "检查私钥与权限：私钥路径要指向真实文件，远端 ~/.ssh 需 700、"
                         + "authorized_keys 需 600。",
                 "Check the key and its permissions: the key path must point at a "
-                        + "real file, and on the VM ~/.ssh must be 700 with "
+                        + "real file, and on the target ~/.ssh must be 700 with "
                         + "authorized_keys 600.");
         put(ZH_TEXT, EN_TEXT, HINT_SSH_CLI,
                 "先用命令行验证一次：ssh -p {0}{1} {2}@{3}；命令行能通说明问题在插件参数上。",
@@ -1323,8 +1323,8 @@ public final class Strings {
                         + "if that works, the problem is in the plugin's arguments.");
 
         // --- MainPanel：对话框 ---
-        put(ZH_TEXT, EN_TEXT, DIALOG_CONNECTION_TITLE, "虚拟机连接配置",
-                "Linux VM Connection Profile");
+        put(ZH_TEXT, EN_TEXT, DIALOG_CONNECTION_TITLE, "SSH 连接配置",
+                "SSH Connection Profile");
         put(ZH_TEXT, EN_TEXT, DIALOG_PARAMS_TITLE, "参数 - {0}", "Parameters - {0}");
         put(ZH_TEXT, EN_TEXT, DIALOG_SELECT_TOOL_FIRST,
                 "请先选一个命令。这个面板只编辑那一个命令的参数。",

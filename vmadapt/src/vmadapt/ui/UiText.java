@@ -410,23 +410,24 @@ final class UiText {
         put(MSG_SETUP_NEED_FORM, "Set up key needs these first:",
                 "要设置密钥，请先填好：");
 
-        put(BTN_CONNECT, "Connect to a VM...", "连接虚拟机…");
+        put(BTN_CONNECT, "SSH connection...", "SSH 连接…");
         put(BTN_CONNECT_TIP,
                 "Opens a step-by-step wizard: address, port, user, key, "
                         + "then connect and save.",
                 "打开一步步的向导：地址、端口、用户名、密钥，然后连接并保存。");
-        put(PANEL_NO_TARGET, "No VM configured yet", "还没有配置虚拟机");
+        put(PANEL_NO_TARGET, "No SSH connection configured yet",
+                "还没有配置 SSH 连接");
         put(PANEL_NO_TARGET_HINT,
-                "Click 'Connect to a VM...' to set one up. It takes five short steps.",
-                "点「连接虚拟机…」开始配置，一共五步。");
+                "Click 'SSH connection...' to set one up. It takes five short steps.",
+                "点「SSH 连接…」开始配置，一共五步。");
         put(PANEL_READY_HINT,
-                "Click 'Connect to a VM...' to test the connection or switch machine.",
-                "点「连接虚拟机…」可以测试连接，或换一台机器。");
+                "Click 'SSH connection...' to test the connection or switch machine.",
+                "点「SSH 连接…」可以测试连接，或换一台机器。");
 
-        put(DIALOG_CONNECTION_TITLE_WIZARD, "Linux VM connection",
-                "虚拟机连接配置");
+        put(DIALOG_CONNECTION_TITLE_WIZARD, "SSH connection",
+                "SSH 连接配置");
         put(WIZ_HOST_HINT,
-                "All three network modes work the same way here: enter the VM's own IP "
+                "All three network modes work the same way here: enter the target's own IP "
                         + "with port 22. Run ip addr inside the VM to get it.\n"
                         + "  Bridged: the VM has its own address on your LAN.\n"
                         + "  Host-only: the VM is on the VMnet1 subnet (and has no "
@@ -437,7 +438,7 @@ final class UiText {
                         + "Port forwarding is only a fallback for when the host cannot "
                         + "reach that subnet: forward the VM's port 22 to a host port, "
                         + "then enter 127.0.0.1 and that port here instead.",
-                "三种网络模式在这里填法是一样的：填虚拟机自己的 IP，端口 22。"
+                "三种网络模式在这里填法是一样的：填目标机器自己的 IP，端口 22。"
                         + "在虚拟机里执行 ip addr 就能查到。\n"
                         + "  桥接：虚拟机在你所在局域网里有独立 IP。\n"
                         + "  仅主机：虚拟机在 VMnet1 网段（这种模式下虚拟机没有外网）。\n"
@@ -446,23 +447,23 @@ final class UiText {
                         + "端口转发只是备选，用在宿主机到不了那个网段的时候："
                         + "把虚拟机的 22 端口转发到宿主机某个端口，这里改填 127.0.0.1 和那个端口。");
         put(WIZ_PORT_HINT,
-                "SSH is 22 unless you changed it in the VM's sshd config.",
-                "SSH 默认是 22。只有在虚拟机上改过 sshd 配置时才需要改这里。");
+                "SSH is 22 unless you changed it in the target's sshd config.",
+                "SSH 默认是 22。只有在目标机器上改过 sshd 配置时才需要改这里。");
         put(WIZ_USER_HINT,
-                "The login name inside the VM - the one you set when installing it, "
+                "The login name on the target - the one you set when installing it, "
                         + "often ubuntu.",
-                "虚拟机里你的登录名。装系统时设的那个，常见是 ubuntu。");
+                "目标机器里你的登录名。装系统时设的那个，常见是 ubuntu。");
         put(WIZ_PWD_HINT,
-                "Enter the VM login password so the public key can be sent to the VM. "
+                "Enter the login password so the public key can be sent to the target. "
                         + "The password is not saved.",
-                "请输入虚拟机登陆密码，以便发送公钥到虚拟机。密码不会被保存。");
+                "请输入登陆密码，以便发送公钥到目标机器。密码不会被保存。");
         put(WIZ_WORKING, "Connecting, please wait...", "正在连接，请稍候…");
         put(WIZ_NAME_NOTE,
                 "Leave blank to use \"user@host:port\". You can rename it later.",
                 "留空则用「用户名@主机:端口」。以后可以随时改。");
         put(WIZ_FAIL_HINT,
-                "Nothing was changed on the VM. Check the reason below and try again.",
-                "虚拟机上没有做任何改动。请对照下面的原因重试。");
+                "Nothing was changed on the target. Check the reason below and try again.",
+                "目标机器上没有做任何改动。请对照下面的原因重试。");
         put(WIZ_OLD_SSH_TITLE, "OpenSSH is too old for automatic setup",
                 "OpenSSH 版本太旧，无法自动安装公钥");
         put(WIZ_OLD_SSH_REASON,
@@ -470,8 +471,8 @@ final class UiText {
                         + "without putting it on the command line. This computer has: {0}",
                 "插件需要 OpenSSH 8.4 或更新版本，才能在不把密码写进命令行的前提下"
                         + "使用密码。这台电脑上是：{0}");
-        put(WIZ_NEED_HOST, "Enter the VM's IP address first.",
-                "请先填虚拟机的 IP 地址。");
+        put(WIZ_NEED_HOST, "Enter the target's IP address first.",
+                "请先填目标机器的 IP 地址。");
         put(WIZ_NEED_USER, "Enter the login user name first.",
                 "请先填登录用户名。");
         put(WIZ_NEED_PASSWORD, "Enter the password, or click Back.",
@@ -486,10 +487,10 @@ final class UiText {
         put(WIZ_KEY_NOTICE,
                 "This will create an SSH key pair on this computer. The private key "
                         + "stays here and is used for authentication; the public key is "
-                        + "appended to your VM automatically.\n\n"
+                        + "appended to the target automatically.\n\n"
                         + "Click Next to continue.",
                 "此操作将在本机生成 SSH 密钥对，私钥用于身份验证，"
-                        + "公钥将自动追加到你的虚拟机中。\n\n"
+                        + "公钥将自动追加到目标机器上。\n\n"
                         + "继续请点击「下一步」。");
 
 
@@ -530,9 +531,9 @@ final class UiText {
                 "远端命令的原始输出：");
 
         put(TIP_FALLBACK_1,
-                "Check that the VM's IP, port and user name are correct and that "
-                        + "the VM is powered on.",
-                "确认虚拟机的 IP、端口、用户名填对了，虚拟机处于开机状态。");
+                "Check that the target's IP, port and user name are correct and that "
+                        + "it is powered on.",
+                "确认目标机器的 IP、端口、用户名填对了，目标机器处于开机状态。");
         put(TIP_FALLBACK_2,
                 "In NAT mode, enter the VM's own address from ip addr with port 22 - "
                         + "the host reaches it through its VMnet8 adapter. Check that "
@@ -555,8 +556,8 @@ final class UiText {
                         + "（用 ipconfig 看），并确认虚拟机自己的防火墙放行了 22 端口"
                         + "（Ubuntu 上：sudo ufw allow 22/tcp）。");
         put(TIP_FALLBACK_4,
-                "Run systemctl status ssh on the VM to confirm sshd is running.",
-                "在虚拟机里执行 systemctl status ssh，确认 sshd 已启动。");
+                "Run systemctl status ssh on the target to confirm sshd is running.",
+                "在目标机器里执行 systemctl status ssh，确认 sshd 已启动。");
         put(TIP_FALLBACK_5,
                 "If public key authentication fails, check that the private key "
                         + "path is correct and that authorized_keys already contains the "
@@ -573,8 +574,8 @@ final class UiText {
 
         // 与 vmadapt.core.SshTarget.validate() 的各分支一一对应。
         put(VAL_HOST_EMPTY,
-                "Enter the VM's host name or IP address.",
-                "请填写虚拟机的主机名或 IP 地址。");
+                "Enter the target's host name or IP address.",
+                "请填写目标机器的主机名或 IP 地址。");
         put(VAL_HOST_SPACE,
                 "The host name must not contain spaces: {0}",
                 "主机名中不能包含空格：{0}");
@@ -665,7 +666,7 @@ final class UiText {
                         + "you can now click \"Copy public key to VM\" to install the "
                         + "public key on the VM.",
                 "表单里的「密钥路径」已自动填好，现在可以点"
-                        + "「复制公钥到远端」把公钥装到虚拟机上。");
+                        + "「复制公钥到远端」把公钥装到目标机器上。");
         put(MSG_GEN_OUTPUT, "ssh-keygen output:", "ssh-keygen 输出：");
 
         put(TIP_KEYGEN_1,
@@ -715,11 +716,11 @@ final class UiText {
                         + "password or an existing key).\n"
                         + "If the remote side has never had a public key installed, "
                         + "ssh.exe cannot enter a password non-interactively; log in once "
-                        + "inside the VM with a password, or use the VMware console.",
+                        + "on the target with a password, or use the machine's own console.",
                 "正在后台执行公钥安装，最长等待 {0} 秒。\n"
                         + "这一步仍然需要一次能够登录的连接（用密码或已有密钥）。\n"
                         + "如果远端从未装过任何公钥，ssh.exe 无法非交互式输入密码，"
-                        + "请先在虚拟机里用密码登录一次，或用 VMware 控制台操作。");
+                        + "请先在目标机器上用密码登录一次，或用该机器自己的控制台操作。");
         put(MSG_READ_PUB_FAILED, "Could not read the public key file: {0}",
                 "读取公钥文件失败：{0}");
         put(MSG_PUB_EMPTY, "The public key file is empty: {0}",
@@ -745,10 +746,10 @@ final class UiText {
                         + "如仍失败，先在命令行手动 ssh 一次把指纹存入 known_hosts。");
         put(TIP_COPY_2,
                 "When the remote side has no usable public key yet, ssh.exe cannot "
-                        + "type a password non-interactively. Log in to the VM in the VMware "
+                        + "type a password non-interactively. Log in on the target's own "
                         + "console first, or complete one command-line login with a password.",
                 "远端还没有任何可用公钥时，ssh.exe 不能非交互式输密码。"
-                        + "请先在 VMware 控制台里登录虚拟机，或用密码完成一次命令行登录。");
+                        + "请先在目标机器自己的控制台里登录，或用密码完成一次命令行登录。");
         put(TIP_COPY_3,
                 "Make sure the remote sshd allows public key authentication: "
                         + "PubkeyAuthentication yes in /etc/ssh/sshd_config, then restart sshd.",
@@ -801,8 +802,8 @@ final class UiText {
         put(USAGE_OPTS,
                 "Options (all optional; when omitted the form is empty and the port defaults to 22):",
                 "选项（都可省略，省略时表单为空，端口默认 22）：");
-        put(USAGE_HOST, "  --host=192.168.1.100   VM IP address or host name",
-                "  --host=192.168.1.100   虚拟机 IP 或主机名");
+        put(USAGE_HOST, "  --host=192.168.1.100   Target IP address or host name",
+                "  --host=192.168.1.100   目标机器 IP 或主机名");
         put(USAGE_PORT,
                 "  --port=22              SSH port (NAT port forwarding commonly uses 2222)",
                 "  --port=22              SSH 端口（NAT 端口转发常见 2222）");

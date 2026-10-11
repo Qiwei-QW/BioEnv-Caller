@@ -75,7 +75,7 @@ public final class ConnectionLayoutTest {
         }
         String t = b.getText();
         check("按钮是「连接虚拟机…」（实际「" + t + "」）",
-                t != null && t.contains("连接虚拟机"));
+                t != null && t.contains("SSH 连接"));
         check("按钮默认可用", b.isEnabled());
     }
 
