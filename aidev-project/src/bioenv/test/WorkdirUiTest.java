@@ -168,7 +168,127 @@ public final class WorkdirUiTest {
         // 真正要守的东西上面已经守住了：接线在构造时就装好（wireDirBrowser），所以
         // 面板一存在点击就有去处，不会出现"点了没动静"。
 
+        // ---------------------------------------------------------------
+        // 浏览窗口不能在构造途中去内容面板里按序号捞组件
+        // ---------------------------------------------------------------
+        //
+        // 这一条是源码级守卫，因为那个崩溃无头测不到：{@code new JDialog(...)} 在没有
+        // 显示器时就抛，所以"打开窗口"这条路径在自检里根本跑不起来。
+        //
+        // 崩的样子是这样的（用户在 TBtools 里点小企鹅时真实发生过）：
+        //
+        //   ArrayIndexOutOfBoundsException: No such child: 1
+        //     at LinuxDirChooser.showDetails   ← getContentPane().getComponent(1)
+        //     at LinuxDirChooser.build         ← build() 自己调进来的
+        //     at LinuxDirChooser.<init>        ← setContentPane(build()) 还没返回
+        //
+        // 那一刻内容面板还是默认的空壳，第 1 个子组件根本不存在。按序号取组件本来就脆，
+        // 版式一改就错位，所以干脆禁掉这种写法：中间那块改成字段直接引用。
+        String chooserSrc = readSource("bioenv/ui/LinuxDirChooser.java");
+        check("读得到 LinuxDirChooser 源码（守卫要能生效）", chooserSrc != null);
+        if (chooserSrc != null) {
+            // 只看代码，不看注释。
+            //
+            // 上面那段注释里就写着这个写法（说明它为什么是错的），照原文搜会把自己
+            // 的说明当成违规——项目里为同样的事吃过一次亏：另一处可达性检查把注释里的
+            // 提及算成了调用，结果一直没报出真正的问题。
+            String codeOnly = stripComments(chooserSrc);
+            check("不再按序号从内容面板里捞组件",
+                    codeOnly.indexOf("getContentPane().getComponent") < 0);
+            check("视图切换只动自己那块面板",
+                    codeOnly.indexOf("midPanel.removeAll()") > 0);
+            check("showDetails 在面板还没建好时会安全返回",
+                    codeOnly.indexOf("if (midPanel == null)") > 0);
+        }
+
         finish();
+    }
+
+    /**
+     * 去掉行注释与块注释，只留代码。
+     *
+     * <p>不做完整的词法分析——这里只需要挡住"注释里提到某个写法"这一种误报，
+     * 而源码里没有字符串字面量包含注释标记的情况。
+     */
+    private static String stripComments(String src) {
+        StringBuilder out = new StringBuilder(src.length());
+        int i = 0;
+        boolean inLine = false;
+        boolean inBlock = false;
+        boolean inStr = false;
+        while (i < src.length()) {
+            char c = src.charAt(i);
+            char n = (i + 1 < src.length()) ? src.charAt(i + 1) : '\0';
+            if (inLine) {
+                if (c == '\n') {
+                    inLine = false;
+                    out.append(c);
+                }
+                i++;
+                continue;
+            }
+            if (inBlock) {
+                if (c == '*' && n == '/') {
+                    inBlock = false;
+                    i += 2;
+                    continue;
+                }
+                i++;
+                continue;
+            }
+            if (inStr) {
+                out.append(c);
+                if (c == '\\') {
+                    if (i + 1 < src.length()) {
+                        out.append(src.charAt(i + 1));
+                        i += 2;
+                        continue;
+                    }
+                } else if (c == '"') {
+                    inStr = false;
+                }
+                i++;
+                continue;
+            }
+            if (c == '"') {
+                inStr = true;
+                out.append(c);
+                i++;
+                continue;
+            }
+            if (c == '/' && n == '/') {
+                inLine = true;
+                i += 2;
+                continue;
+            }
+            if (c == '/' && n == '*') {
+                inBlock = true;
+                i += 2;
+                continue;
+            }
+            out.append(c);
+            i++;
+        }
+        return out.toString();
+    }
+
+    /** 从源码树里读一个文件；读不到返回 null，由调用方报出来。 */
+    private static String readSource(String rel) {
+        // 门禁在仓库根目录下跑，所以相对路径就是源码树。多试一个前缀是为了
+        // 有人从别处跑这个测试时也找得到。
+        java.io.File f = new java.io.File("aidev-project/src/" + rel);
+        if (!f.isFile()) {
+            f = new java.io.File(rel);
+        }
+        if (!f.isFile()) {
+            return null;
+        }
+        try {
+            byte[] b = java.nio.file.Files.readAllBytes(f.toPath());
+            return new String(b, java.nio.charset.StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     /** 反射读写工作目录输入框，免得为一个测试把它开成 public。 */

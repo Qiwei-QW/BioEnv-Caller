@@ -105,6 +105,17 @@ public final class LinuxDirChooser {
     private String current = "";
     /** 用户选定的目录；取消时为 null。 */
     private String result;
+    /**
+     * 中间那块放列表/详情的地方。
+     *
+     * <p>存成字段，而不是每次从 {@code dialog.getContentPane().getComponent(1)} 里按序号
+     * 捞。原来就是那样写的，结果 <b>build() 自己调 showDetails() 时崩了</b>：
+     * {@code setContentPane(build())} 还没返回，内容面板还是默认的空壳，第 1 个子组件
+     * 压根不存在 —— {@code ArrayIndexOutOfBoundsException: No such child: 1}。
+     * 按序号取组件本来就脆，版式一改就错位。
+     */
+    private JPanel midPanel;
+
     /** 详细信息视图。 */
     private boolean details;
 
@@ -279,16 +290,16 @@ public final class LinuxDirChooser {
     }
 
     private JPanel buildMiddle() {
-        JPanel mid = new JPanel(new BorderLayout(0, 4));
+        midPanel = new JPanel(new BorderLayout(0, 4));
         iconList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         // 图标视图：多列铺开，像 Windows 那个窗口一样。
         iconList.setLayoutOrientation(JList.HORIZONTAL_WRAP);
         iconList.setVisibleRowCount(-1);
         iconList.setFixedCellWidth(160);
         detailTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        mid.add(iconPane, BorderLayout.CENTER);
-        mid.add(status, BorderLayout.SOUTH);
-        return mid;
+        midPanel.add(iconPane, BorderLayout.CENTER);
+        midPanel.add(status, BorderLayout.SOUTH);
+        return midPanel;
     }
 
     private JPanel buildBottom() {
@@ -330,21 +341,27 @@ public final class LinuxDirChooser {
         folderName.setText(sel == null ? current : LinuxDirList.childOf(current, sel));
     }
 
+    /**
+     * 在列表视图与详细信息视图之间切换。
+     *
+     * <p>只动 {@link #midPanel} 自己的子组件，<b>不</b>去 {@code dialog.getContentPane()}
+     * 里按序号捞组件——那正是崩溃的原因：{@code build()} 自己会调到这里，而那一刻
+     * {@code setContentPane(build())} 还没返回，内容面板仍是默认空壳，第 1 个子组件
+     * 不存在。
+     *
+     * <p>还没建好时就只记下选择：真正的摆放由 {@code buildMiddle()} 完成。这样"先记意图、
+     * 后落地"的顺序对任何调用时机都成立。
+     */
     private void showDetails(boolean want) {
         details = want;
-        if (want) {
-            JPanel mid = (JPanel) dialog.getContentPane().getComponent(1);
-            mid.removeAll();
-            mid.add(detailPane, BorderLayout.CENTER);
-            mid.add(status, BorderLayout.SOUTH);
-        } else {
-            JPanel mid = (JPanel) dialog.getContentPane().getComponent(1);
-            mid.removeAll();
-            mid.add(iconPane, BorderLayout.CENTER);
-            mid.add(status, BorderLayout.SOUTH);
+        if (midPanel == null) {
+            return;
         }
-        dialog.getContentPane().revalidate();
-        dialog.getContentPane().repaint();
+        midPanel.removeAll();
+        midPanel.add(want ? detailPane : iconPane, BorderLayout.CENTER);
+        midPanel.add(status, BorderLayout.SOUTH);
+        midPanel.revalidate();
+        midPanel.repaint();
         load(current.isEmpty() ? initialDir() : current);
     }
 
