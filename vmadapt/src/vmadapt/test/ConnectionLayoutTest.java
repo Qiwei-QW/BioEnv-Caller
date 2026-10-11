@@ -74,7 +74,7 @@ public final class ConnectionLayoutTest {
             return;
         }
         String t = b.getText();
-        check("按钮是「连接虚拟机…」（实际「" + t + "」）",
+        check("按钮是「SSH 连接…」（实际「" + t + "」）",
                 t != null && t.contains("SSH 连接"));
         check("按钮默认可用", b.isEnabled());
     }
@@ -148,6 +148,41 @@ public final class ConnectionLayoutTest {
                 "连接失败。", "原因", false, "关闭");
         check("失败页有「关闭」", r.close() != null);
         check("失败页显示原因", r.detail().contains("原因"));
+
+        // ------------------------------------------------------------------
+        // 尺寸统一：换步时窗口不该一伸一缩
+        // ------------------------------------------------------------------
+        //
+        // 原先每一步各自 pack()，窗口高度随内容跳：只填一个「主机 / IP」的步是 86，
+        // 须知页是 132 —— 走一遍向导，窗口会明显地变两次形。现在各步的尺寸由
+        // SetupWizard.Step 固定，所以这里钉住"尺寸一致"。
+        //
+        // 结果页是<b>例外</b>：它要放一段长度不定的详情，压到统一高度会把内容裁掉。
+        // 它单独高一截，也只有它一个例外。
+        java.awt.Dimension d1 = s1.panel().getPreferredSize();
+        java.awt.Dimension d2 = s2.panel().getPreferredSize();
+        java.awt.Dimension dn = n.panel().getPreferredSize();
+        java.awt.Dimension dp = p.panel().getPreferredSize();
+        java.awt.Dimension dm = nm.panel().getPreferredSize();
+
+        check("输入各步宽度一致（" + d1.width + " / " + d2.width + " / "
+                        + dp.width + " / " + dm.width + "）",
+                d1.width == d2.width && d2.width == dp.width && dm.width == d1.width);
+        check("输入各步高度一致（" + d1.height + " / " + d2.height + " / "
+                        + dp.height + " / " + dm.height + "）",
+                d1.height == d2.height && d2.height == dp.height && dm.height == d1.height);
+        check("须知步与输入步等高（" + dn.height + " vs " + d1.height + "）",
+                dn.height == d1.height);
+        check("高度就是约定的 HEIGHT", d1.height == SetupWizard.HEIGHT);
+        check("宽度就是约定的 WIDTH + 两侧留白",
+                d1.width == SetupWizard.WIDTH + 40);
+
+        java.awt.Dimension dr = r.panel().getPreferredSize();
+        check("结果页比其它步高（" + dr.height + " > " + d1.height + "）",
+                dr.height > d1.height);
+        check("结果页用的是约定高度 RESULT_HEIGHT",
+                dr.height == SetupWizard.RESULT_HEIGHT);
+        check("结果页宽度也和其它步一致", dr.width == d1.width);
     }
 
     // ------------------------------------------------------------------

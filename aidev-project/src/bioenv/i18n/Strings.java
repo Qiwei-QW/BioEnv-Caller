@@ -119,24 +119,13 @@ public final class Strings {
      */
     public static final String BTN_PROFILE_DELETE = "btn.profileDelete";
 
-    /** 右键菜单：重命名。 */
-    public static final String MENU_PROFILE_RENAME = "menu.profileRename";
-
-    /** 重命名对话框：标题与正文（正文带当前名字占位）。 */
-    public static final String DLG_PROFILE_RENAME_TITLE = "dlg.profileRenameTitle";
-    public static final String DLG_PROFILE_RENAME = "dlg.profileRename";
-
-    /** 状态：重命名成功（带旧名与新名占位）。 */
-    public static final String STATUS_PROFILE_RENAMED = "status.profileRenamed";
-
-    /** 错误：新名字和另一条配置重名（带名字占位）。 */
-    public static final String ERR_PROFILE_RENAME_DUPLICATE = "err.profileRenameDuplicate";
-
-    /** 错误：重命名失败（带名字占位）。 */
-    public static final String ERR_PROFILE_RENAME_FAILED = "err.profileRenameFailed";
-
-    /** 错误：要重命名的那条已经不在了（带名字占位）。 */
-    public static final String ERR_PROFILE_RENAME_MISSING = "err.profileRenameMissing";
+    /**
+     * 「已保存配置」下拉框里的最后一项：新增一条配置。
+     *
+     * <p>它不是一个配置，而是一个动作，混在纯数据的列表里。所以选中它之后必须
+     * <b>立刻把选中项还原</b>回去，否则下拉框会停在一个并不存在的配置上。
+     */
+    public static final String ITEM_NEW_PROFILE = "item.newProfile";
 
     /** 确认对话框：标题。 */
     public static final String CONFIRM_PROFILE_DELETE_TITLE = "confirm.profileDeleteTitle";
@@ -993,22 +982,7 @@ public final class Strings {
         put(ZH_TEXT, EN_TEXT, ERR_PROFILE_MISSING, "配置「{0}」已不存在，请另选一个。",
                 "Profile \"{0}\" no longer exists. Pick another one.");
         put(ZH_TEXT, EN_TEXT, BTN_PROFILE_DELETE, "删除配置", "Delete profile");
-        put(ZH_TEXT, EN_TEXT, MENU_PROFILE_RENAME, "重命名…", "Rename...");
-        put(ZH_TEXT, EN_TEXT, DLG_PROFILE_RENAME_TITLE, "重命名配置", "Rename profile");
-        put(ZH_TEXT, EN_TEXT, DLG_PROFILE_RENAME,
-                "配置「{0}」的新名字：\n\n留空表示不起别名，显示为 用户名@主机:端口。",
-                "New name for profile \"{0}\":\n\nLeave it blank to drop the alias and "
-                        + "show user@host:port instead.");
-        put(ZH_TEXT, EN_TEXT, STATUS_PROFILE_RENAMED, "配置「{0}」已改名为「{1}」。",
-                "Renamed profile \"{0}\" to \"{1}\".");
-        put(ZH_TEXT, EN_TEXT, ERR_PROFILE_RENAME_DUPLICATE,
-                "已经有另一条配置叫「{0}」了，请换一个名字。",
-                "Another profile is already called \"{0}\". Pick a different name.");
-        put(ZH_TEXT, EN_TEXT, ERR_PROFILE_RENAME_FAILED, "重命名「{0}」失败，文件可能不可写。",
-                "Could not rename \"{0}\"; the file may not be writable.");
-        put(ZH_TEXT, EN_TEXT, ERR_PROFILE_RENAME_MISSING,
-                "配置「{0}」已不存在，请重新选择。",
-                "Profile \"{0}\" no longer exists. Pick another one.");
+        put(ZH_TEXT, EN_TEXT, ITEM_NEW_PROFILE, "＋ 新增配置", "+ New profile");
         put(ZH_TEXT, EN_TEXT, CONFIRM_PROFILE_DELETE_TITLE, "删除配置",
                 "Delete profile");
         put(ZH_TEXT, EN_TEXT, CONFIRM_PROFILE_DELETE,

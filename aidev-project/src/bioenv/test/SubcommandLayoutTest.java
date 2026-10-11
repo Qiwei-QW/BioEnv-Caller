@@ -35,12 +35,37 @@ public final class SubcommandLayoutTest {
     private static int fail;
 
     public static void main(String[] args) throws Exception {
-        SwingUtilities.invokeAndWait(new Runnable() {
-            @Override
-            public void run() {
-                body();
-            }
-        });
+        // 把语言钉死成默认中文，再建面板。
+        //
+        // 这里原来没有这一步，而它和下面那句 I18n.loadOnce() 一起埋了个坑：面板在
+        // loadOnce() <b>之前</b>构造，用的是"还没读过语言文件"的默认中文；等到查控件时，
+        // loadOnce() 已经把用户盘上的语言读进来了。两边一旦不一致，按文案找控件就全都
+        // 找不到。
+        //
+        // 平时看不出来，因为默认是中文、文件里也是中文，两边碰巧一样。开发机上一旦有人
+        // 把界面切成英文（%USERPROFILE%\.TBtools\BioEnvCaller\language.txt 写着 en），
+        // 这个测试就会红——而且红得毫无道理：面板本身没有任何问题。
+        //
+        // 所以先把 user.home 指到临时目录（那里没有语言文件），语言就是确定的中文，
+        // 与面板构造时用的那一个一致。ThemeSwitchResidueTest 用的是同一套隔离。
+        String oldHome = System.getProperty("user.home");
+        java.io.File home = new java.io.File(System.getProperty("java.io.tmpdir"),
+                "bioenv-sublayout-" + System.nanoTime());
+        if (!home.mkdirs()) {
+            throw new IllegalStateException("无法创建临时 home " + home);
+        }
+        System.setProperty("user.home", home.getAbsolutePath());
+        try {
+            I18n.loadOnce();
+            SwingUtilities.invokeAndWait(new Runnable() {
+                @Override
+                public void run() {
+                    body();
+                }
+            });
+        } finally {
+            System.setProperty("user.home", oldHome);
+        }
         line("");
         line("  passed: " + pass + "   failed: " + fail);
         if (fail > 0) {
