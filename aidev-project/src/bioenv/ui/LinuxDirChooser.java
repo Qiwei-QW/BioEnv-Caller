@@ -150,11 +150,23 @@ public final class LinuxDirChooser {
         return c.result;
     }
 
+    /**
+     * 初始目录：调用方给了就用它，否则从<b>用户主目录</b>开始。
+     *
+     * <p>原来默认落在 {@code ~/vmadapt_work}（那个自动建工作目录的约定路径）。那是错的：
+     * 用户在这里是要<b>挑</b>一个目录，不是接受一个已经替他选好的。一进来就钻进
+     * {@code vmadapt_work}，等于把"你想放哪"这个决定替他做了，他还得先往上退一层才
+     * 看得见别的目录。
+     *
+     * <p>从主目录开始则是中立的：{@code vmadapt_work} 就在列表里，想用它点一下就行，
+     * 想用别的也一眼看得见。而且 {@code ~} 是交给远端展开的，所以"qw"这种每台机器都
+     * 不一样的用户名不需要我们知道。
+     */
     private String initialDir() {
         if (startDir != null && !startDir.trim().isEmpty()) {
             return startDir.trim();
         }
-        return vmadapt.core.RemoteFiles.WORK_ROOT;
+        return "~";
     }
 
     private static JButton iconButton(String key) {
