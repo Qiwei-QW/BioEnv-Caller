@@ -190,6 +190,8 @@ public final class MainPanel extends JPanel {
     private final JButton clearLogButton = new JButton(I18n.t(Strings.MENU_CLEAR_LOG));
     /** "输出"标题：和清空按钮同处一行。 */
     private JLabel logTitle;
+    /** 命令预览下面那句说明（「可以直接在这里输入…」）。 */
+    private JLabel commandHint;
     /**
      * Opens the tool assistant: the tool's help on one tab, the user's own notes
      * on another. Named for what it opens rather than for the first tab, since
@@ -220,7 +222,9 @@ public final class MainPanel extends JPanel {
      * reference — hence these fields.
      */
     private javax.swing.border.TitledBorder treeBorder;
-    private javax.swing.border.TitledBorder logBorder;
+    // logBorder 已经删掉：「输出」那一栏的标题后来搬成了一个普通 JLabel（见 logTitle），
+    // 而语言刷新还在写这个字段。它从来没有被赋过值，所以那句刷新一直是空转，标题也就
+    // 一直不跟着换。留着它只会让下一个人以为它有用。
     private javax.swing.border.TitledBorder commandBorder;
 
     // --- state ---
@@ -505,15 +509,15 @@ public final class MainPanel extends JPanel {
         // it names the channel: "no conda" and "could not connect at all" have
         // completely different next steps, and only rep.wslOk tells them apart.
         if (rep.wslOk) {
-            setStatus(I18n.t(Strings.STATUS_NO_CONDA));
+            setStatusKey(Strings.STATUS_NO_CONDA);
         } else if (sshTargetKnown) {
-            setStatus(I18n.t(Strings.STATUS_NO_CONNECTION));
+            setStatusKey(Strings.STATUS_NO_CONNECTION);
         } else if (sshMode) {
             // Linux VM mode with nothing selected. "Could not connect" would be a
             // lie - we never tried - and the next step is different too.
-            setStatus(I18n.t(Strings.STATUS_NO_PROFILE_TO_SCAN));
+            setStatusKey(Strings.STATUS_NO_PROFILE_TO_SCAN);
         } else {
-            setStatus(I18n.t(Strings.STATUS_NO_CONDA));
+            setStatusKey(Strings.STATUS_NO_CONDA);
         }
     }
 
@@ -649,13 +653,15 @@ public final class MainPanel extends JPanel {
         if (commandPanelRef != null) {
             commandPanelRef.setBorder(commandBorder);
         }
-        // 标题已移到标题栏里，这里只更新文字 + 留内边距。
+        // 标题已移到标题栏里，这里只留内边距。
         //
         // 不能再设 TitledBorder：那会把"输出/清空"那一行覆盖回"边框上写标题"的
         // 老样子，切一次主题就退回去。
-        if (logTitle != null) {
-            logTitle.setText(I18n.t(Strings.TITLE_OUTPUT));
-        }
+        //
+        // 这里也<b>不再设标题文字</b>。那是语言的事，不是画法的事：它原来写在这里，
+        // 于是每次 applyTheme()（包括切语言时重跑的那次）都会把「输出」翻一遍。
+        // 而这一栏刻意不跟语言走 —— 它旁边的正文是日志，记的是当时发生的事、用当时
+        // 的语言写的，只翻标题会让整栏半中半英。文字在构造时设一次，之后不动。
         if (logPanelRef != null) {
             logPanelRef.setBorder(BorderFactory.createEmptyBorder(2, 2, 2, 2));
         }
@@ -743,15 +749,31 @@ public final class MainPanel extends JPanel {
             // The source label and box tooltip depend on the mode, so re-derive
             // them through the same code path that set them initially.
             applySourceLabels(isSshMode());
-            if (treeBorder != null) {
-                treeBorder.setTitle(I18n.t(Strings.TITLE_TREE));
+            // 分区标题（左侧工具树、右侧命令预览）由 applyTheme() 统一按当前语言重建，
+            // 所以这里重跑一遍它。
+            //
+            // 原来是直接 treeBorder.setTitle(...)，有两个问题：一是它只认一个字段；
+            // 二是「输出」那个标题早就从 TitledBorder 搬成了一个普通 JLabel，而这里刷的
+            // 还是那个<b>从来没有被赋过值</b>的 logBorder（永远 null），于是「输出」
+            // 一直不跟着换。重跑 applyTheme 就不会再漏——标题只有那一条构建路径，
+            // 语言和主题都走它。
+            applyTheme();
+            // 「输出」这个<b>标题</b>要跟着语言走。
+            //
+            // 不跟语言走的是它的<b>正文</b>：那里是日志，记的是当时发生了什么、用当时的
+            // 语言写的。已经打出来的那些行不该被回炉重译（也译不回来），所以正文保持原样，
+            // 只翻标题。用户明确要的就是这个分界。
+            if (logTitle != null) {
+                logTitle.setText(I18n.t(Strings.TITLE_OUTPUT));
             }
-            if (logBorder != null) {
-                logBorder.setTitle(I18n.t(Strings.TITLE_OUTPUT));
+            if (commandHint != null) {
+                commandHint.setText(I18n.t(Strings.HINT_COMMAND_AREA_LONG));
             }
             treeRoot.setUserObject(I18n.t(Strings.LABEL_TREE_ROOT));
             treeModel.nodeChanged(treeRoot);
             refreshCommandPanelTitle();
+            // 状态栏那句是上一次动作写的，会一直留在屏幕上——切语言要按新语言重渲染。
+            refreshStatusText();
         }
     };
 
@@ -815,7 +837,7 @@ public final class MainPanel extends JPanel {
             refreshSshList(true, false);
             return;
         }
-        setStatus(I18n.t(Strings.STATUS_LOOKING_WSL));
+        setStatusKey(Strings.STATUS_LOOKING_WSL);
         pendingNeedsManual = false;
         final int mine = ++loadGeneration;
         new SwingWorker<Void, String>() {
@@ -875,7 +897,7 @@ public final class MainPanel extends JPanel {
                 try {
                     get();
                 } catch (Exception ex) {
-                    setStatus(I18n.t(Strings.STATUS_RESTORE_FAILED));
+                    setStatusKey(Strings.STATUS_RESTORE_FAILED);
                     return;
                 }
                 showDistros(pendingDistros, pendingDistro);
@@ -894,7 +916,7 @@ public final class MainPanel extends JPanel {
                     // 在用户从下拉框里主动选了虚拟机方式时才该出现，那由 SSH 那条
                     // 路径（refreshSshList → shouldAutoOpenDialog）负责。
                     if (!LinkState.hasEverConnected()) {
-                        setStatus(I18n.t(Strings.STATUS_FIRST_RUN_GUIDE));
+                        setStatusKey(Strings.STATUS_FIRST_RUN_GUIDE);
                     } else {
                         setStatus(I18n.t(Strings.STATUS_NEEDS_FIRST_SCAN,
                                 pendingDistro == null
@@ -910,7 +932,7 @@ public final class MainPanel extends JPanel {
                     if (lastReport != null) {
                         applyDiscoveryReport(lastReport, null, null, false, false);
                     } else {
-                        setStatus(I18n.t(Strings.STATUS_READY_NO_WSL));
+                        setStatusKey(Strings.STATUS_READY_NO_WSL);
                     }
                     return;
                 }
@@ -923,9 +945,9 @@ public final class MainPanel extends JPanel {
                     appendLog(I18n.t(Strings.LOG_DETECT_FOR_NEW));
                 }
                 refreshList();
-                setStatus(I18n.t(Strings.STATUS_READY_COUNT,
+                setStatusKey(Strings.STATUS_READY_COUNT,
                         Integer.valueOf(registry == null ? 0 : registry.getTools().size()),
-                        pendingDistro));
+                        pendingDistro);
             }
         }.execute();
     }
@@ -1050,13 +1072,13 @@ public final class MainPanel extends JPanel {
             // this reset, a user who closed the dialog once would never be guided
             // again on this machine, which is precisely the behaviour being fixed.
             dialogDismissedByUser = false;
-            setStatus(I18n.t(Strings.STATUS_READING_PROFILES));
+            setStatusKey(Strings.STATUS_READING_PROFILES);
             // 用户把下拉框改成了「虚拟机」——他明确要连虚拟机，这时该引导他填配置。
             // 这是 applyConnectionMode 才有的许可：打开面板恢复上次方式时走的是
             // loadDistroAsync，那里传的是 false。
             refreshSshList(true, true);
         } else {
-            setStatus(I18n.t(Strings.STATUS_LOOKING_WSL));
+            setStatusKey(Strings.STATUS_LOOKING_WSL);
             loadDistroAsync(null);
         }
     }
@@ -1212,11 +1234,11 @@ public final class MainPanel extends JPanel {
         try {
             vmadapt.core.ConnectionStore store = new vmadapt.core.ConnectionStore();
             if (store.removeDisplayed(name)) {
-                setStatus(I18n.t(Strings.STATUS_PROFILE_DELETED, name));
+                setStatusKey(Strings.STATUS_PROFILE_DELETED, name);
             } else {
                 // 没删成有两种原因：文件写不进去，或那条已经不在了（另开一个窗口删过）。
                 // 两者都如实说"删除失败"，不假装成功。
-                setStatus(I18n.t(Strings.ERR_PROFILE_DELETE_FAILED, name));
+                setStatusKey(Strings.ERR_PROFILE_DELETE_FAILED, name);
             }
         } catch (Exception ex) {
             setStatus(I18n.t(Strings.ERR_PROFILE_DELETE_FAILED, name) + " " + ex.getMessage());
@@ -1285,7 +1307,7 @@ public final class MainPanel extends JPanel {
                 try {
                     all = get();
                 } catch (Exception ex) {
-                    setStatus(I18n.t(Strings.STATUS_PROFILE_READ_FAILED, ex.getMessage()));
+                    setStatusKey(Strings.STATUS_PROFILE_READ_FAILED, ex.getMessage());
                     return;
                 }
                 adjustingMode = true;
@@ -1320,7 +1342,7 @@ public final class MainPanel extends JPanel {
                     // 选中项应当代表"当前用哪台机器"，而这里一台都没有。所以回退到
                     // 不选中任何东西，让这个框看起来是空的、只等用户去点新增。
                     distroBox.setSelectedIndex(-1);
-                    setStatus(I18n.t(Strings.STATUS_NO_PROFILE));
+                    setStatusKey(Strings.STATUS_NO_PROFILE);
                 } else {
                     // Prefer whatever was selected before, so a refresh does not
                     // silently move the user to a different machine.
@@ -1340,10 +1362,10 @@ public final class MainPanel extends JPanel {
                     // 配置。有选中项就直接说清楚它能用了。
                     Object sel = distroBox.getSelectedItem();
                     if (sel != null) {
-                        setStatus(I18n.t(Strings.STATUS_PROFILE_SELECTED, sel.toString()));
+                        setStatusKey(Strings.STATUS_PROFILE_SELECTED, sel.toString());
                     } else {
-                        setStatus(I18n.t(Strings.STATUS_PROFILES_LOADED,
-                                Integer.valueOf(all.size())));
+                        setStatusKey(Strings.STATUS_PROFILES_LOADED,
+                                Integer.valueOf(all.size()));
                     }
                 }
                 // Opening the dialog is decided by "has this machine ever connected
@@ -1436,8 +1458,8 @@ public final class MainPanel extends JPanel {
      */
     private void openNewConnectionWizard() {
         if (java.awt.GraphicsEnvironment.isHeadless()) {
-            setStatus(I18n.t(Strings.STATUS_NO_DISPLAY,
-                    "%USERPROFILE%\\.vmadapt\\connections.json"));
+            setStatusKey(Strings.STATUS_NO_DISPLAY,
+                    "%USERPROFILE%\\.vmadapt\\connections.json");
             return;
         }
         ensureConnectionPanel();
@@ -1489,8 +1511,8 @@ public final class MainPanel extends JPanel {
         if (java.awt.GraphicsEnvironment.isHeadless()) {
             // The profile path is a technical identifier, so it is passed as an
             // argument rather than baked into the translated sentence.
-            setStatus(I18n.t(Strings.STATUS_NO_DISPLAY,
-                    "%USERPROFILE%\\.vmadapt\\connections.json"));
+            setStatusKey(Strings.STATUS_NO_DISPLAY,
+                    "%USERPROFILE%\\.vmadapt\\connections.json");
             return;
         }
         if (connectionDialog == null) {
@@ -1686,7 +1708,7 @@ public final class MainPanel extends JPanel {
                 try {
                     setStatus(get());
                 } catch (Exception ex) {
-                    setStatus(I18n.t(Strings.STATUS_PROFILE_READ_FAILED, ex.getMessage()));
+                    setStatusKey(Strings.STATUS_PROFILE_READ_FAILED, ex.getMessage());
                     return;
                 }
                 // 切换目标之后自动加载。以前这里只写一行状态就让用户自己去点扫描，
@@ -1882,7 +1904,10 @@ public final class MainPanel extends JPanel {
         });
         JPanel cmdSouth = new JPanel(new java.awt.FlowLayout(
                 java.awt.FlowLayout.LEFT, 6, 2));
-        JLabel hint = new JLabel(I18n.t(Strings.HINT_COMMAND_AREA_LONG));
+        // 存成字段：这句话原来是个局部变量，于是语言切换够不着它，切完英文界面上
+        // 它还留着中文。凡是构造时按语言取过文字、之后又该跟着换的控件，都得留个引用。
+        commandHint = new JLabel(I18n.t(Strings.HINT_COMMAND_AREA_LONG));
+        JLabel hint = commandHint;
         UiTheme.role(hint, "muted");
         hint.setForeground(new Color(0x66, 0x66, 0x66));
         cmdSouth.add(hint);
@@ -2107,8 +2132,8 @@ public final class MainPanel extends JPanel {
                                 bioenv.core.Schema.Option.Kind kind) {
                 if (registry != null) {
                     registry.rememberCorrection(command, option, kind);
-                    setStatus(I18n.t(Strings.STATUS_REMEMBERED_TYPE,
-                            command, option, kind));
+                    setStatusKey(Strings.STATUS_REMEMBERED_TYPE,
+                            command, option, kind);
                 }
             }
         });
@@ -2175,11 +2200,11 @@ public final class MainPanel extends JPanel {
                 bioenv.core.Schema child =
                         registry.introspectSubcommand(selected, sub);
                 if (child != null) {
-                    setStatus(I18n.t(Strings.STATUS_SUB_OPTIONS, selected.command,
-                            sub.name, Integer.valueOf(child.options.size())));
+                    setStatusKey(Strings.STATUS_SUB_OPTIONS, selected.command,
+                            sub.name, Integer.valueOf(child.options.size()));
                 } else {
-                    setStatus(I18n.t(Strings.STATUS_SUB_NO_OPTIONS, selected.command,
-                            sub.name));
+                    setStatusKey(Strings.STATUS_SUB_NO_OPTIONS, selected.command,
+                            sub.name);
                 }
                 return child;
             }
@@ -2198,7 +2223,7 @@ public final class MainPanel extends JPanel {
                 Runner.Job job = currentJob;
                 if (job != null) {
                     job.cancel();
-                    setStatus(I18n.t(Strings.STATUS_CANCELLING));
+                    setStatusKey(Strings.STATUS_CANCELLING);
                 }
             }
         });
@@ -2601,9 +2626,9 @@ public final class MainPanel extends JPanel {
         // worker below rather than here; what is checked now is only enough to fail
         // fast with a clear message before the button is even disabled for long.
         if (sshMode) {
-            setStatus(I18n.t(Strings.STATUS_PREPARING_CONNECTION));
+            setStatusKey(Strings.STATUS_PREPARING_CONNECTION);
         } else {
-            setStatus(I18n.t(Strings.STATUS_LOOKING_WSL));
+            setStatusKey(Strings.STATUS_LOOKING_WSL);
         }
         // Takes over from whatever was loading: the panel may still be starting up,
         // and two reports interleaved in one log read as one printed twice.
@@ -2644,7 +2669,7 @@ public final class MainPanel extends JPanel {
                     applyDiscovery(get());
                 } catch (Exception ex) {
                     Throwable c = ex.getCause() == null ? ex : ex.getCause();
-                    setStatus(I18n.t(Strings.STATUS_DISCOVERY_FAILED, c.getMessage()));
+                    setStatusKey(Strings.STATUS_DISCOVERY_FAILED, c.getMessage());
                     appendLog(I18n.t(Strings.LOG_ERROR_PREFIX) + c);
                 }
             }
@@ -2656,7 +2681,7 @@ public final class MainPanel extends JPanel {
 
         EnvScanner.Report rep = dr.report;
         if (rep == null) {
-            setStatus(I18n.t(Strings.STATUS_DISCOVERY_NO_RESULT));
+            setStatusKey(Strings.STATUS_DISCOVERY_NO_RESULT);
             return;
         }
         if (!rep.condaOk) {
@@ -2682,7 +2707,7 @@ public final class MainPanel extends JPanel {
                 // 事后回看日志只见结论不见起因。
                 appendLog(I18n.t(Strings.LOG_REACH_HEAD));
                 appendLog(reachMessage(dr.reachState, dr.sshTarget));
-                setStatus(I18n.t(Strings.STATUS_VM_NOT_REACHABLE));
+                setStatusKey(Strings.STATUS_VM_NOT_REACHABLE);
             } else if (ssh) {
                 // Connected, but something below conda failed.
                 appendLog(I18n.t(Strings.LOG_UNREACHABLE_VM, dr.sshTarget.toDisplay()));
@@ -2750,14 +2775,14 @@ public final class MainPanel extends JPanel {
 
         refreshList();
         if (dr.scan != null) {
-            setStatus(I18n.t(Strings.STATUS_READY_ACROSS,
+            setStatusKey(Strings.STATUS_READY_ACROSS,
                     Integer.valueOf(dr.scan.toolsKept),
-                    Integer.valueOf(dr.scan.envsScanned)));
+                    Integer.valueOf(dr.scan.envsScanned));
         } else {
-            setStatus(I18n.t(Strings.STATUS_READY_COUNT,
+            setStatusKey(Strings.STATUS_READY_COUNT,
                     Integer.valueOf(dr.registry == null
                             ? 0 : dr.registry.getTools().size()),
-                    dr.chosen));
+                    dr.chosen);
         }
     }
 
@@ -2914,7 +2939,7 @@ public final class MainPanel extends JPanel {
             return;
         }
         introspecting = true;
-        setStatus(I18n.t(Strings.STATUS_READING_HELP, t.command));
+        setStatusKey(Strings.STATUS_READING_HELP, t.command);
         new SwingWorker<Void, Void>() {
             @Override
             protected Void doInBackground() {
@@ -2931,7 +2956,7 @@ public final class MainPanel extends JPanel {
                 formPanel.showTool(t);
                 updatePreview();
                 if (t.isOpaque()) {
-                    setStatus(I18n.t(Strings.STATUS_HELP_UNPARSED, t.command));
+                    setStatusKey(Strings.STATUS_HELP_UNPARSED, t.command);
                     appendLog("");
                     appendLog(I18n.t(Strings.LOG_HELP_UNPARSED, t.command));
                 } else {
@@ -3077,7 +3102,7 @@ public final class MainPanel extends JPanel {
         previewEdited = false;
         updatePreview();
         updatePreviewHint();
-        setStatus(I18n.t(Strings.STATUS_PREVIEW_REBUILT));
+        setStatusKey(Strings.STATUS_PREVIEW_REBUILT);
     }
 
     private void updateRunEnabled() {
@@ -3122,7 +3147,7 @@ public final class MainPanel extends JPanel {
         currentJob = job;
         runButton.setEnabled(false);
         stopButton.setEnabled(true);
-        setStatus(I18n.t(Strings.STATUS_RUNNING, tool.command));
+        setStatusKey(Strings.STATUS_RUNNING, tool.command);
         appendLog("");
         appendLog(I18n.t(Strings.LOG_RUN_STARTED, tool.command
                 + (subPath.isEmpty() ? "" : " " + subPath)));
@@ -3167,21 +3192,21 @@ public final class MainPanel extends JPanel {
                     String secs = String.format("%.1f", r.elapsedMillis / 1000.0);
                     if (r.cancelled) {
                         appendLog(I18n.t(Strings.LOG_RUN_CANCELLED, secs));
-                        setStatus(I18n.t(Strings.STATUS_CANCELLED));
+                        setStatusKey(Strings.STATUS_CANCELLED);
                     } else if (r.ok()) {
                         appendLog(I18n.t(Strings.LOG_RUN_FINISHED, secs));
-                        setStatus(I18n.t(Strings.STATUS_DONE_IN, secs));
+                        setStatusKey(Strings.STATUS_DONE_IN, secs);
                     } else {
                         appendLog(I18n.t(Strings.LOG_RUN_EXITED,
                                 Integer.valueOf(r.exitCode), secs));
-                        setStatus(I18n.t(Strings.STATUS_EXITED_CODE,
-                                Integer.valueOf(r.exitCode)));
+                        setStatusKey(Strings.STATUS_EXITED_CODE,
+                                Integer.valueOf(r.exitCode));
                         appendLog(I18n.t(Strings.LOG_RUN_HINT));
                     }
                 } catch (Exception ex) {
                     Throwable c = ex.getCause() == null ? ex : ex.getCause();
                     appendLog(I18n.t(Strings.LOG_ERROR_PREFIX) + c);
-                    setStatus(I18n.t(Strings.STATUS_FAILED, c.getMessage()));
+                    setStatusKey(Strings.STATUS_FAILED, c.getMessage());
                 }
             }
         }.execute();
@@ -3327,7 +3352,7 @@ public final class MainPanel extends JPanel {
         assistant.setOnSave(new Runnable() {
             @Override
             public void run() {
-                setStatus(I18n.t(Strings.ASSISTANT_SAVED, command));
+                setStatusKey(Strings.ASSISTANT_SAVED, command);
                 window.dispose();
             }
         });
@@ -3361,9 +3386,9 @@ public final class MainPanel extends JPanel {
                     && registry.relearn(selected, editor.scope());
             if (ok) {
                 refreshForm();
-                setStatus(I18n.t(Strings.STATUS_HELP_REREAD));
+                setStatusKey(Strings.STATUS_HELP_REREAD);
             } else {
-                setStatus(I18n.t(Strings.STATUS_HELP_REREAD_FAILED));
+                setStatusKey(Strings.STATUS_HELP_REREAD_FAILED);
             }
             return;
         }
@@ -3400,7 +3425,7 @@ public final class MainPanel extends JPanel {
                     Integer.valueOf(renamed)));
         }
         if (status.length() == 0) {
-            setStatus(I18n.t(Strings.STATUS_PARAMS_UPDATED));
+            setStatusKey(Strings.STATUS_PARAMS_UPDATED);
         } else {
             appendLog(status.toString());
             setStatus(status.toString());
@@ -3436,7 +3461,23 @@ public final class MainPanel extends JPanel {
     // ------------------------------------------------------------------
 
     private void setStatus(String text) {
-        statusText.set(text == null ? "" : text);
+        statusKey.set(null);
+        statusArgs.set(null);
+        statusRaw.set(text == null ? "" : text);
+        FileDialogs.onEdt(applyStatus);
+    }
+
+    /**
+     * 状态栏文案按<b>键</b>设置，语言一变就能重新渲染。
+     *
+     * <p>凡是"会一直留在屏幕上"的状态都该走这里，而不是先 {@code I18n.t(...)} 再
+     * {@link #setStatus(String)}：后者把当时的语言烤进了字符串，切语言之后没人能把它
+     * 翻译回来。
+     */
+    private void setStatusKey(String key, Object... args) {
+        statusKey.set(key);
+        statusArgs.set(args == null || args.length == 0 ? null : args);
+        statusRaw.set("");
         FileDialogs.onEdt(applyStatus);
     }
 
@@ -3452,14 +3493,43 @@ public final class MainPanel extends JPanel {
      * 这不是绕过问题：一个已经没有 jar 支撑的实例确实什么都做不了，能安静地
      * 退场就是它应有的行为。
      */
-    private final java.util.concurrent.atomic.AtomicReference<String> statusText =
+    /**
+     * 状态栏当前那句话的<b>来源</b>：键 + 参数，而不是渲染好的字符串。
+     *
+     * <p>原来只存渲染好的字符串，于是切语言之后它停在旧语言上——那句话是上一次
+     * 动作发生时的语言写的，之后没人重算。存键和参数就能在语言变化时重新渲染一遍，
+     * 而这正是"就绪。389 个命令可用，来自 Ubuntu。"这类<b>会留在屏幕上</b>的文字需要的。
+     *
+     * <p>非键的原文（少数几处直接拼字符串的调用）走 {@link #statusRaw}。
+     *
+     * <p>存数据而不是存一个每次调用都 new 的 Runnable，是因为上面那条约束：新 Runnable
+     * 会带来一个新的匿名类，插件重装时旧实例再想加载它就取不到了。这里只换引用，
+     * 渲染交给预先建好的 {@link #applyStatus}。
+     */
+    private final java.util.concurrent.atomic.AtomicReference<String> statusKey =
+            new java.util.concurrent.atomic.AtomicReference<String>(null);
+    private final java.util.concurrent.atomic.AtomicReference<Object[]> statusArgs =
+            new java.util.concurrent.atomic.AtomicReference<Object[]>(null);
+    private final java.util.concurrent.atomic.AtomicReference<String> statusRaw =
             new java.util.concurrent.atomic.AtomicReference<String>("");
     private final Runnable applyStatus = new Runnable() {
         @Override
         public void run() {
-            statusLabel.setText(statusText.get());
+            String key = statusKey.get();
+            if (key != null) {
+                Object[] args = statusArgs.get();
+                statusLabel.setText(args == null || args.length == 0
+                        ? I18n.t(key) : I18n.t(key, args));
+            } else {
+                statusLabel.setText(statusRaw.get());
+            }
         }
     };
+
+    /** 按当前语言重新渲染状态栏。语言切换时调用。 */
+    private void refreshStatusText() {
+        FileDialogs.onEdt(applyStatus);
+    }
 
     /**
      * 待写入日志的行：{@code [是否先换行, 文本]}。

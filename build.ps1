@@ -170,6 +170,7 @@ try {
         'bioenv.test.SshNoProfileMessageTest',
         'bioenv.test.ConnectionModeRememberedTest',
         'bioenv.test.ConnectionEntryPointsTest',
+        'bioenv.test.LanguageSwitchTest',
         'bioenv.test.MultiChannelCacheTest',
         'bioenv.test.ProbeRouteTest',
         'bioenv.test.IncrementalScanTest',

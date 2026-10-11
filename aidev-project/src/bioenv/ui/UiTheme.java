@@ -142,16 +142,13 @@ public final class UiTheme {
         return tokens.flat;
     }
 
-    /** 菜单上显示的名字。 */
-    public static String label(String id) {
-        if (PERSONAL.equals(id)) {
-            return "浅色";
-        }
-        if (DARK.equals(id)) {
-            return "深色";
-        }
-        return "经典";
-    }
+    /**
+     * 三套风格各自的界面名字见 {@code Strings.THEME_*}，由 {@link ThemeSwitcher} 取用。
+     *
+     * <p>这里原来有一个 {@code label(id)} 返回写死的中文。名字是界面文案，不是画法，
+     * 放在这个纯画法与取值的类里会让它被迫依赖 {@code bioenv.i18n}——而它一直刻意
+     * 不依赖。那个方法全项目只有风格切换器一个调用者，所以跟着调用者搬走了。
+     */
 
     public static String[] all() {
         return new String[]{CLASSIC, PERSONAL, DARK};
