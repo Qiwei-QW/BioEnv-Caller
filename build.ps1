@@ -171,6 +171,7 @@ try {
         'bioenv.test.ConnectionModeRememberedTest',
         'bioenv.test.ConnectionEntryPointsTest',
         'bioenv.test.LanguageSwitchTest',
+        'bioenv.test.LinuxDirListTest',
         'bioenv.test.MultiChannelCacheTest',
         'bioenv.test.ProbeRouteTest',
         'bioenv.test.IncrementalScanTest',

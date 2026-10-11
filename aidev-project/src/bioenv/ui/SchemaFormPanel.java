@@ -2242,7 +2242,10 @@ public final class SchemaFormPanel extends JPanel {
         makeWorkButton.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                makeLinuxWorkdir();
+                // 原来是"自动建一个带时间戳的目录"。那既不让人看见远端长什么样，
+                // 也没法选已有的目录 —— 现在改成打开浏览窗口（版式对齐 Windows 的
+                // 「打开」窗口），用户能进能退、能新建、也能直接挑一个现成的。
+                browseLinuxWorkdir();
             }
         });
         buttons.add(makeWorkButton);
@@ -2254,6 +2257,7 @@ public final class SchemaFormPanel extends JPanel {
         JButton browse = new JButton(WindowsMark.shared());
         browse.setMargin(new Insets(1, 5, 1, 5));
         browse.setName("bioenv.chooseWorkdir");
+        chooseWorkdirButton = browse;
         browse.setToolTipText(I18n.t(Strings.FORM_CHOOSE_WORKDIR));
         browse.getAccessibleContext().setAccessibleName(
                 I18n.t(Strings.FORM_CHOOSE_WORKDIR));
@@ -2274,6 +2278,11 @@ public final class SchemaFormPanel extends JPanel {
             }
         });
         buttons.add(browse);
+        chooseWorkdirButton = browse;
+        // 建好之后立刻按当前通道摆一次。setRemoteChannel 可能在按钮存在之前就被调用过
+        // （宿主在构造早期设的），那时它只能记下标志、碰不到控件；所以这里要补一次，
+        // 否则 SSH 下那个按钮照样显示出来。
+        applyWorkdirButtonVisibility();
         row.add(buttons, BorderLayout.EAST);
 
         // 标签独立一行，输入框在下一行占满宽度：路径通常很长，和标签挤一行时
@@ -2480,6 +2489,47 @@ public final class SchemaFormPanel extends JPanel {
      * themselves: the plugin knows the home directory, and the user would otherwise
      * have to open a terminal to find out what to type.
      */
+    /**
+     * 打开浏览窗口选一个 Linux 侧的目录，把选中的路径写进工作目录。
+     *
+     * <p>浏览窗口由宿主提供（见 {@link DirBrowser}），因为面板不该知道怎么连过去。
+     * 窗口返回 null 表示取消——此时<b>保持原值不动</b>，而不是把框清空。
+     */
+    private void browseLinuxWorkdir() {
+        if (dirBrowser == null) {
+            javax.swing.JOptionPane.showMessageDialog(this,
+                    I18n.t(Strings.FORM_NO_WSL_FOR_WORKDIR));
+            return;
+        }
+        String start = workdirField.getText().trim();
+        String picked = dirBrowser.browse(currentTransport,
+                SchemaFormPanel.this, start.isEmpty() ? null : start);
+        if (picked != null && !picked.trim().isEmpty()) {
+            workdirField.setText(picked.trim());
+            fireChange();
+        }
+    }
+
+    /**
+     * 当前通道对象，由宿主通过 {@link #setTransport} 放进来。
+     *
+     * <p>类型是 {@code Object} 而不是 {@code bioenv.core.Transport}：这个面板与传输层
+     * 之间只通过若干小接口打交道，不为一个参数把整个 core 依赖引进来。宿主知道它装的
+     * 是什么。
+     */
+    public void setTransport(Object transport) {
+        this.currentTransport = transport;
+    }
+
+    private Object currentTransport;
+
+    /** SSH 下藏起"选本机目录"那个按钮；WSL 下才显示。 */
+    private void applyWorkdirButtonVisibility() {
+        if (chooseWorkdirButton != null) {
+            chooseWorkdirButton.setVisible(!remoteChannel);
+        }
+    }
+
     private void makeLinuxWorkdir() {
         if (workdirMaker == null) {
             javax.swing.JOptionPane.showMessageDialog(this,
@@ -2652,6 +2702,46 @@ public final class SchemaFormPanel extends JPanel {
     public void setWorkdirMaker(WorkdirMaker maker) {
         this.workdirMaker = maker;
     }
+
+    /**
+     * 浏览 Linux 侧的目录，用来选工作目录。
+     *
+     * <p>为什么要有这个口子：工作目录是<b>远端</b> Linux 上的一条路径，而面板不该知道
+     * 怎么连过去（WSL 还是 SSH）。WSL 与 SSH 都实现了 {@code Transport.runBashCapture}，
+     * 所以宿主那边一套实现就够了。
+     */
+    public interface DirBrowser {
+        /**
+         * 弹出浏览窗口。
+         *
+         * @param transport 当前通道；宿主自己知道该给哪一个
+         * @param parent    父窗口
+         * @param startDir  初始目录
+         * @return 用户选的绝对路径；取消返回 null
+         */
+        String browse(Object transport, java.awt.Component parent, String startDir);
+    }
+
+    public void setDirBrowser(DirBrowser browser) {
+        this.dirBrowser = browser;
+    }
+
+    private DirBrowser dirBrowser;
+
+    /**
+     * 当前通道是否<b>不是本机</b>（也就是 SSH）。
+     *
+     * <p>面板据此决定要不要显示那个"选本机目录"的按钮：WSL 下本机与 Linux 之间有共享
+     * （{@code /mnt/c}），选本机目录是有意义的；SSH 下远端看不到本机的 {@code C:\}，
+     * 那个按钮只会把一条在本机才成立的路径塞进远端的工作目录。
+     */
+    public void setRemoteChannel(boolean remote) {
+        this.remoteChannel = remote;
+        applyWorkdirButtonVisibility();
+    }
+
+    private boolean remoteChannel;
+    private JButton chooseWorkdirButton;
 
     private WorkdirMaker workdirMaker;
 

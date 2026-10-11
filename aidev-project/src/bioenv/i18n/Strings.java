@@ -157,6 +157,34 @@ public final class Strings {
     /** 语言切换工具提示。 */
     public static final String LANG_TOOLTIP = "lang.tooltip";
 
+    // ------------------------------------------------------------------
+    // 浏览 Linux 目录的对话框（布局对齐 Windows 的「打开」窗口）
+    // ------------------------------------------------------------------
+
+    public static final String DIR_TITLE = "dir.title";
+    public static final String DIR_LOOK_IN = "dir.lookIn";
+    public static final String DIR_FOLDER_NAME = "dir.folderName";
+    public static final String DIR_FILE_TYPE = "dir.fileType";
+    public static final String DIR_TYPE_FOLDERS = "dir.typeFolders";
+    public static final String DIR_UP = "dir.up";
+    public static final String DIR_HOME = "dir.home";
+    public static final String DIR_MKDIR = "dir.mkdir";
+    public static final String DIR_VIEW_LIST = "dir.viewList";
+    public static final String DIR_VIEW_DETAILS = "dir.viewDetails";
+    public static final String DIR_OPEN = "dir.open";
+    public static final String DIR_CANCEL = "dir.cancel";
+    public static final String DIR_CHOOSE = "dir.choose";
+    public static final String DIR_LOADING = "dir.loading";
+    public static final String DIR_LOAD_FAILED = "dir.loadFailed";
+    public static final String DIR_EMPTY = "dir.empty";
+    public static final String DIR_COUNT = "dir.count";
+    public static final String DIR_NO_CHANNEL = "dir.noChannel";
+    public static final String DIR_MKDIR_PROMPT = "dir.mkdirPrompt";
+    public static final String DIR_MKDIR_BAD_NAME = "dir.mkdirBadName";
+    public static final String DIR_COL_NAME = "dir.colName";
+    public static final String DIR_COL_PERMS = "dir.colPerms";
+    public static final String DIR_COL_MODIFIED = "dir.colModified";
+
     /**
      * 风格切换器上的三套风格名，以及它的工具提示。
      *
@@ -1025,6 +1053,36 @@ public final class Strings {
         put(ZH_TEXT, EN_TEXT, THEME_DARK, "深色", "Dark");
         put(ZH_TEXT, EN_TEXT, THEME_TOOLTIP, "切换界面风格：经典 / 浅色 / 深色",
                 "Switch interface style: Classic / Light / Dark");
+
+        put(ZH_TEXT, EN_TEXT, DIR_TITLE, "选择 Linux 上的目录", "Choose a folder on Linux");
+        put(ZH_TEXT, EN_TEXT, DIR_LOOK_IN, "查找：", "Look in:");
+        put(ZH_TEXT, EN_TEXT, DIR_FOLDER_NAME, "文件夹名：", "Folder name:");
+        put(ZH_TEXT, EN_TEXT, DIR_FILE_TYPE, "文件类型：", "Files of type:");
+        // 这个下拉在这个对话框里没有筛选作用——它只列目录。放一项在这儿是为了
+        // 版式和 Windows 的「打开」窗口一致，而不是留一个空控件让人以为坏了。
+        put(ZH_TEXT, EN_TEXT, DIR_TYPE_FOLDERS, "文件夹", "Folders");
+        put(ZH_TEXT, EN_TEXT, DIR_UP, "向上一级", "Up one level");
+        put(ZH_TEXT, EN_TEXT, DIR_HOME, "主目录", "Home");
+        put(ZH_TEXT, EN_TEXT, DIR_MKDIR, "新建文件夹", "New folder");
+        put(ZH_TEXT, EN_TEXT, DIR_VIEW_LIST, "列表", "List");
+        put(ZH_TEXT, EN_TEXT, DIR_VIEW_DETAILS, "详细信息", "Details");
+        put(ZH_TEXT, EN_TEXT, DIR_OPEN, "打开", "Open");
+        put(ZH_TEXT, EN_TEXT, DIR_CANCEL, "取消", "Cancel");
+        put(ZH_TEXT, EN_TEXT, DIR_CHOOSE, "选择这个目录", "Choose this folder");
+        put(ZH_TEXT, EN_TEXT, DIR_LOADING, "正在读取…", "Reading...");
+        put(ZH_TEXT, EN_TEXT, DIR_LOAD_FAILED, "读取失败：{0}", "Could not read: {0}");
+        put(ZH_TEXT, EN_TEXT, DIR_EMPTY, "（这里没有子目录）", "(no sub-folders here)");
+        put(ZH_TEXT, EN_TEXT, DIR_COUNT, "共 {0} 个子目录", "{0} sub-folders");
+        put(ZH_TEXT, EN_TEXT, DIR_NO_CHANNEL,
+                "还没有建立到 Linux 侧的连接。请先连上再选目录。",
+                "Not connected to the Linux side yet. Connect first, then pick a folder.");
+        put(ZH_TEXT, EN_TEXT, DIR_MKDIR_PROMPT, "新文件夹的名字：", "Name for the new folder:");
+        put(ZH_TEXT, EN_TEXT, DIR_MKDIR_BAD_NAME,
+                "名字里不能带「/」。要建多层目录，请先进到上层再建。",
+                "The name cannot contain \"/\". To nest folders, go into the parent first.");
+        put(ZH_TEXT, EN_TEXT, DIR_COL_NAME, "名称", "Name");
+        put(ZH_TEXT, EN_TEXT, DIR_COL_PERMS, "权限", "Permissions");
+        put(ZH_TEXT, EN_TEXT, DIR_COL_MODIFIED, "修改时间", "Modified");
 
         // --- MainPanel：按钮 ---
         put(ZH_TEXT, EN_TEXT, MENU_RUN, "运行", "Run");

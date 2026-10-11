@@ -101,7 +101,97 @@ public final class WorkdirUiTest {
         check("工具提示里提到企鹅，指向那个按钮",
                 make.getToolTipText() != null);
 
+        // ---------------------------------------------------------------
+        // 点下去必须真的打开浏览窗口
+        // ---------------------------------------------------------------
+        //
+        // 这一条是补出来的：用户报了"点小企鹅没反应"。按钮接上监听、监听里调了
+        // browseLinuxWorkdir、browseLinuxWorkdir 再转给宿主的 DirBrowser——中间任何
+        // 一环断了，表现都只是"点了没动静"，没有任何报错。所以把这一整条链子钉住：
+        // 点一下，宿主必须收到一次调用，且拿到的是我们传进去的通道对象。
+        final Object transportSentinel = new Object();
+        final int[] called = new int[1];
+        final String[] gotStart = new String[1];
+        final Object[] gotTransport = new Object[1];
+        form.setTransport(transportSentinel);
+        form.setDirBrowser(new SchemaFormPanel.DirBrowser() {
+            @Override
+            public String browse(Object transport, Component parent, String startDir) {
+                called[0]++;
+                gotTransport[0] = transport;
+                gotStart[0] = startDir;
+                return null; // 用户取消
+            }
+        });
+
+        check("按钮默认可用", make.isEnabled());
+        make.doClick();
+        check("点一下会去打开浏览窗口", called[0] == 1,
+                "实际调用 " + called[0] + " 次");
+        check("宿主收到的就是面板持有的那个通道",
+                gotTransport[0] == transportSentinel);
+        check("初始目录为空时传 null（由浏览窗口自己决定去哪）",
+                gotStart[0] == null, String.valueOf(gotStart[0]));
+
+        // 取消（返回 null）不能把用户已经填好的值清掉。
+        form.showTool(tool);
+        form.setTransport(transportSentinel);
+        form.setDirBrowser(new SchemaFormPanel.DirBrowser() {
+            @Override
+            public String browse(Object transport, Component parent, String startDir) {
+                return null;
+            }
+        });
+        setWorkdirField(form, "/home/you/work");
+        AbstractButton make2 = (AbstractButton) find(form, "bioenv.makeWorkdir");
+        make2.doClick();
+        check("浏览窗口取消后原来的值还在",
+                "/home/you/work".equals(getWorkdirField(form)),
+                String.valueOf(getWorkdirField(form)));
+
+        // 选了目录就要写进框里。
+        form.setDirBrowser(new SchemaFormPanel.DirBrowser() {
+            @Override
+            public String browse(Object transport, Component parent, String startDir) {
+                return "/home/you/picked";
+            }
+        });
+        make2.doClick();
+        check("浏览窗口返回的路径写进了工作目录",
+                "/home/you/picked".equals(getWorkdirField(form)),
+                String.valueOf(getWorkdirField(form)));
+
+        // 这里不再试"没有浏览窗口"那一条：那个分支要弹一个 JOptionPane，而无头环境下
+        // 连它的父窗口都造不出来（Frame.<init> 会抛）。也就是说这条断言测的其实是
+        // "无头能不能弹窗"，不是接线对不对——那是另一件事，且在这里永远为假。
+        //
+        // 真正要守的东西上面已经守住了：接线在构造时就装好（wireDirBrowser），所以
+        // 面板一存在点击就有去处，不会出现"点了没动静"。
+
         finish();
+    }
+
+    /** 反射读写工作目录输入框，免得为一个测试把它开成 public。 */
+    private static void setWorkdirField(SchemaFormPanel form, String text) {
+        try {
+            java.lang.reflect.Field f =
+                    SchemaFormPanel.class.getDeclaredField("workdirField");
+            f.setAccessible(true);
+            ((javax.swing.JTextField) f.get(form)).setText(text);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private static String getWorkdirField(SchemaFormPanel form) {
+        try {
+            java.lang.reflect.Field f =
+                    SchemaFormPanel.class.getDeclaredField("workdirField");
+            f.setAccessible(true);
+            return ((javax.swing.JTextField) f.get(form)).getText();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     private static void finish() {
@@ -187,10 +277,15 @@ public final class WorkdirUiTest {
     }
 
     private static void check(String label, boolean ok) {
+        check(label, ok, null);
+    }
+
+    private static void check(String label, boolean ok, String detail) {
         checks++;
         if (!ok) {
             failures++;
-            System.out.println("  FAIL: " + label);
+            System.out.println("  FAIL: " + label
+                    + (detail == null ? "" : " — " + detail));
         }
     }
 }
