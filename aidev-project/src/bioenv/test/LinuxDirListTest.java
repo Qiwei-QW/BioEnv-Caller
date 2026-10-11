@@ -35,6 +35,7 @@ public final class LinuxDirListTest {
         scripts();
         parsing();
         paths();
+        files();
 
         System.out.println(failures == 0
                 ? "PASS " + checks + " checks"
@@ -157,6 +158,44 @@ public final class LinuxDirListTest {
                 LinuxDirList.childOf("/home/you/", "data"));
         eq("根下拼子路径", "/data", LinuxDirList.childOf("/", "data"));
         eq("空父目录当根", "/data", LinuxDirList.childOf("", "data"));
+    }
+
+    /** 选文件时的列举：目录和文件都要，且能按名字过滤。 */
+    private static void files() {
+        String s = LinuxDirList.filesScript("/home/you", null);
+        check("列文件也要回显绝对路径", s.contains("pwd -P"));
+        check("列文件也要能报「进不去」", s.contains(LinuxDirList.NO_SUCH_DIR));
+
+        // 过滤值里的 / 必须转义，否则 sed 表达式会被它截断成另一回事。
+        String f = LinuxDirList.filesScript("/home/you", "a/b");
+        check("过滤值里的斜杠被转义", !f.contains("*a/b*"), f);
+
+        // 目录与文件要分开：目录是走进去用的，文件是选来用的。
+        LinuxDirList.Listing got = LinuxDirList.parseFiles(
+                Arrays.asList("/home/you", "sub/", "data.fa", "ref.gtf"),
+                Collections.<String>emptyList(), 0);
+        check("目录进了 dirs", got.dirs.equals(Collections.singletonList("sub")),
+                got.dirs.toString());
+        check("文件进了 files", got.files.size() == 2, got.files.toString());
+        check("目录没有被当成文件", !got.files.contains("sub"), got.files.toString());
+        check("文件里没有残留的斜杠",
+                !got.files.get(0).endsWith("/"), got.files.toString());
+        check("文件已排序",
+                Arrays.asList("data.fa", "ref.gtf").equals(got.files),
+                got.files.toString());
+
+        // 空目录是正常的，不是错误。
+        LinuxDirList.Listing empty = LinuxDirList.parseFiles(
+                Collections.singletonList("/home/you"),
+                Collections.<String>emptyList(), 0);
+        check("没有文件时仍然算成功", empty.ok(), empty.problem);
+        check("没有文件时 files 为空", empty.files.isEmpty());
+
+        // 进不去时不该被当成"这个目录里没东西"。
+        LinuxDirList.Listing bad = LinuxDirList.parseFiles(
+                Collections.<String>emptyList(),
+                Collections.singletonList(LinuxDirList.NO_SUCH_DIR), 3);
+        check("进不去时算失败（不是「没有文件」）", !bad.ok(), bad.problem);
     }
 
     // ------------------------------------------------------------------

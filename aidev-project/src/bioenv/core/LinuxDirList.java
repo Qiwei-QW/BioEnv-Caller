@@ -76,6 +76,8 @@ public final class LinuxDirList {
         public String path = "";
         /** 子目录名，已排序。 */
         public final List<String> dirs = new ArrayList<String>();
+        /** 文件名，已排序；只有 {@link #parseFiles} 会填。 */
+        public final List<String> files = new ArrayList<String>();
         /** 详细信息视图的行；只有 {@link #parseDetails} 会填。 */
         public final List<Entry> entries = new ArrayList<Entry>();
         /** 失败原因；成功时为空串。 */
@@ -237,6 +239,109 @@ public final class LinuxDirList {
             out.dirs.add(e.name);
         }
         Collections.sort(out.dirs, String.CASE_INSENSITIVE_ORDER);
+        return out;
+    }
+
+    // ------------------------------------------------------------------
+    // 选文件（而不只是选目录）
+    // ------------------------------------------------------------------
+
+    /**
+     * 列出一个目录下的<b>目录和文件</b>，供选文件时用。
+     *
+     * <p>和 {@link #script} 的区别：那个只列目录（挑工作目录用），这里两者都要——目录是
+     * 用来走进去的，文件才是能选的东西。{@code ls -1p} 给目录加了 {@code /} 后缀，正好
+     * 把两者分开，不需要额外问远端。
+     *
+     * <p>{@code nameContains} 非空时按名字做<b>子串</b>过滤，在<b>远端</b>过滤。大目录
+     * （一个测序数据目录动辄上千个文件）不该整份传回来再筛——一次往返能省几秒。
+     * 过滤只作用于文件，目录一律保留，否则筛一下就进不去子目录了。
+     */
+    public static String filesScript(String dir, String nameContains) {
+        String target = (dir == null || dir.trim().isEmpty()) ? "~" : dir.trim();
+        String quoted = vmadapt.core.RemoteFiles.expandHomeTemplate(target);
+        // 过滤值经 sed 的 s 命令要转义，否则用户输入里的 / 或 & 会把表达式弄坏。
+        String filter = nameContains == null ? "" : nameContains.trim();
+        String filterLine = "";
+        if (!filter.isEmpty()) {
+            StringBuilder esc = new StringBuilder();
+            for (int i = 0; i < filter.length(); i++) {
+                char ch = filter.charAt(i);
+                if (ch == '/' || ch == '&' || ch == '\\' || ch == '\n') {
+                    esc.append('\\');
+                }
+                esc.append(ch);
+            }
+            // -F 固定字符串匹配，避免用户输入里的 . * [ 被当成正则。
+            filterLine = "  case \"$e\" in */) ;; *) "
+                    + "case \"$e\" in *" + esc + "*) ;; *) continue ;; esac ;; esac\n";
+        }
+        return "d=" + quoted + "\n"
+                + "if ! cd \"$d\" 2>/dev/null; then\n"
+                + "  echo '__TBVM_NO_SUCH_DIR__' >&2\n"
+                + "  exit 3\n"
+                + "fi\n"
+                + "pwd -P\n"
+                + "for e in * .[!.]*; do\n"
+                + "  [ -e \"$e\" ] || continue\n"
+                + filterLine
+                + "  printf '%s\\n' \"$e\"\n"
+                + "done\n"
+                + "exit 0\n";
+    }
+
+    /**
+     * 解析 {@link #filesScript} 的输出。
+     *
+     * <p>沿用 {@link Listing}：{@code dirs} 放<b>子目录</b>名，{@code files} 放<b>文件</b>名。
+     * 两者分开是因为它们在界面上的行为完全不同——目录是点进去的，文件是选中带走的。
+     */
+    public static Listing parseFiles(List<String> stdout, List<String> stderr, int exit) {
+        // 这里<b>不能</b>复用 parse() 的分类。
+        //
+        // parse() 是给"只列目录"的脚本写的：它拿第一行当路径，之后每一行都当成目录名
+        // （因为那个脚本在远端已经用 grep 筛过了）。把它套到文件输出上，文件会全部
+        // 落进 dirs、files 一个都没有——这正是这条测试第一次跑就抓到的。
+        //
+        // parseDetails() 依赖 parse() 那个宽松行为（详情输出的名字不带斜杠），所以也
+        // 不能反过来把 parse() 改成"必须有斜杠才算目录"。两类输出各拆各的。
+        Listing out = new Listing();
+        List<String> err = stderr == null ? Collections.<String>emptyList() : stderr;
+        for (String line : err) {
+            if (line != null && line.contains(NO_SUCH_DIR)) {
+                out.problem = "目录不存在，或者没有权限进入。";
+                return out;
+            }
+        }
+        if (stdout == null || stdout.isEmpty()) {
+            out.problem = exit == 0
+                    ? "没有拿到回显（目录可能不可读）。"
+                    : "列目录失败（退出码 " + exit + "）。";
+            return out;
+        }
+        out.path = stdout.get(0) == null ? "" : stdout.get(0).trim();
+        if (out.path.isEmpty() || !out.path.startsWith("/")) {
+            out.problem = "回显的路径不像绝对路径：" + out.path;
+            return out;
+        }
+        for (int i = 1; i < stdout.size(); i++) {
+            String line = stdout.get(i);
+            if (line == null) {
+                continue;
+            }
+            String name = line.trim();
+            if (name.isEmpty() || ".".equals(name) || "..".equals(name)) {
+                continue;
+            }
+            if (name.endsWith("/")) {
+                // ls -1p 给目录加了 "/" 后缀，去掉它才是名字。
+                out.dirs.add(name.substring(0, name.length() - 1));
+            } else {
+                out.files.add(name);
+            }
+        }
+        Collections.sort(out.dirs, String.CASE_INSENSITIVE_ORDER);
+        Collections.sort(out.files, String.CASE_INSENSITIVE_ORDER);
         return out;
     }
 }

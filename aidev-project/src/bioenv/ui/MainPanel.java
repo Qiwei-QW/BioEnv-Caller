@@ -345,6 +345,17 @@ public final class MainPanel extends JPanel {
      * 不需要按通道分叉。
      */
     private void wireDirBrowser() {
+        // 同一个窗口既能挑目录（工作目录），也能挑文件（参数）。
+        formPanel.setFileBrowser(new SchemaFormPanel.FileBrowser() {
+            @Override
+            public java.util.List<String> browseFiles(Object transport, String startDir,
+                                                      boolean multi, boolean save) {
+                return transport instanceof Transport
+                        ? LinuxFileChooser.open((Transport) transport, startDir,
+                                multi, save)
+                        : new java.util.ArrayList<String>();
+            }
+        });
         formPanel.setDirBrowser(new SchemaFormPanel.DirBrowser() {
             @Override
             public String browse(Object transport, java.awt.Component parent,

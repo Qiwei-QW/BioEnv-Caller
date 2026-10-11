@@ -185,6 +185,24 @@ public final class Strings {
     public static final String DIR_COL_PERMS = "dir.colPerms";
     public static final String DIR_COL_MODIFIED = "dir.colModified";
 
+    // ------------------------------------------------------------------
+    // 选文件的二选一，以及 Linux 侧的文件窗口
+    // ------------------------------------------------------------------
+
+    /** 「...」按钮弹出的两项。 */
+    public static final String PICK_WINDOWS_FILE = "pick.windowsFile";
+    public static final String PICK_LINUX_FILE = "pick.linuxFile";
+    public static final String PICK_CHOOSER_TITLE = "pick.chooserTitle";
+    /** Linux 侧文件窗口的标题与文案。 */
+    public static final String FILE_TITLE = "file.title";
+    public static final String FILE_NAME_LABEL = "file.nameLabel";
+    public static final String FILE_FILTER = "file.filter";
+    public static final String FILE_FILTER_TIP = "file.filterTip";
+    public static final String FILE_NO_FILES = "file.noFiles";
+    public static final String FILE_COUNT = "file.count";
+    public static final String FILE_SELECTED = "file.selected";
+    public static final String FILE_SAVE_HINT = "file.saveHint";
+
     /**
      * 风格切换器上的三套风格名，以及它的工具提示。
      *
@@ -1083,6 +1101,25 @@ public final class Strings {
         put(ZH_TEXT, EN_TEXT, DIR_COL_NAME, "名称", "Name");
         put(ZH_TEXT, EN_TEXT, DIR_COL_PERMS, "权限", "Permissions");
         put(ZH_TEXT, EN_TEXT, DIR_COL_MODIFIED, "修改时间", "Modified");
+
+        put(ZH_TEXT, EN_TEXT, PICK_WINDOWS_FILE, "Windows 上的文件…",
+                "A file on Windows...");
+        put(ZH_TEXT, EN_TEXT, PICK_LINUX_FILE, "Linux 工作目录里的文件…",
+                "A file in the Linux working directory...");
+        put(ZH_TEXT, EN_TEXT, PICK_CHOOSER_TITLE, "选择哪一侧的文件", "Where is the file?");
+        put(ZH_TEXT, EN_TEXT, FILE_TITLE, "选择 Linux 上的文件", "Choose a file on Linux");
+        put(ZH_TEXT, EN_TEXT, FILE_NAME_LABEL, "文件名：", "File name:");
+        put(ZH_TEXT, EN_TEXT, FILE_FILTER, "筛选：", "Filter:");
+        put(ZH_TEXT, EN_TEXT, FILE_FILTER_TIP,
+                "按名字包含的文字过滤。目录不受影响，仍然可以进去。",
+                "Show only names containing this text. Directories are unaffected.");
+        put(ZH_TEXT, EN_TEXT, FILE_NO_FILES, "（这个目录里没有文件）",
+                "(no files in this directory)");
+        put(ZH_TEXT, EN_TEXT, FILE_COUNT, "{0} 个文件", "{0} files");
+        put(ZH_TEXT, EN_TEXT, FILE_SELECTED, "已选 {0} 个", "{0} selected");
+        put(ZH_TEXT, EN_TEXT, FILE_SAVE_HINT,
+                "在左边选一个目录，再在下面填文件名。",
+                "Pick a directory on the left, then type a file name below.");
 
         // --- MainPanel：按钮 ---
         put(ZH_TEXT, EN_TEXT, MENU_RUN, "运行", "Run");

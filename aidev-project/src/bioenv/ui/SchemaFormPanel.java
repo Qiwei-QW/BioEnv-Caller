@@ -2118,27 +2118,41 @@ public final class SchemaFormPanel extends JPanel {
                 JButton browse = new JButton("...");
                 browse.setMargin(new Insets(0, 6, 0, 6));
                 browse.setToolTipText(chooserHint(directory, multi, save));
+                final boolean wantDirectory = directory;
                 browse.addActionListener(new ActionListener() {
                     @Override
                     public void actionPerformed(ActionEvent e) {
-                        if (multi) {
-                            java.util.List<java.io.File> files =
-                                    FileDialogs.chooseMany(HintText.realText(field),
-                                            SchemaFormPanel.this);
-                            if (!files.isEmpty()) {
-                                HintText.clear(field);
-                                field.setText(joinPaths(files));
-                                fireChange();
+                        // 先问"文件在哪一侧"。
+                        //
+                        // 原来这里直接开 Windows 的选择器：选中的本地文件会被上传到
+                        // Linux 工作目录，参数再改写成远端路径。数据在本机时这是对的，
+                        // 但数据<b>本来就在远端</b>时（远端刚跑完一步，结果就躺在那儿）
+                        // 用户没法直接选它——只能先弄一份到本机再传回去。
+                        //
+                        // 所以多问一句。两边写入参数的形式都是"一条路径"：Windows 那条
+                        // 照旧（后面 copyOnEnter 会把它传上去并改写），Linux 那条原样写入，
+                        // 因为远端路径本来就该长那样，上传逻辑只认 Windows 路径会自动跳过。
+                        javax.swing.JPopupMenu menu = new javax.swing.JPopupMenu();
+                        javax.swing.JMenuItem win = new javax.swing.JMenuItem(
+                                I18n.t(Strings.PICK_WINDOWS_FILE));
+                        win.addActionListener(new ActionListener() {
+                            @Override
+                            public void actionPerformed(ActionEvent a) {
+                                pickWindows(field, wantDirectory, multi, save);
                             }
-                            return;
-                        }
-                        java.io.File f = FileDialogs.choose(HintText.realText(field),
-                                directory, save, SchemaFormPanel.this);
-                        if (f != null) {
-                            HintText.clear(field);
-                            field.setText(f.getAbsolutePath());
-                            fireChange();
-                        }
+                        });
+                        javax.swing.JMenuItem lin = new javax.swing.JMenuItem(
+                                I18n.t(Strings.PICK_LINUX_FILE));
+                        lin.setEnabled(fileBrowser != null);
+                        lin.addActionListener(new ActionListener() {
+                            @Override
+                            public void actionPerformed(ActionEvent a) {
+                                pickLinux(field, wantDirectory, multi, save);
+                            }
+                        });
+                        menu.add(win);
+                        menu.add(lin);
+                        menu.show(browse, 0, browse.getHeight());
                     }
                 });
                 row.add(browse, BorderLayout.EAST);
@@ -2760,6 +2774,97 @@ public final class SchemaFormPanel extends JPanel {
 
     public void setInputCopier(InputCopier copier) {
         this.inputCopier = copier;
+    }
+
+    /**
+     * 挑一个<b>已经在 Linux 侧</b>的文件，用来填参数。
+     *
+     * <p>和 {@link InputCopier} 是两件事：那个负责把本机文件传上去，这个负责<b>不传</b>
+     * ——文件本来就在远端，直接挑它。面板不该知道怎么连过去，所以开成口子。
+     */
+    public interface FileBrowser {
+        /**
+         * @param transport 当前通道
+         * @param startDir  初始目录，通常是设置好的工作目录
+         * @param multi     允许多选
+         * @param save      保存模式（输出参数）：选目录 + 填文件名
+         * @return 选中的远端绝对路径；取消返回空表
+         */
+        java.util.List<String> browseFiles(Object transport, String startDir,
+                                           boolean multi, boolean save);
+    }
+
+    public void setFileBrowser(FileBrowser browser) {
+        this.fileBrowser = browser;
+    }
+
+    private FileBrowser fileBrowser;
+
+    /** Windows 那一侧：本地选择器 + 之后的自动上传。 */
+    private void pickWindows(JTextField field, boolean directory, boolean multi,
+                             boolean save) {
+        if (multi) {
+            java.util.List<java.io.File> files =
+                    FileDialogs.chooseMany(HintText.realText(field),
+                            SchemaFormPanel.this);
+            if (!files.isEmpty()) {
+                HintText.clear(field);
+                field.setText(joinPaths(files));
+                fireChange();
+            }
+            return;
+        }
+        java.io.File f = FileDialogs.choose(HintText.realText(field),
+                directory, save, SchemaFormPanel.this);
+        if (f != null) {
+            HintText.clear(field);
+            field.setText(f.getAbsolutePath());
+            fireChange();
+        }
+    }
+
+    /**
+     * Linux 那一侧：从远端已有的文件里挑。
+     *
+     * <p>写进去的是<b>远端路径</b>，不再经过上传——{@code copyOnEnter} 只认 Windows
+     * 路径，会自动跳过它。这正是这里要的效果：文件已经在远端，不该再传一遍。
+     */
+    private void pickLinux(JTextField field, boolean directory, boolean multi,
+                           boolean save) {
+        if (fileBrowser == null) {
+            return;
+        }
+        // 从哪开始找：工作目录是用户刚挑好的地方，东西多半就在那儿。
+        //
+        // 直接用工作目录那个框，不另存一份副本——它就是工作目录，多一份副本就多一个
+        // 会跟主值不一致的地方。框里若是 Windows 路径（WSL 下允许），对远端没意义，
+        // 那就退回主目录。
+        String start = null;
+        String wd = workdirField == null ? null : workdirField.getText();
+        if (wd != null && !wd.trim().isEmpty()
+                && !vmadapt.core.RemoteFiles.looksLikeWindowsPath(wd.trim())) {
+            start = wd.trim();
+        }
+        String typed = HintText.realText(field);
+        if (typed != null && !typed.trim().isEmpty()
+                && !vmadapt.core.RemoteFiles.looksLikeWindowsPath(typed.trim())) {
+            start = typed.trim();
+        }
+        java.util.List<String> picked = fileBrowser.browseFiles(currentTransport,
+                start, multi, save && !directory);
+        if (picked == null || picked.isEmpty()) {
+            return;
+        }
+        HintText.clear(field);
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < picked.size(); i++) {
+            if (i > 0) {
+                sb.append(", ");
+            }
+            sb.append(picked.get(i));
+        }
+        field.setText(sb.toString());
+        fireChange();
     }
 
     private InputCopier inputCopier;
