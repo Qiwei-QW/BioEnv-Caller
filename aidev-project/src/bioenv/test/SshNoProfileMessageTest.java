@@ -112,10 +112,10 @@ public final class SshNoProfileMessageTest {
         System.out.println("状态栏: " + status);
 
         // 核心断言：说清楚「还没选配置」，而不是扯到 WSL。
-        check("日志说明了要先选配置", log.contains("还没有选中可用的 Linux 虚拟机配置"));
+        check("日志说明了要先选配置", log.contains("还没有选中可用的 SSH 连接"));
         check("日志不再误报 WSL", !log.contains("WSL 不可达"));
-        check("状态栏提示还没有可用配置", status.contains("还没有可用的 Linux 虚拟机配置"));
-        check("状态栏不只说「连不上」", !status.contains("连不上 Linux 虚拟机"));
+        check("状态栏提示还没有可用配置", status.contains("还没有可用的 SSH 连接"));
+        check("状态栏不只说「连不上」", !status.contains("连不上目标机器"));
 
         deleteRecursively(home);
 

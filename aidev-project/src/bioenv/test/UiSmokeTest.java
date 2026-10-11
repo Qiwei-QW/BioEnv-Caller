@@ -171,7 +171,8 @@ public final class UiSmokeTest {
         System.out.println("PASS  PluginInject.generatePanel() -> "
                 + produced.getClass().getName());
 
-        // 已保存配置的右键菜单：必须真的建好，并且两项都在。
+        // 已保存配置的右键菜单：必须真的建好。现在只剩「删除配置」一项 ——
+        // 「重命名…」和「编辑…」都去掉了（理由见 MainPanel#rebuildProfileMenu）。
         //
         // 这里刻意不切换方式。切方式会走 applyConnectionMode，而它会把这次选择写进
         // 「上次用的方式」——跑一次门禁就把用户下次打开插件的默认方式改掉，这种事不能干。
@@ -180,11 +181,11 @@ public final class UiSmokeTest {
         if (profileMenu == null) {
             throw new IllegalStateException("profile popup menu is missing");
         }
-        if (profileMenu.getComponentCount() != 2) {
-            throw new IllegalStateException("profile menu should have 2 items, has "
+        if (profileMenu.getComponentCount() != 1) {
+            throw new IllegalStateException("profile menu should have 1 item, has "
                     + profileMenu.getComponentCount());
         }
-        String[] wantNames = { "bioenv.profileRename", "bioenv.profileDelete" };
+        String[] wantNames = { "bioenv.profileDelete" };
         for (int i = 0; i < wantNames.length; i++) {
             java.awt.Component item = profileMenu.getComponent(i);
             if (!wantNames[i].equals(item.getName())) {
@@ -192,7 +193,7 @@ public final class UiSmokeTest {
                         + item.getName() + ", expected " + wantNames[i]);
             }
         }
-        System.out.println("PASS  profile menu has rename + delete");
+        System.out.println("PASS  profile menu has delete");
 
         // 菜单挂在配置下拉框上，否则右键点不出东西来。
         javax.swing.JComboBox<?> sourceBox =

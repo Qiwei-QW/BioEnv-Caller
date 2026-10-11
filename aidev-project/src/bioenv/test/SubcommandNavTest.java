@@ -33,12 +33,28 @@ public final class SubcommandNavTest {
     private static int fail;
 
     public static void main(String[] args) throws Exception {
-        SwingUtilities.invokeAndWait(new Runnable() {
-            @Override
-            public void run() {
-                body();
-            }
-        });
+        // 把语言钉死成默认中文，再建面板。理由同 SubcommandLayoutTest：
+        // 面板在 I18n.loadOnce() 之前构造，用的是默认中文，而查控件时 loadOnce() 已经把
+        // 用户盘上的语言读进来了。开发机把界面切成英文之后，两边就不一致，按文案找控件
+        // 全部落空。先把 user.home 指到临时目录（没有语言文件）就不会有这个问题。
+        String oldHome = System.getProperty("user.home");
+        java.io.File home = new java.io.File(System.getProperty("java.io.tmpdir"),
+                "bioenv-subnav-" + System.nanoTime());
+        if (!home.mkdirs()) {
+            throw new IllegalStateException("无法创建临时 home " + home);
+        }
+        System.setProperty("user.home", home.getAbsolutePath());
+        try {
+            I18n.loadOnce();
+            SwingUtilities.invokeAndWait(new Runnable() {
+                @Override
+                public void run() {
+                    body();
+                }
+            });
+        } finally {
+            System.setProperty("user.home", oldHome);
+        }
         line("");
         line("  passed: " + pass + "   failed: " + fail);
         if (fail > 0) {

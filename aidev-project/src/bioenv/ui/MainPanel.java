@@ -82,6 +82,17 @@ public final class MainPanel extends JPanel {
     private final JButton detectButton = new JButton(I18n.t(Strings.MENU_DETECT));
 
     /**
+     * 「已保存配置」下拉框里那一项「＋ 新增配置」的文字。
+     *
+     * <p>它是列表里唯一的<b>动作</b>，其余都是数据。认它一律用<b>等值比较</b>，
+     * 而不是"以 ＋ 开头"这类模式匹配——配置名是用户起的，他完全可以把一条配置
+     * 叫「＋ 我的机器」，那时按前缀认就会把真配置当成动作。
+     */
+    private String newProfileItemText() {
+        return I18n.t(Strings.ITEM_NEW_PROFILE);
+    }
+
+    /**
      * 已保存配置的右键菜单：重命名 / 删除。
      *
      * <h2>为什么是右键菜单而不是一个按钮</h2>
@@ -937,11 +948,19 @@ public final class MainPanel extends JPanel {
         } finally {
             fillingDistros = false;
         }
-        // 只有一个发行版时下拉框纯属碍眼：没有可选的余地，还白占一行。
-        boolean many = distros.size() > 1;
-        distroBox.setVisible(many);
+        // 一个发行版也要显示出来，但置灰。
+        //
+        // 原来是 size() > 1 才显示（"没有可选的余地，还白占一行"）。结果是只装了一个
+        // 发行版的机器上看不到自己用的到底是哪个——自动探测本身没问题，被藏掉的只是
+        // "当前用的是它"这条信息。
+        //
+        // 但也不该做成一个能点的下拉框：一个选项的下拉框点了没反应，比不显示更让人
+        // 困惑。所以显示 + 禁用：能看见，不假装能选。
+        boolean any = !distros.isEmpty();
+        distroBox.setVisible(any);
+        distroBox.setEnabled(distros.size() > 1);
         if (distroLabel != null) {
-            distroLabel.setVisible(many);
+            distroLabel.setVisible(any);
         }
     }
 
@@ -1057,20 +1076,19 @@ public final class MainPanel extends JPanel {
     }
 
     /**
-     * 建好右键菜单的两项。语言切换时会重建，所以文案取当前语言。
+     * 建好右键菜单。语言切换时会重建，所以文案取当前语言。
+     *
+     * <p>只剩一项「删除配置」。
+     *
+     * <p>原先还有「重命名…」和「编辑…」。两个都去掉了：「编辑…」等于把整条配置重填一遍，
+     * 直接删了重建更简单；「重命名…」只改别名，而别名本来就是可有可无的显示名 ——
+     * 为了它多养一个对话框、一套查重逻辑和一个失败分支，不划算。要看哪台机器，
+     * 选中那条时状态栏就写着 {@code 用户名@主机:端口}。
+     *
+     * <p>新增配置也不在这里：它是"加一条"，属于下拉框自己的事（见 newProfileItemText）。
      */
     private void rebuildProfileMenu() {
         profileMenu.removeAll();
-        javax.swing.JMenuItem rename = new javax.swing.JMenuItem(
-                I18n.t(Strings.MENU_PROFILE_RENAME));
-        rename.setName("bioenv.profileRename");
-        rename.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                renameSelectedProfile();
-            }
-        });
-        profileMenu.add(rename);
 
         javax.swing.JMenuItem delete = new javax.swing.JMenuItem(
                 I18n.t(Strings.BTN_PROFILE_DELETE));
@@ -1129,53 +1147,40 @@ public final class MainPanel extends JPanel {
      * <p>名字留空是允许的：那表示不要别名，显示名退回 {@code user@host:port}——
      * 相当于"把别名清掉"，这比强迫用户想个新名字合理。
      */
-    private void renameSelectedProfile() {
-        if (!isSshMode()) {
+    /**
+     * 把下拉框的选中项还原成"当前那台机器"。
+     *
+     * <p>用在选中「＋ 新增配置」之后：那一项必须立刻让位，否则框里显示的是"新增配置"，
+     * 而 {@code sshTarget} 其实还是原来那台 —— 显示与状态不一致，接着点扫描就会去连
+     * 一串并不存在的地址。
+     *
+     * <p>没有当前机器（比如一条配置都没有）时退到不选中任何项，让框看起来是空的。
+     */
+    private void restoreProfileSelection() {
+        String current = sshTarget == null ? null : displayNameOf(sshTarget);
+        if (current != null) {
+            distroBox.setSelectedItem(current);
             return;
         }
+        distroBox.setSelectedIndex(-1);
+    }
+
+    /**
+     * 当前选中的配置名；没有选中任何配置（或框是空的）时返回 null。
+     *
+     * <p>{@link Strings#ITEM_NEW_PROFILE} 那一项要排除掉：它是动作不是配置，把它当成
+     * 配置名传下去（比如删除），就会去删一条叫「＋ 新增配置」的配置。
+     */
+    private String selectedProfileName() {
         Object sel = distroBox.getSelectedItem();
-        String name = sel == null ? null : sel.toString().trim();
-        if (name == null || name.isEmpty()) {
-            return;
+        if (sel == null) {
+            return null;
         }
-
-        String typed = (String) javax.swing.JOptionPane.showInputDialog(this,
-                I18n.t(Strings.DLG_PROFILE_RENAME, name),
-                I18n.t(Strings.DLG_PROFILE_RENAME_TITLE),
-                javax.swing.JOptionPane.QUESTION_MESSAGE,
-                null, null, name);
-        if (typed == null) {
-            return; // 取消
+        String name = sel.toString().trim();
+        if (name.isEmpty() || name.equals(newProfileItemText())) {
+            return null;
         }
-        String newName = typed.trim();
-
-        try {
-            vmadapt.core.ConnectionStore.RenameResult r =
-                    new vmadapt.core.ConnectionStore().rename(name, newName);
-            switch (r) {
-                case OK:
-                    // 显示名变了，重新读一遍列表，让框里显示新名字。
-                    setStatus(I18n.t(Strings.STATUS_PROFILE_RENAMED, name,
-                            newName.isEmpty() ? name : newName));
-                    // 记住的那台也要跟着改名，否则"上次用的机器"会指向一个不存在的名字。
-                    if (name.equals(targetMemory.vmProfile())) {
-                        targetMemory.rememberVmProfile(newName);
-                    }
-                    break;
-                case DUPLICATE:
-                    setStatus(I18n.t(Strings.ERR_PROFILE_RENAME_DUPLICATE, newName));
-                    break;
-                case NOT_FOUND:
-                    setStatus(I18n.t(Strings.ERR_PROFILE_RENAME_MISSING, name));
-                    break;
-                default:
-                    setStatus(I18n.t(Strings.ERR_PROFILE_RENAME_FAILED, name));
-                    break;
-            }
-        } catch (Exception ex) {
-            setStatus(I18n.t(Strings.ERR_PROFILE_RENAME_FAILED, name) + " " + ex.getMessage());
-        }
-        refreshSshList(false, false);
+        return name;
     }
 
     /**
@@ -1190,9 +1195,8 @@ public final class MainPanel extends JPanel {
         if (!isSshMode()) {
             return;
         }
-        Object sel = distroBox.getSelectedItem();
-        String name = sel == null ? null : sel.toString().trim();
-        if (name == null || name.isEmpty()) {
+        String name = selectedProfileName();
+        if (name == null) {
             return;
         }
 
@@ -1290,21 +1294,32 @@ public final class MainPanel extends JPanel {
                     for (vmadapt.core.SshTarget t : all) {
                         distroBox.addItem(displayNameOf(t));
                     }
+                    // 末尾追加「＋ 新增配置」。放在最后而不是最前：前面几项是数据，
+                    // 第一项就是"当前用的是哪台"，把动作插在最前面会让人以为它是
+                    // 已选中的配置。追加在尾部读起来也自然——"现有的都在这儿，
+                    // 想再加一台在最下面"。
+                    distroBox.addItem(newProfileItemText());
                 } finally {
                     adjustingMode = false;
                 }
-                // 只有一个配置时也<b>要显示</b>这个下拉框。
+                // 这个框在 SSH 方式下<b>永远显示、永远可点</b>。
                 //
-                // 原来一条时把它藏起来（"没有可选的余地，还白占一行"）。但重命名和删除
-                // 现在挂在它的右键上，藏起来就等于：只有一台机器的用户，那唯一一条配置
-                // 既改不了名字也删不掉。它的角色从"选择器"变成了"这条配置的把手"，
-                // 一条时正是最需要这个把手的时候。
-                boolean show = !all.isEmpty();
-                distroBox.setVisible(show);
+                // 它原来在"一条配置都没有"或"只有一条"时被藏起来（"没有可选的余地"）。
+                // 但它的角色已经变了：一条都没有时，它是<b>唯一</b>能新建配置的入口
+                // （「＋ 新增配置」就在里面）；有一条时，它是删除那条配置的把手。
+                // 两种情况下藏起来都会让人没路可走。
+                distroBox.setVisible(true);
+                // 显式置回 true：WSL 那边在只有一个发行版时把它禁用了，不还原的话
+                // "WSL（单发行版）→ SSH"会让这个框一直灰着，点不动。
+                distroBox.setEnabled(true);
                 if (distroLabel != null) {
-                    distroLabel.setVisible(show);
+                    distroLabel.setVisible(true);
                 }
                 if (all.isEmpty()) {
+                    // 框里只剩「＋ 新增配置」一项，JComboBox 会自动选中它。那不对：
+                    // 选中项应当代表"当前用哪台机器"，而这里一台都没有。所以回退到
+                    // 不选中任何东西，让这个框看起来是空的、只等用户去点新增。
+                    distroBox.setSelectedIndex(-1);
                     setStatus(I18n.t(Strings.STATUS_NO_PROFILE));
                 } else {
                     // Prefer whatever was selected before, so a refresh does not
@@ -1343,7 +1358,8 @@ public final class MainPanel extends JPanel {
                 // mayGuide 另外把关：只有"用户主动选了虚拟机方式"这一条来源才允许弹。
                 // 打开面板时恢复上次的选择不算，否则上次用过虚拟机就会每次开插件都弹。
                 if (mayGuide && shouldAutoOpenDialog()) {
-                    openConnectionDialog();
+                    // 首次引导也直接进向导：中间那一页不提供信息也不做选择。
+                    openNewConnectionWizard();
                 } else if (auto && !all.isEmpty()) {
                     // 自动连接：先做可达性检查，能连上就恢复缓存。
                     // 这条路径失败只写日志和状态栏，不弹任何窗口。
@@ -1407,6 +1423,68 @@ public final class MainPanel extends JPanel {
      * take down the event thread. Nothing in this method is worth crashing the
      * panel for.
      */
+    /**
+     * 直接开新建配置的向导，中间不再插一页「连接配置」面板。
+     *
+     * <p>面板那一页原本是入口：它上面写着"还没有配置 SSH 连接，点「SSH 连接…」开始配置"，
+     * 用户还得再点一次才见到向导。现在这个插件连的不只是虚拟机（还有服务器、工作站、
+     * WSL），那一页既不提供信息也不做选择，纯属多一步，所以去掉了 —— 选「SSH 远程」
+     * 或点下拉框里的「＋ 新增配置」，直接就是向导第一步。
+     *
+     * <p>面板对象仍然要建：向导读的 host/port/user/key 这些字段都在它里面，它现在
+     * 是控制器而不是一页界面。所以它不进窗口，只作为向导的宿主。
+     */
+    private void openNewConnectionWizard() {
+        if (java.awt.GraphicsEnvironment.isHeadless()) {
+            setStatus(I18n.t(Strings.STATUS_NO_DISPLAY,
+                    "%USERPROFILE%\\.vmadapt\\connections.json"));
+            return;
+        }
+        ensureConnectionPanel();
+        connectionPanel.setOwnerWindow(SwingUtilities.getWindowAncestor(this));
+        connectionPanel.startNewConnection();
+    }
+
+    /**
+     * 确保 {@link #connectionPanel} 存在（但不显示它）。
+     *
+     * <p>它是向导的控制器，也是「网络模式速查」那一页的宿主。原先两者都由连接窗承载，
+     * 现在连接窗只在这个方法里按需创建、不自动弹。
+     */
+    private void ensureConnectionPanel() {
+        if (connectionPanel != null) {
+            return;
+        }
+        connectionPanel = new vmadapt.ui.ConnectionPanel();
+        connectionPanel.setLangProvider(new PluginLangProvider());
+        connectionPanel.setConnectedListener(
+                new vmadapt.ui.ConnectionPanel.ConnectedListener() {
+                    @Override
+                    public void connected(vmadapt.core.SshTarget target) {
+                        LinkState.markConnected();
+                    }
+                });
+        // 加完一条配置后，主面板的下拉框要重读一遍。以前这条线索是"连接窗被关掉"，
+        // 现在向导可以不走那个窗口，所以改成显式通知。
+        connectionPanel.setProfilesChangedListener(
+                new vmadapt.ui.ConnectionPanel.ProfilesChangedListener() {
+                    @Override
+                    public void profilesChanged() {
+                        if (isSshMode()) {
+                            refreshSshList(false, false);
+                        }
+                    }
+                });
+    }
+
+    /**
+     * 打开「连接配置」面板窗。
+     *
+     * <p>它已经不是新建配置的必经之路了（那条路直接进向导，见
+     * {@link #openNewConnectionWizard()}）。留着它是因为面板上还有一页
+     * 「网络模式速查」——三种网络模式怎么填、连不上怎么查，那页是纯参考，
+     * 不该跟着入口一起去掉。
+     */
     private void openConnectionDialog() {
         if (java.awt.GraphicsEnvironment.isHeadless()) {
             // The profile path is a technical identifier, so it is passed as an
@@ -1420,32 +1498,10 @@ public final class MainPanel extends JPanel {
             connectionDialog = new javax.swing.JDialog(owner,
                     I18n.t(Strings.DIALOG_CONNECTION_TITLE));
             connectionDialog.setName("bioenv.connectionDialog");
-            // Hand the connection panel the plugin's current language. The adapter
-            // deliberately leaves t() unimplemented (returns null) so vmadapt falls
-            // back to its own bilingual catalogue: the two modules use separate key
-            // namespaces, and forwarding keys blindly would print raw keys like
-            // "btn.test" on screen. Language switching still reaches the panel,
-            // because the provider supplies langCode() and the change listener.
-            vmadapt.ui.ConnectionPanel connectionPanel = new vmadapt.ui.ConnectionPanel();
-            connectionPanel.setLangProvider(new PluginLangProvider());
-            // A successful "Test connection" is one of the two events that count as
-            // "this machine is set up" (the other is a successful Detect scan).
-            //
-            // This used to be inferred by watching the panel's status-label
-            // background colour, because the panel published no success signal. That
-            // coupled us to a private colour constant: changing the palette would have
-            // silently stopped the suppression. ConnectionPanel now fires an explicit
-            // callback, so the fact is reported rather than guessed.
-            connectionPanel.setConnectedListener(
-                    new vmadapt.ui.ConnectionPanel.ConnectedListener() {
-                        @Override
-                        public void connected(vmadapt.core.SshTarget target) {
-                            LinkState.markConnected();
-                        }
-                    });
+            ensureConnectionPanel();
             connectionDialog.setContentPane(connectionPanel);
-            connectionDialog.setSize(760, 560);
-            connectionDialog.setMinimumSize(new Dimension(520, 380));
+            connectionDialog.setSize(560, 460);
+            connectionDialog.setMinimumSize(new Dimension(440, 320));
             connectionDialog.setLocationRelativeTo(this);
             connectionDialog.setResizable(true);
             // Dispose rather than exit, and rebuild the panel next time so the
@@ -1456,6 +1512,14 @@ public final class MainPanel extends JPanel {
                 @Override
                 public void windowClosed(java.awt.event.WindowEvent e) {
                     connectionDialog = null;
+                    // 面板<b>不</b>跟着置空。
+                    //
+                    // 原来这里顺手把面板也丢了，理由是"下次开窗重新读一遍配置"。但面板
+                    // 现在是向导的控制器：向导可以从这个窗口之外打开（下拉框里的
+                    // 「＋ 新增配置」），此刻正开着向导而用户把连接窗关掉是完全可能的，
+                    // 丢引用会让向导接着读一个已经被丢掉的面板。面板本身很轻，留着；
+                    // 列表该刷新的时候由 refreshSshList 和 profilesChanged 负责。
+                    //
                     // Set BEFORE refreshing, and deliberately not cleared afterwards:
                     // refreshSshList() decides in a SwingWorker's done(), i.e.
                     // asynchronously on this same thread, so a scoped flag would
@@ -1485,6 +1549,15 @@ public final class MainPanel extends JPanel {
     /**
      * Applies initial divider positions once the panel has been laid out.' The connection-profile dialog, created on demand; set back to null when closed. */
     private javax.swing.JDialog connectionDialog;
+
+    /**
+     * 当前那个连接窗里的面板；窗口销毁时置回 null。
+     *
+     * <p>留着它是因为「新增配置…」和右键「编辑…」需要把意图传进去（从空白开始、
+     * 或带着某条配置进向导）。窗口本身是按需创建的，所以这个引用与
+     * {@link #connectionDialog} 同生共死。
+     */
+    private vmadapt.ui.ConnectionPanel connectionPanel;
 
     /**
      * Exposes this plugin's language choice to the {@code vmadapt} module.
@@ -1652,10 +1725,14 @@ public final class MainPanel extends JPanel {
         distroBox.setPreferredSize(new Dimension(150, distroBox.getPreferredSize().height));
         applySourceLabels(false);
         bar.add(distroBox, g);
-        // No separate "configure" button: the connection dialog opens by itself the
-        // moment there is a Linux VM profile to create or edit. A button that mostly
-        // duplicated that moment was one more thing to explain, and it was dead in
-        // WSL mode anyway.
+        // 这里原来没有入口，注释写着"窗口会在需要配置时自己弹出来"。那个理由只对
+        // "从没连过"成立：自动弹出由 hasEverConnected() 把关，第一次连上之后就永久
+        // 关闭，而那是打开连接窗的<b>唯一</b>入口。于是用户能连一次，之后既加不了
+        // 第二台、也改不了填错的 IP —— 想改只能去删配置重建。
+        //
+        // 现在入口在 distroBox 里的「＋ 新增配置」那一项（见 newProfileItemText）。
+        // 放在下拉框里而不是旁边加个按钮：用户要"再连一台"时，第一眼看的就是这个框，
+        // 加一台的动作长在那个框里最省事，也不多占一行宽度。
         g.gridx = 4;
         bar.add(detectButton, g);
         g.gridx = 5;
@@ -1977,6 +2054,9 @@ public final class MainPanel extends JPanel {
             }
         });
 
+        // 「＋ 新增配置」的触发点在下拉框自己的监听里（见 distroBox 的 ActionListener），
+        // 因为它就是列表中的一项，没有单独的按钮可挂。
+
         rebuildProfileMenu();
         wireDistroBoxPopup();
 
@@ -2144,6 +2224,24 @@ public final class MainPanel extends JPanel {
                 }
                 Object sel = distroBox.getSelectedItem();
                 if (sel == null) {
+                    return;
+                }
+                if (isSshMode() && newProfileItemText().equals(sel.toString())) {
+                    // 用户选的是「＋ 新增配置」——那是个动作，不是一台机器。
+                    //
+                    // 两件事都要做：
+                    //   1. 把选中项还原回去。不还原的话这个框就停在一个并不存在的
+                    //      配置上，用户接着点"扫描 conda 环境"会去连那串文字。
+                    //   2. 还原时<b>不能</b>触发本监听里的"切换机器"逻辑——那会清空
+                    //      日志、重置报告，等于把用户当前的工作现场抹掉，而他要做的
+                    //      只是加一台机器。所以还原期间置上 adjustingMode。
+                    openNewConnectionWizard();
+                    adjustingMode = true;
+                    try {
+                        restoreProfileSelection();
+                    } finally {
+                        adjustingMode = false;
+                    }
                     return;
                 }
                 logArea.setText("");

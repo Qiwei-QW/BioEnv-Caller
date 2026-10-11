@@ -169,6 +169,7 @@ try {
         'bioenv.test.UiSmokeTest',
         'bioenv.test.SshNoProfileMessageTest',
         'bioenv.test.ConnectionModeRememberedTest',
+        'bioenv.test.ConnectionEntryPointsTest',
         'bioenv.test.MultiChannelCacheTest',
         'bioenv.test.ProbeRouteTest',
         'bioenv.test.IncrementalScanTest',

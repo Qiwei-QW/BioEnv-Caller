@@ -48,6 +48,29 @@ public final class SetupWizard {
     /** 所有步骤共用的宽度。 */
     public static final int WIDTH = 440;
 
+    /**
+     * 所有步骤共用的总高度（含四周留白）。
+     *
+     * <h2>为什么要有这个数</h2>
+     *
+     * <p>原先每一步各自 {@code pack()}，于是窗口高度随内容跳：只填一个「主机 / IP」的
+     * 步是 86，须知页是 132，换步时窗口会明显地一伸一缩。统一成固定高度之后，整个
+     * 向导从第一步到最后一步都是同一个框，看着稳。
+     *
+     * <p>132 是其中<b>最高的一步</b>（须知页）的实际需要，不是拍的：量过每一个步的
+     * preferredSize，输入类是 86、须知是 132。取最大值就不会裁掉任何一步。
+     */
+    public static final int HEIGHT = 132;
+
+    /**
+     * 结果页的高度，比 {@link #HEIGHT} 高一截。
+     *
+     * <p>它是唯一不合适的例外：结果页要显示一段<b>长度不定</b>的详情（成功信息或报错
+     * 输出），而且带滚动区。压到 132 会把它挤成一条缝，等于把用户最需要看的东西裁掉。
+     * 所以这里留出它实际需要的高度（218），其余各步一律 132。
+     */
+    public static final int RESULT_HEIGHT = 218;
+
     private static final int FIELD_H = 26;
 
     /** 标签列宽：够放下「配置名称：」这类最长标签，又不会把输入框推太远。 */
@@ -78,6 +101,14 @@ public final class SetupWizard {
             buttons.setOpaque(false);
             root.add(center, BorderLayout.CENTER);
             root.add(buttons, BorderLayout.SOUTH);
+            // 固定尺寸放在基类里，是为了"不漏"：将来加新步不用记得去设，
+            // 而忘了设的那一步就会成为唯一一个尺寸不同的。
+            root.setPreferredSize(new Dimension(WIDTH + 40, HEIGHT));
+        }
+
+        /** 给某一步单独的高度（目前只有结果页用）。 */
+        protected void setFixedHeight(int height) {
+            root.setPreferredSize(new Dimension(WIDTH + 40, height));
         }
 
         /**
@@ -342,6 +373,8 @@ public final class SetupWizard {
             body.add(sc, BorderLayout.CENTER);
             setNoticeBody(body);
             addButton(close, closeName);
+            // 结果页比其它步高（要放一段可滚动的详情）。
+            setFixedHeight(RESULT_HEIGHT);
         }
 
         public String detail() {

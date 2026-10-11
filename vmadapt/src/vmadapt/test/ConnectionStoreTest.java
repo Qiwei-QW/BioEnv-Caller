@@ -339,53 +339,16 @@ public final class ConnectionStoreTest {
                     ConnectionStore.displayName(left2.get(0)));
 
             // -----------------------------------------------------------
-            // 13. 重命名
+            // 13. 编辑 / 重命名：这两个功能已经从界面上拿掉了
             // -----------------------------------------------------------
             //
-            // 重命名不能用 save() 做：save 按身份（别名）去重，改了别名再存会被当成
-            // 另一条记录，结果"重命名之后多出来一条"。所以单独走 rename。
-            Path renFile = dir.resolve("ren.json");
-            ConnectionStore ren = new ConnectionStore(renFile);
-            SshTarget renOne = new SshTarget("10.1.1.1", 22, "amy", null);
-            renOne.label = "old-name";
-            SshTarget renTwo = new SshTarget("10.2.2.2", 22, "bob", null);
-            renTwo.label = "other-name";
-            check("存入两条待改名", ren.save(renOne) && ren.save(renTwo));
-
-            eq("改名成功", "OK",
-                    String.valueOf(ren.rename("old-name", "new-name")));
-            eq("条数没变（save 会多出一条，rename 不会）", "2",
-                    String.valueOf(ren.list().size()));
-            eq("新名字已在列表里", "new-name",
-                    ConnectionStore.displayName(ren.list().get(0)));
-            check("旧名字已不在", ren.load("old-name") == null);
-            // 走一遍磁盘：只改内存的话，重启插件就白改了。
-            eq("重命名落盘了", "new-name",
-                    ConnectionStore.displayName(new ConnectionStore(renFile).list().get(0)));
-            eq("另一条没被牵连", "other-name",
-                    ConnectionStore.displayName(new ConnectionStore(renFile).list().get(1)));
-
-            eq("改成已有的名字被拒绝", "DUPLICATE",
-                    String.valueOf(ren.rename("new-name", "other-name")));
-            eq("被拒绝后仍是两条", "2", String.valueOf(ren.list().size()));
-            eq("被拒绝后名字没变", "new-name",
-                    ConnectionStore.displayName(ren.list().get(0)));
-
-            eq("改成同一个名字算成功（无改动）", "OK",
-                    String.valueOf(ren.rename("new-name", "new-name")));
-            eq("改成同一个名字不会多出一条", "2", String.valueOf(ren.list().size()));
-
-            eq("改不存在的返回 NOT_FOUND", "NOT_FOUND",
-                    String.valueOf(ren.rename("no-such", "whatever")));
-            eq("空名字去找返回 NOT_FOUND", "NOT_FOUND",
-                    String.valueOf(ren.rename("   ", "whatever")));
-
-            // 别名留空 = 清掉别名，显示名退回 user@host:port。
-            eq("别名改成空白算成功", "OK",
-                    String.valueOf(ren.rename("new-name", "   ")));
-            eq("清掉别名后显示为 user@host:port", "amy@10.1.1.1:22",
-                    ConnectionStore.displayName(ren.list().get(0)));
-
+            // 曾经有「编辑…」（带原值进向导、保存时替换那一条）和「重命名…」
+            // （只改别名），存储层配套有 replace() 与 rename()。两个功能后来都删掉了：
+            // 编辑等于把整条配置重填一遍，直接删了重建更简单；重命名只改一个显示用的
+            // 别名，不值得为它单养一套查重与失败分支。
+            //
+            // 这里少的是测试覆盖，不是行为保证 —— save() 仍按身份去重（上面第 12 节
+            // 钉着），按显示名精确删除仍由 removeDisplayed() 负责。
         } finally {
             deleteRecursively(dir);
         }

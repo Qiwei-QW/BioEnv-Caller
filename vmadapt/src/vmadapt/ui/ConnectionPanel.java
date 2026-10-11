@@ -503,6 +503,28 @@ public final class ConnectionPanel extends JPanel {
     }
 
     /**
+     * 新建一条配置：先把表单清空，再走向导。
+     *
+     * <p>清空是必须的。向导每一步都从表单控件预填（{@code hostField} 等），而那些控件里
+     * 装着<b>当前选中那条配置</b>的值；不清空的话，点了「＋ 新增配置」看到的却是旧机器的
+     * 地址，用户稍不留神就把旧配置又存了一遍。
+     */
+    public void startNewConnection() {
+        clearTarget();
+        openWizard();
+    }
+
+    /** 把表单清空，回到"什么都没填"的状态。 */
+    private void clearTarget() {
+        hostField.setText("");
+        portField.setText(String.valueOf(SshTarget.DEFAULT_PORT));
+        userField.setText("");
+        keyField.setText("");
+        nameField.setText("");
+        timeoutField.setText(String.valueOf(SshTarget.DEFAULT_TIMEOUT_SECONDS));
+    }
+
+    /**
      * 把「这次要用哪把密钥」定下来，写进 {@link #keyField}。
      *
      * <h2>为什么必须在向导一开始就做</h2>
@@ -537,16 +559,61 @@ public final class ConnectionPanel extends JPanel {
 
     private void showWizardStep(javax.swing.JPanel content, String title) {
         if (wizardWindow == null) {
-            wizardWindow = new javax.swing.JDialog(
-                    SwingUtilities.getWindowAncestor(this), title);
+            // 宿主窗口可能没有：向导现在可以直接开，不经过面板窗口（用户点「＋ 新增配置」
+            // 或第一次切到 SSH 方式时，直接就是向导，中间不再插一页）。
+            // JDialog 允许 owner 为 null，只是位置改由 ownerWindow 决定。
+            java.awt.Window owner = SwingUtilities.getWindowAncestor(this);
+            if (owner == null) {
+                owner = ownerWindow;
+            }
+            wizardWindow = new javax.swing.JDialog(owner, title);
             wizardWindow.setName("bioenv.setupWizard");
             wizardWindow.setModal(false);
         }
         wizardWindow.setTitle(title);
         wizardWindow.setContentPane(content);
+        // 不 pack()：pack 会按当前这一步的内容算大小，于是换步时窗口一伸一缩。
+        // 每步的尺寸由 SetupWizard.Step 固定好（480 x 132，结果页 218），这里直接
+        // 用内容的首选尺寸，各步就一模一样了。
         wizardWindow.pack();
-        wizardWindow.setLocationRelativeTo(this);
+        if (SwingUtilities.getWindowAncestor(this) == null && ownerWindow != null) {
+            wizardWindow.setLocationRelativeTo(ownerWindow);
+        } else {
+            wizardWindow.setLocationRelativeTo(this);
+        }
         wizardWindow.setVisible(true);
+    }
+
+    /**
+     * 向导的宿主窗口。面板自己没有窗口时（直接开向导的场景）用它来定位置，
+     * 免得窗口弹到屏幕角上。
+     */
+    public void setOwnerWindow(java.awt.Window window) {
+        this.ownerWindow = window;
+    }
+
+    private java.awt.Window ownerWindow;
+
+    /**
+     * 配置列表变了的通知。
+     *
+     * <p>原先宿主靠"连接窗被关掉"这一个事件来刷新下拉框。现在向导可以不走面板窗口
+     * 直接开，那条线索就没了 —— 用户加完一条配置，主面板的下拉框得知道要重读一遍。
+     */
+    public interface ProfilesChangedListener {
+        void profilesChanged();
+    }
+
+    public void setProfilesChangedListener(ProfilesChangedListener listener) {
+        this.profilesChangedListener = listener;
+    }
+
+    private ProfilesChangedListener profilesChangedListener;
+
+    private void fireProfilesChanged() {
+        if (profilesChangedListener != null) {
+            profilesChangedListener.profilesChanged();
+        }
     }
 
     private void closeWizard() {
@@ -1156,6 +1223,9 @@ public final class ConnectionPanel extends JPanel {
                         statusArea.setText(text(UiText.MSG_SAVED_BODY, snapshot.label)
                                 + "\n  " + snapshot.toDisplay() + "\n");
                         refreshPanelState();
+                        // 宿主（主面板）据此重读配置列表。不走面板窗口的场景下，
+                        // "窗口被关掉"那条线索不存在了，必须显式说一声。
+                        fireProfilesChanged();
                     } else {
                         reportFailure(text(UiText.MSG_SAVE_REJECTED),
                                 text(UiText.MSG_SAVE_REJECTED_REASON, snapshot.label),
