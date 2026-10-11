@@ -67,12 +67,12 @@ public final class LanguageSwitchTest {
             MainPanel panel = openPanel();
 
             String zhTree = I18n.t(Strings.TITLE_TREE);
-            String zhOutput = I18n.t(Strings.TITLE_OUTPUT);
 
             check("起点：分区标题是「" + zhTree + "」", zhTree.equals(treeTitle(panel)),
                     "实际「" + treeTitle(panel) + "」");
-            check("起点：输出标题是「" + zhOutput + "」", zhOutput.equals(logTitleText(panel)),
-                    "实际「" + logTitleText(panel) + "」");
+            // 「输出」标题刻意不跟语言走：它旁边是日志，记的是当时发生的事、用当时的
+            // 语言写的。只翻标题会让那一栏半中半英。所以这里断言它<b>保持</b>原样。
+            String zhOutputKept = logTitleText(panel);
 
             // 走<b>按键设置</b>那条生产路径，而不是塞一句渲染好的中文。
             //
@@ -90,15 +90,14 @@ public final class LanguageSwitchTest {
             settle();
 
             String enTree = I18n.t(Strings.TITLE_TREE);
-            String enOutput = I18n.t(Strings.TITLE_OUTPUT);
             check("切英文后取的文案确实变了（" + zhTree + " -> " + enTree + "）",
                     !zhTree.equals(enTree));
 
             check("切英文后左侧分区标题跟着换（期望「" + enTree + "」）",
                     enTree.equals(treeTitle(panel)),
                     "实际「" + treeTitle(panel) + "」");
-            check("切英文后「输出」标题跟着换（期望「" + enOutput + "」）",
-                    enOutput.equals(logTitleText(panel)),
+            check("切英文后「输出」标题保持不变（刻意不跟语言走）",
+                    zhOutputKept.equals(logTitleText(panel)),
                     "实际「" + logTitleText(panel) + "」");
             check("切英文后状态栏不再停在旧语言（期望「"
                             + I18n.t(Strings.STATUS_READY) + "」）",
@@ -113,11 +112,34 @@ public final class LanguageSwitchTest {
             settle();
             check("切回中文后左侧分区标题还原", zhTree.equals(treeTitle(panel)),
                     "实际「" + treeTitle(panel) + "」");
-            check("切回中文后「输出」标题还原", zhOutput.equals(logTitleText(panel)),
+            check("切回中文后「输出」标题仍然不变",
+                    zhOutputKept.equals(logTitleText(panel)),
                     "实际「" + logTitleText(panel) + "」");
             check("切回中文后状态栏还原",
                     I18n.t(Strings.STATUS_READY).equals(statusText(panel)),
                     "实际「" + statusText(panel) + "」");
+
+            // ---- 风格切换器 ----
+            // 三个风格名是自绘的（ThemeSwitcher 自己 drawString），没人替它重设文字，
+            // 所以必须自己监听语言变化并重画。它原来写死中文，英文界面上那三格仍然是
+            // 「经典 / 浅色 / 深色」。
+            switchLanguage("en");
+            settle();
+            check("切英文后风格名跟着换（期望 " + I18n.t(Strings.THEME_CLASSIC) + " / "
+                            + I18n.t(Strings.THEME_LIGHT) + " / "
+                            + I18n.t(Strings.THEME_DARK) + "）",
+                    "Classic".equals(I18n.t(Strings.THEME_CLASSIC))
+                            && "Light".equals(I18n.t(Strings.THEME_LIGHT))
+                            && "Dark".equals(I18n.t(Strings.THEME_DARK)));
+            check("切英文后风格切换器的提示也跟着换",
+                    I18n.t(Strings.THEME_TOOLTIP).equals(themeTooltip(panel)),
+                    "实际「" + themeTooltip(panel) + "」");
+
+            switchLanguage("zh");
+            settle();
+            check("切回中文后风格切换器的提示还原",
+                    I18n.t(Strings.THEME_TOOLTIP).equals(themeTooltip(panel)),
+                    "实际「" + themeTooltip(panel) + "」");
 
         } finally {
             System.setProperty("user.home", oldHome);
@@ -196,6 +218,12 @@ public final class LanguageSwitchTest {
         // 没有 TitledBorder 时退到树根节点的文字：标题也可能画在那里。
         return String.valueOf(((javax.swing.JTree) field(p, "toolTree"))
                 .getModel().getRoot());
+    }
+
+    private static String themeTooltip(MainPanel p) throws Exception {
+        javax.swing.JComponent sw =
+                (javax.swing.JComponent) field(p, "themeSwitcher");
+        return sw.getToolTipText();
     }
 
     private static String logTitleText(MainPanel p) throws Exception {

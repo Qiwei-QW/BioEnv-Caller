@@ -651,13 +651,15 @@ public final class MainPanel extends JPanel {
         if (commandPanelRef != null) {
             commandPanelRef.setBorder(commandBorder);
         }
-        // 标题已移到标题栏里，这里只更新文字 + 留内边距。
+        // 标题已移到标题栏里，这里只留内边距。
         //
         // 不能再设 TitledBorder：那会把"输出/清空"那一行覆盖回"边框上写标题"的
         // 老样子，切一次主题就退回去。
-        if (logTitle != null) {
-            logTitle.setText(I18n.t(Strings.TITLE_OUTPUT));
-        }
+        //
+        // 这里也<b>不再设标题文字</b>。那是语言的事，不是画法的事：它原来写在这里，
+        // 于是每次 applyTheme()（包括切语言时重跑的那次）都会把「输出」翻一遍。
+        // 而这一栏刻意不跟语言走 —— 它旁边的正文是日志，记的是当时发生的事、用当时
+        // 的语言写的，只翻标题会让整栏半中半英。文字在构造时设一次，之后不动。
         if (logPanelRef != null) {
             logPanelRef.setBorder(BorderFactory.createEmptyBorder(2, 2, 2, 2));
         }
@@ -754,9 +756,9 @@ public final class MainPanel extends JPanel {
             // 一直不跟着换。重跑 applyTheme 就不会再漏——标题只有那一条构建路径，
             // 语言和主题都走它。
             applyTheme();
-            if (logTitle != null) {
-                logTitle.setText(I18n.t(Strings.TITLE_OUTPUT));
-            }
+            // 「输出」那一栏的标题不跟着语言走，这是刻意的：它旁边的正文是<b>日志</b>，
+            // 记的是"当时发生了什么"，用当时那种语言写的。只把标题翻过去、正文留着，
+            // 反而变成半中半英。整栏保持原样更一致。
             treeRoot.setUserObject(I18n.t(Strings.LABEL_TREE_ROOT));
             treeModel.nodeChanged(treeRoot);
             refreshCommandPanelTitle();

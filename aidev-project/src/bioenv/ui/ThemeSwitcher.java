@@ -11,6 +11,9 @@ import java.awt.event.MouseEvent;
 
 import javax.swing.JComponent;
 
+import bioenv.i18n.I18n;
+import bioenv.i18n.Strings;
+
 /**
  * 风格切换器：把三套风格平铺出来，点一下就换。
  *
@@ -19,6 +22,15 @@ import javax.swing.JComponent;
  *
  * <p>为什么不用三个 {@code JButton}：那样每个按钮都会带自己的 L&F 外观，而这个控件
  * 本身就该跟着主题走 —— 自己画一遍最省事，也最不容易在切换时露出破绽。
+ *
+ * <h2>名字为什么在这里取，而不是在 {@link UiTheme}</h2>
+ *
+ * <p>三套风格的名字原来写死在 {@code UiTheme.label()} 里，于是英文界面上这三格仍然是
+ * 「经典 / 浅色 / 深色」——旁边就是语言切换按钮，切过去之后这里还留着中文。
+ *
+ * <p>但把 {@link I18n} 塞进 {@code UiTheme} 并不合适：它是纯画法与取值的工具，被各处
+ * 引用，一直刻意不依赖 i18n。名字只有这一个控件在用（查过，全项目就这一处），所以
+ * 取名字这件事跟着控件走，{@code UiTheme} 保持原样。
  */
 public final class ThemeSwitcher extends JComponent {
 
@@ -29,10 +41,25 @@ public final class ThemeSwitcher extends JComponent {
 
     private int hover = -1;
 
+    /** 风格 id → 界面文案的键。 */
+    private static String labelKey(String id) {
+        if (UiTheme.PERSONAL.equals(id)) {
+            return Strings.THEME_LIGHT;
+        }
+        if (UiTheme.DARK.equals(id)) {
+            return Strings.THEME_DARK;
+        }
+        return Strings.THEME_CLASSIC;
+    }
+
+    private static String label(String id) {
+        return I18n.t(labelKey(id));
+    }
+
     public ThemeSwitcher() {
         setOpaque(false);
         setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        setToolTipText("切换界面风格：经典 / 个性 / 深色");
+        setToolTipText(I18n.t(Strings.THEME_TOOLTIP));
         addMouseListener(new MouseAdapter() {
             @Override
             public void mouseExited(MouseEvent e) {
@@ -61,6 +88,15 @@ public final class ThemeSwitcher extends JComponent {
         UiTheme.addListener(new Runnable() {
             @Override
             public void run() {
+                repaint();
+            }
+        });
+        // 语言变了也要跟着换。这个名字是自绘的，没人替它重设文字——不重画就一直是
+        // 上一种语言。工具提示同样是构造时定的，一并刷新。
+        I18n.addListener(new Runnable() {
+            @Override
+            public void run() {
+                setToolTipText(I18n.t(Strings.THEME_TOOLTIP));
                 repaint();
             }
         });
@@ -124,7 +160,7 @@ public final class ThemeSwitcher extends JComponent {
                 g2.setColor(UiTheme.surface());
                 g2.fillRoundRect(x, pad, seg, h - pad * 2, h - pad * 2, h - pad * 2);
             }
-            String s = UiTheme.label(ids[i]);
+            String s = label(ids[i]);
             java.awt.Font f = UiTheme.flat() ? UiTheme.ui(12, on) : null;
             if (f == null) {
                 f = getFont() != null

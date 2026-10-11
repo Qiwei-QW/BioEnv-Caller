@@ -157,6 +157,17 @@ public final class Strings {
     /** 语言切换工具提示。 */
     public static final String LANG_TOOLTIP = "lang.tooltip";
 
+    /**
+     * 风格切换器上的三套风格名，以及它的工具提示。
+     *
+     * <p>这三个名字原来写死在 {@code UiTheme.label()} 里，中英文界面上都是中文——
+     * 语言切换按钮就在它旁边，切过去之后这一处还留在中文，看着很扎眼。
+     */
+    public static final String THEME_CLASSIC = "theme.classic";
+    public static final String THEME_LIGHT = "theme.light";
+    public static final String THEME_DARK = "theme.dark";
+    public static final String THEME_TOOLTIP = "theme.tooltip";
+
     // ------------------------------------------------------------------
     // MainPanel：按钮
     // ------------------------------------------------------------------
@@ -1009,6 +1020,11 @@ public final class Strings {
         put(ZH_TEXT, EN_TEXT, LANG_SWITCH_TO_ZH, "中文", "中文");
         put(ZH_TEXT, EN_TEXT, LANG_TOOLTIP, "点击切换界面语言 / Click to switch interface language",
                 "Click to switch interface language / 点击切换界面语言");
+        put(ZH_TEXT, EN_TEXT, THEME_CLASSIC, "经典", "Classic");
+        put(ZH_TEXT, EN_TEXT, THEME_LIGHT, "浅色", "Light");
+        put(ZH_TEXT, EN_TEXT, THEME_DARK, "深色", "Dark");
+        put(ZH_TEXT, EN_TEXT, THEME_TOOLTIP, "切换界面风格：经典 / 浅色 / 深色",
+                "Switch interface style: Classic / Light / Dark");
 
         // --- MainPanel：按钮 ---
         put(ZH_TEXT, EN_TEXT, MENU_RUN, "运行", "Run");
