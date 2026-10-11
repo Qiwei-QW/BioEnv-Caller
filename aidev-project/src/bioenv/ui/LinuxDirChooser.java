@@ -286,6 +286,94 @@ public final class LinuxDirChooser {
         return root;
     }
 
+    /**
+     * 列表里每一项左边画一个文件夹图标。
+     *
+     * <p>原来直接用 {@code JList<String>} 的默认渲染器，条目就是干巴巴一行文字；而用户
+     * 心里对标的是 Windows 那个「打开」窗口，那里每一项前面都有个文件夹。少了图标不但
+     * 认起来慢，"这是个目录列表"这件事也不明显。
+     *
+     * <p>图标是<b>画出来</b>的，不是打包一张图：和工具条上那两个图标同一个路子（见
+     * {@code WindowsMark}），免得再引入一个会丢、会在高分屏上糊的资源。
+     */
+    private static final class FolderIcon implements javax.swing.Icon {
+        private static final FolderIcon INSTANCE = new FolderIcon();
+        private static final int SIZE = 16;
+
+        static FolderIcon shared() {
+            return INSTANCE;
+        }
+
+        @Override
+        public int getIconWidth() {
+            return SIZE;
+        }
+
+        @Override
+        public int getIconHeight() {
+            return SIZE;
+        }
+
+        @Override
+        public void paintIcon(java.awt.Component c, java.awt.Graphics g,
+                              int x, int y) {
+            java.awt.Graphics2D g2 = (java.awt.Graphics2D) g.create();
+            try {
+                g2.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING,
+                        java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+                java.awt.Color body = new java.awt.Color(0xFF, 0xD1, 0x54);
+                java.awt.Color edge = new java.awt.Color(0xE0, 0xA8, 0x1E);
+                java.awt.Color tab = new java.awt.Color(0xF2, 0xC0, 0x3C);
+                // 标签页
+                g2.setColor(tab);
+                g2.fillRect(x + 2, y + 3, 6, 3);
+                g2.drawRect(x + 2, y + 3, 6, 3);
+                // 文件夹主体
+                g2.setColor(body);
+                g2.fillRect(x + 1, y + 5, SIZE - 3, SIZE - 8);
+                g2.setColor(edge);
+                g2.drawRect(x + 1, y + 5, SIZE - 3, SIZE - 8);
+            } finally {
+                g2.dispose();
+            }
+        }
+    }
+
+    /** 列表视图的渲染器：图标在左，名字在右。 */
+    private static final class FolderRenderer
+            extends javax.swing.DefaultListCellRenderer {
+        private static final long serialVersionUID = 1L;
+
+        @Override
+        public java.awt.Component getListCellRendererComponent(
+                javax.swing.JList<?> list, Object value, int index,
+                boolean selected, boolean focused) {
+            super.getListCellRendererComponent(list, value, index, selected, focused);
+            setIcon(FolderIcon.shared());
+            setIconTextGap(6);
+            // 左右留点空，免得图标贴着边框。
+            setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 4));
+            return this;
+        }
+    }
+
+    /** 详细信息视图第一列也带图标。 */
+    private static final class FolderCellRenderer
+            extends javax.swing.table.DefaultTableCellRenderer {
+        private static final long serialVersionUID = 1L;
+
+        @Override
+        public java.awt.Component getTableCellRendererComponent(
+                javax.swing.JTable table, Object value, boolean selected,
+                boolean focused, int row, int column) {
+            super.getTableCellRendererComponent(table, value, selected, focused,
+                    row, column);
+            setIcon(FolderIcon.shared());
+            setIconTextGap(6);
+            return this;
+        }
+    }
+
     private JPanel buildTop() {
         JPanel top = new JPanel(new BorderLayout(6, 0));
         top.add(new JLabel(I18n.t(Strings.DIR_LOOK_IN)), BorderLayout.WEST);
@@ -309,6 +397,10 @@ public final class LinuxDirChooser {
         iconList.setVisibleRowCount(-1);
         iconList.setFixedCellWidth(160);
         detailTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        iconList.setCellRenderer(new FolderRenderer());
+        // 只有第一列（名称）配图标；权限和时间是纯文字，配图标反而乱。
+        detailTable.getColumnModel().getColumn(0)
+                .setCellRenderer(new FolderCellRenderer());
         midPanel.add(iconPane, BorderLayout.CENTER);
         midPanel.add(status, BorderLayout.SOUTH);
         return midPanel;
