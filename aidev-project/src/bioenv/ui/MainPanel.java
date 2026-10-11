@@ -190,6 +190,8 @@ public final class MainPanel extends JPanel {
     private final JButton clearLogButton = new JButton(I18n.t(Strings.MENU_CLEAR_LOG));
     /** "输出"标题：和清空按钮同处一行。 */
     private JLabel logTitle;
+    /** 命令预览下面那句说明（「可以直接在这里输入…」）。 */
+    private JLabel commandHint;
     /**
      * Opens the tool assistant: the tool's help on one tab, the user's own notes
      * on another. Named for what it opens rather than for the first tab, since
@@ -756,9 +758,17 @@ public final class MainPanel extends JPanel {
             // 一直不跟着换。重跑 applyTheme 就不会再漏——标题只有那一条构建路径，
             // 语言和主题都走它。
             applyTheme();
-            // 「输出」那一栏的标题不跟着语言走，这是刻意的：它旁边的正文是<b>日志</b>，
-            // 记的是"当时发生了什么"，用当时那种语言写的。只把标题翻过去、正文留着，
-            // 反而变成半中半英。整栏保持原样更一致。
+            // 「输出」这个<b>标题</b>要跟着语言走。
+            //
+            // 不跟语言走的是它的<b>正文</b>：那里是日志，记的是当时发生了什么、用当时的
+            // 语言写的。已经打出来的那些行不该被回炉重译（也译不回来），所以正文保持原样，
+            // 只翻标题。用户明确要的就是这个分界。
+            if (logTitle != null) {
+                logTitle.setText(I18n.t(Strings.TITLE_OUTPUT));
+            }
+            if (commandHint != null) {
+                commandHint.setText(I18n.t(Strings.HINT_COMMAND_AREA_LONG));
+            }
             treeRoot.setUserObject(I18n.t(Strings.LABEL_TREE_ROOT));
             treeModel.nodeChanged(treeRoot);
             refreshCommandPanelTitle();
@@ -1894,7 +1904,10 @@ public final class MainPanel extends JPanel {
         });
         JPanel cmdSouth = new JPanel(new java.awt.FlowLayout(
                 java.awt.FlowLayout.LEFT, 6, 2));
-        JLabel hint = new JLabel(I18n.t(Strings.HINT_COMMAND_AREA_LONG));
+        // 存成字段：这句话原来是个局部变量，于是语言切换够不着它，切完英文界面上
+        // 它还留着中文。凡是构造时按语言取过文字、之后又该跟着换的控件，都得留个引用。
+        commandHint = new JLabel(I18n.t(Strings.HINT_COMMAND_AREA_LONG));
+        JLabel hint = commandHint;
         UiTheme.role(hint, "muted");
         hint.setForeground(new Color(0x66, 0x66, 0x66));
         cmdSouth.add(hint);

@@ -70,9 +70,11 @@ public final class LanguageSwitchTest {
 
             check("起点：分区标题是「" + zhTree + "」", zhTree.equals(treeTitle(panel)),
                     "实际「" + treeTitle(panel) + "」");
-            // 「输出」标题刻意不跟语言走：它旁边是日志，记的是当时发生的事、用当时的
-            // 语言写的。只翻标题会让那一栏半中半英。所以这里断言它<b>保持</b>原样。
-            String zhOutputKept = logTitleText(panel);
+            String zhOutput = I18n.t(Strings.TITLE_OUTPUT);
+            String zhHint = I18n.t(Strings.HINT_COMMAND_AREA_LONG);
+            check("起点：「输出」标题是「" + zhOutput + "」",
+                    zhOutput.equals(logTitleText(panel)),
+                    "实际「" + logTitleText(panel) + "」");
 
             // 走<b>按键设置</b>那条生产路径，而不是塞一句渲染好的中文。
             //
@@ -96,9 +98,15 @@ public final class LanguageSwitchTest {
             check("切英文后左侧分区标题跟着换（期望「" + enTree + "」）",
                     enTree.equals(treeTitle(panel)),
                     "实际「" + treeTitle(panel) + "」");
-            check("切英文后「输出」标题保持不变（刻意不跟语言走）",
-                    zhOutputKept.equals(logTitleText(panel)),
+            // 「输出」的<b>标题</b>跟着语言走，而它的<b>正文</b>不跟：正文是日志，记的是
+            // 当时发生了什么、用当时的语言写的，已经打出来的行不该被回炉重译。
+            check("切英文后「输出」标题跟着换（期望「"
+                            + I18n.t(Strings.TITLE_OUTPUT) + "」）",
+                    I18n.t(Strings.TITLE_OUTPUT).equals(logTitleText(panel)),
                     "实际「" + logTitleText(panel) + "」");
+            check("切英文后命令预览那句说明也跟着换",
+                    I18n.t(Strings.HINT_COMMAND_AREA_LONG).equals(commandHintText(panel)),
+                    "实际「" + commandHintText(panel) + "」");
             check("切英文后状态栏不再停在旧语言（期望「"
                             + I18n.t(Strings.STATUS_READY) + "」）",
                     I18n.t(Strings.STATUS_READY).equals(statusText(panel)),
@@ -112,9 +120,11 @@ public final class LanguageSwitchTest {
             settle();
             check("切回中文后左侧分区标题还原", zhTree.equals(treeTitle(panel)),
                     "实际「" + treeTitle(panel) + "」");
-            check("切回中文后「输出」标题仍然不变",
-                    zhOutputKept.equals(logTitleText(panel)),
+            check("切回中文后「输出」标题还原", zhOutput.equals(logTitleText(panel)),
                     "实际「" + logTitleText(panel) + "」");
+            check("切回中文后命令预览那句说明还原",
+                    zhHint.equals(commandHintText(panel)),
+                    "实际「" + commandHintText(panel) + "」");
             check("切回中文后状态栏还原",
                     I18n.t(Strings.STATUS_READY).equals(statusText(panel)),
                     "实际「" + statusText(panel) + "」");
@@ -218,6 +228,10 @@ public final class LanguageSwitchTest {
         // 没有 TitledBorder 时退到树根节点的文字：标题也可能画在那里。
         return String.valueOf(((javax.swing.JTree) field(p, "toolTree"))
                 .getModel().getRoot());
+    }
+
+    private static String commandHintText(MainPanel p) throws Exception {
+        return ((JLabel) field(p, "commandHint")).getText();
     }
 
     private static String themeTooltip(MainPanel p) throws Exception {
