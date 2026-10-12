@@ -2343,9 +2343,22 @@ public final class SchemaFormPanel extends JPanel {
         }
         final String target = wslInputDir();
         if (target == null) {
-            // No working directory on the Linux side yet. Said once, and the path is
-            // left exactly as typed — the plugin does not invent a destination.
-            noteOnce("copydir", I18n.t(Strings.FORM_NOTE_COPYDIR));
+            // 没有"Linux 侧的工作目录"可落脚。
+            //
+            // 但**只在 SSH 下**这句话才成立，这是被用户指出来的：他在 WSL 模式下把工作
+            // 目录设成 C:\Users\...\pep、输入也选了 Windows 路径，界面却让他"先在
+            // Linux 侧建一个工作目录"——可那条路本来就能跑。
+            //
+            // WSL 与 Windows 之间有 /mnt/c 这条共享，CommandBuilder 会把工作目录和参数
+            // 里的 Windows 路径都翻译成 /mnt/c/... 再交给远端（见它第 86、411 行）。也
+            // 就是说：WSL 模式下用 Windows 工作目录是**用户的正当选择**，不需要复制，
+            // 更不需要建 Linux 目录，界面上什么都不该说。
+            //
+            // SSH 下不同：远端看不到本机的 C:\，那条路径在那边没有意义，提示必须留着
+            // ——但要说明白原因，而不是让人以为漏做了一步。
+            if (remoteChannel) {
+                noteOnce("copydir", I18n.t(Strings.FORM_NOTE_COPYDIR));
+            }
             return;
         }
         if (inputCopier == null) {

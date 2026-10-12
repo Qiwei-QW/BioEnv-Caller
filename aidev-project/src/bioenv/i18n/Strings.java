@@ -1680,10 +1680,16 @@ public final class Strings {
         put(ZH_TEXT, EN_TEXT, FORM_OPTION_SHOWN_OF, "显示 {0} / 共 {1}",
                 "{0} of {1}");
         put(ZH_TEXT, EN_TEXT, FORM_OPTIONS_TITLE, "选项", "Options");
+        // 这句只在 SSH 下出现：WSL 与 Windows 之间有 /mnt/c，Windows 路径本来就能用，
+        // 说了反而让人以为漏做了一步。所以文案针对 SSH 写，并说清为什么。
         put(ZH_TEXT, EN_TEXT, FORM_NOTE_COPYDIR,
-                "请先点企鹅图标，在 Linux 侧建一个工作目录；之后这个文件会自动复制过去。",
-                "Press the penguin first to make a working directory on the Linux "
-                        + "side; this file is then copied across for you.");
+                "在 SSH 模式下，工作目录要填 Linux 侧的路径（如 /home/you/work）："
+                        + "远端看不到本机的 C:\\。点企鹅图标可以在这里选一个，"
+                        + "之后本机的文件会自动复制过去。",
+                "Over SSH the working directory must be a path on the Linux side "
+                        + "(such as /home/you/work): the remote cannot see this "
+                        + "machine's C:. Press the penguin to pick one, and files from "
+                        + "this machine are then copied across.");
         put(ZH_TEXT, EN_TEXT, FORM_COPY_FAILED,
                 "无法复制 {0} 个文件；路径保持原样未改。",
                 "Could not copy {0} file(s); the path was left as it was.");
