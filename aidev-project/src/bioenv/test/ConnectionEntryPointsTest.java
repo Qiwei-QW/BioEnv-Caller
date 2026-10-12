@@ -57,6 +57,33 @@ public final class ConnectionEntryPointsTest {
             JComboBox<?> box = distroBox(panel);
 
             // -----------------------------------------------------------
+            // 0a. 下次打开要回到上次用的那台机器
+            // -----------------------------------------------------------
+            // 用户报的：有多条配置时，下次打开默认不是上次用的那个。
+            //
+            // 根因是拿显示名去 List<SshTarget>.contains —— 参数是 Object，编译通过，
+            // 运行时恒为 false，于是"回到上次那台"从来没生效，下拉框停在第一项。
+            // 判断已抽成纯函数，这里直接钉住它的行为。
+            check("有上次用的那台：选它",
+                    "b".equals(MainPanel.profileToSelect(
+                            Arrays.asList("a", "b", "c"), null, "b")));
+            check("本次会话已经选了：优先保持它，不被上次的顶掉",
+                    "c".equals(MainPanel.profileToSelect(
+                            Arrays.asList("a", "b", "c"), "c", "b")));
+            check("上次那台已被删掉：不硬选，交回默认位置",
+                    MainPanel.profileToSelect(
+                            Arrays.asList("a", "b"), null, "gone") == null);
+            check("没有上次记录：交回默认位置",
+                    MainPanel.profileToSelect(
+                            Arrays.asList("a", "b"), null, "") == null);
+            check("一条配置都没有：交回默认位置",
+                    MainPanel.profileToSelect(
+                            Collections.<String>emptyList(), null, "b") == null);
+            check("上次记录带空格也能对上",
+                    "b".equals(MainPanel.profileToSelect(
+                            Arrays.asList("a", "b"), null, "  b  ")));
+
+            // -----------------------------------------------------------
             // 0. 浏览 Linux 目录的接线必须在构造时就装好
             // -----------------------------------------------------------
             // 这条守的是用户报的「点小企鹅没反应」：接线原来装在 adoptRegistry 里，而
