@@ -3304,16 +3304,19 @@ public final class MainPanel extends JPanel {
                 : pendingDistro;
         final int port = (ssh && sshTarget != null) ? sshTarget.port : 0;
         final String keyPath = (ssh && sshTarget != null) ? sshTarget.keyPath : null;
-        final String log = bioenv.core.TerminalLaunch.transcriptPath(
-                remoteWorkdir == null ? "" : remoteWorkdir);
-        final String scriptFile = bioenv.core.TerminalLaunch.scriptFilePath(
-                remoteWorkdir == null ? "" : remoteWorkdir);
+        // 交互路径只需要那个脚本文件，而且它也放 /tmp。
+        //
+        // 记录和结束标记在这里都是多余的：输出由面板自己逐块收（不靠 script 记），
+        // 进程什么时候结束读线程自己就知道（不靠标记文件轮询）。少两个文件，
+        // 也少一层嵌套的 script —— 外层那个已经给了 PTY。
+        final String tempBase = bioenv.core.TerminalLaunch.tempBase();
+        final String scriptFile = bioenv.core.TerminalLaunch.scriptFilePath(tempBase);
         // 把实际用的工作目录写进日志：出问题时一眼能看出它有没有 cd 对地方。
         // 这一条是被"结果文件没落在工作目录里"逼出来的 —— 当时日志里没有任何
         // 线索指向 cd，只能靠读代码猜。
         appendLog(I18n.t(Strings.LOG_RUN_WORKDIR,
                 remoteWorkdir == null ? "-" : remoteWorkdir));
-        final String session = bioenv.core.TerminalLaunch.sessionScript(script, log);
+        final String session = script;
         final Transport chan = wsl;
         if (chan == null) {
             appendLog(I18n.t(Strings.LOG_TERMINAL_NO_TRANSCRIPT));
@@ -3494,11 +3497,10 @@ public final class MainPanel extends JPanel {
         // 不带 -i 就不用配置里那把密钥。
         final int port = (ssh && sshTarget != null) ? sshTarget.port : 0;
         final String keyPath = (ssh && sshTarget != null) ? sshTarget.keyPath : null;
-        final String log = bioenv.core.TerminalLaunch.transcriptPath(
-                remoteWorkdir == null ? "" : remoteWorkdir);
-        final String scriptFile =
-                bioenv.core.TerminalLaunch.scriptFilePath(
-                        remoteWorkdir == null ? "" : remoteWorkdir);
+        // 脚本与记录都放 /tmp：插件的记账不该落在用户的数据目录里。
+        final String tempBase = bioenv.core.TerminalLaunch.tempBase();
+        final String log = bioenv.core.TerminalLaunch.transcriptPath(tempBase);
+        final String scriptFile = bioenv.core.TerminalLaunch.scriptFilePath(tempBase);
         final String session = bioenv.core.TerminalLaunch.sessionScript(script, log);
 
         // 先把脚本写进远端文件，再启动终端。

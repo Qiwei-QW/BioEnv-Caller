@@ -250,13 +250,30 @@ public final class TerminalLaunch {
         return sshArgv(userHost, port, keyPath, scriptPath);
     }
 
-    /** 会话脚本文件的路径：放在工作目录下，名字固定。 */
-    public static String scriptFilePath(String workdir) {
-        if (workdir == null || workdir.trim().isEmpty()) {
-            return "tbvterm.sh";
-        }
-        String d = workdir.trim();
-        return d.endsWith("/") ? d + "tbvterm.sh" : d + "/tbvterm.sh";
+    /**
+     * 一次运行要用的临时文件基名：放在 {@code /tmp} 下，<b>不落进用户的工作目录</b>。
+     *
+     * <p>原来这三个文件（脚本、记录、结束标记）都写在工作目录里，于是用户跑完一看，
+     * 目录里除了工具真正的产出，还多了 {@code tbvterm.sh}、{@code tbvterm.log}、
+     * {@code tbvterm.log.done}。用户报的正是这个：他在终端里跑同一个工具只得到两个结果
+     * 文件，插件跑却多出三个 —— <b>插件的记账不该落在用户的数据目录里</b>。
+     *
+     * <p>选 {@code /tmp} 而不是 {@code ~/.tbvadapt} 之类的家目录，是因为这里的路径要经
+     * shell 引用（见 {@link #posixQuote}，它一律加单引号），而单引号里 {@code ~} 和
+     * {@code $HOME} <b>不会展开</b> —— 这正是本项目早先建出过一个名叫 {@code ~} 的目录
+     * 的原因。{@code /tmp} 是绝对路径，不需要任何展开，引号加了也照样对。
+     *
+     * <p>带一段唯一后缀：两次运行互不覆盖；名字里的十六进制来自纳秒，不需要额外查询。
+     * 用完不必删 —— 系统会清 {@code /tmp}。
+     */
+    public static String tempBase() {
+        return "/tmp/tbvterm-" + Long.toHexString(System.nanoTime());
+    }
+
+    /** 会话脚本文件的路径。 */
+    public static String scriptFilePath(String base) {
+        String b = (base == null || base.trim().isEmpty()) ? "/tmp/tbvterm" : base.trim();
+        return b + ".sh";
     }
 
     /**
@@ -376,11 +393,8 @@ public final class TerminalLaunch {
      * <p>固定名而不是时间戳：用户回头要找它，一个能记住的名字比一串数字有用；而且
      * 每次覆盖正好表示"这是最近一次"。
      */
-    public static String transcriptPath(String workdir) {
-        if (workdir == null || workdir.trim().isEmpty()) {
-            return "tbvterm.log";
-        }
-        String d = workdir.trim();
-        return d.endsWith("/") ? d + "tbvterm.log" : d + "/tbvterm.log";
+    public static String transcriptPath(String base) {
+        String b = (base == null || base.trim().isEmpty()) ? "/tmp/tbvterm" : base.trim();
+        return b + ".log";
     }
 }

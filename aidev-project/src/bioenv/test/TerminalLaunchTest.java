@@ -72,12 +72,25 @@ public final class TerminalLaunchTest {
         eq("不留记录时 null 变空串", "",
                 TerminalLaunch.withoutTranscript(null));
 
-        eq("没有工作目录时记录文件用相对名", "tbvterm.log",
-                TerminalLaunch.transcriptPath(""));
-        eq("工作目录下的记录文件名固定", "/home/qw/shili/tbvterm.log",
-                TerminalLaunch.transcriptPath("/home/qw/shili"));
-        eq("末尾斜杠不会产生双斜杠", "/home/qw/shili/tbvterm.log",
-                TerminalLaunch.transcriptPath("/home/qw/shili/"));
+        // 记账文件放 /tmp，不落进用户的工作目录。
+        //
+        // 用户报的：在终端里跑同一个工具只得到两个结果文件，插件跑却多出
+        // tbvterm.sh / tbvterm.log / tbvterm.log.done —— 插件的记账混进了数据目录。
+        String base = TerminalLaunch.tempBase();
+        check("临时目录在 /tmp 下（不需要 shell 展开任何东西）",
+                base.startsWith("/tmp/tbvterm-"), base);
+        check("临时基名不含空格或 ~（引号加了也照样对）",
+                base.indexOf(' ') < 0 && base.indexOf('~') < 0, base);
+        check("两次运行不会撞名",
+                !base.equals(TerminalLaunch.tempBase()), base);
+        eq("脚本文件带 .sh", base + ".sh", TerminalLaunch.scriptFilePath(base));
+        eq("记录文件带 .log", base + ".log", TerminalLaunch.transcriptPath(base));
+        eq("结束标记在记录后面加 .done", base + ".log.done",
+                TerminalLaunch.sentinelPath(TerminalLaunch.transcriptPath(base)));
+        // 空基名也要给一个合法的绝对路径，不能退回相对名（那会落进工作目录）。
+        check("空基名退回 /tmp 下的绝对路径",
+                TerminalLaunch.scriptFilePath("").startsWith("/tmp/"),
+                TerminalLaunch.scriptFilePath(""));
     }
 
     private static void channels() {
@@ -162,12 +175,8 @@ public final class TerminalLaunchTest {
 
     /** 脚本走文件：路径怎么算、内容怎么写进去。 */
     private static void scriptFile() {
-        eq("工作目录下的脚本文件名固定", "/home/qw/shili/tbvterm.sh",
-                TerminalLaunch.scriptFilePath("/home/qw/shili"));
-        eq("末尾斜杠不会产生双斜杠", "/home/qw/shili/tbvterm.sh",
-                TerminalLaunch.scriptFilePath("/home/qw/shili/"));
-        eq("没有工作目录时用相对名", "tbvterm.sh",
-                TerminalLaunch.scriptFilePath(""));
+        // 这三个原来断言"脚本落在工作目录里"，而那正是用户不要的：
+        // 插件的记账混进了数据目录。路径现在一律在 /tmp 下，见上面的检查。
 
         // base64：脚本里那些单引号、美元符、换行都不能原样进 shell。
         String cmd = TerminalLaunch.writeScriptCommand("/home/qw/x.sh",
