@@ -201,7 +201,49 @@ public final class WorkdirUiTest {
                     codeOnly.indexOf("if (midPanel == null)") > 0);
         }
 
+        // ---------------------------------------------------------------
+        // 工作目录那一行只能有一条
+        // ---------------------------------------------------------------
+        //
+        // 用户报的：解析不出参数的工具（pamp）页面上出现了两条工作目录。
+        // 原因是 buildHead() 和 buildFallbackPanel() 各加了一条，而解析不出的工具两条
+        // 都显示。多出来的不只是难看——buildWorkdirRow() 会覆盖共用的 workdirField，
+        // 于是页头那条是死的：往里打字，面板读的是另一条，路径不生效也不报错。
+        //
+        // 页头对每个工具都显示（解析得出的和解析不出的都走 buildHead），所以工作目录
+        // 属于页头，全局一条。
+        check("解析得出参数的工具：只有一条工作目录按钮",
+                countByName(form, "bioenv.makeWorkdir") == 1,
+                "实际 " + countByName(form, "bioenv.makeWorkdir") + " 条");
+
+        SchemaFormPanel bare = new SchemaFormPanel();
+        Tool noSchema = new Tool("pamp", "paml_env", "/envs/x");
+        noSchema.schema = new Schema();
+        noSchema.schema.parsed = false;   // 解析不出参数：走 fallback 面板
+        bare.showTool(noSchema);
+        check("解析不出参数的工具：也只有一条工作目录按钮",
+                countByName(bare, "bioenv.makeWorkdir") == 1,
+                "实际 " + countByName(bare, "bioenv.makeWorkdir") + " 条");
+        check("解析不出参数的工具：Windows 按钮也只有一条",
+                countByName(bare, "bioenv.chooseWorkdir") == 1,
+                "实际 " + countByName(bare, "bioenv.chooseWorkdir") + " 条");
+
         finish();
+    }
+
+    /** 数一数组件树里叫这个名字的组件有几个。 */
+    private static int countByName(Container root, String name) {
+        int n = 0;
+        Component[] kids = root.getComponents();
+        for (int i = 0; i < kids.length; i++) {
+            if (name.equals(kids[i].getName())) {
+                n++;
+            }
+            if (kids[i] instanceof Container) {
+                n += countByName((Container) kids[i], name);
+            }
+        }
+        return n;
     }
 
     /**
