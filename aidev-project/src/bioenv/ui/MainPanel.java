@@ -349,10 +349,11 @@ public final class MainPanel extends JPanel {
         formPanel.setFileBrowser(new SchemaFormPanel.FileBrowser() {
             @Override
             public java.util.List<String> browseFiles(Object transport, String startDir,
-                                                      boolean multi, boolean save) {
+                                                      boolean multi, boolean save,
+                                                      boolean directory) {
                 return transport instanceof Transport
                         ? LinuxFileChooser.open((Transport) transport, startDir,
-                                multi, save)
+                                multi, save, directory)
                         : new java.util.ArrayList<String>();
             }
         });

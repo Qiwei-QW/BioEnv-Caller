@@ -74,6 +74,13 @@ public final class LinuxFileChooser {
     private final String startDir;
     private final boolean multi;
     private final boolean save;
+    /**
+     * 这个参数要的是<b>目录</b>（如 {@code -b <dir>}）。
+     *
+     * <p>没有它的话，选中的文件夹一律被当成"进去"，于是目录参数根本没法把文件夹当值
+     * 带走——用户报的就是这个。文件模式下保持 Windows 的行为（选文件夹＝进去）。
+     */
+    private final boolean directory;
 
     private final JDialog dialog;
     /** 查找(I)：路径，可编辑可下拉——走过的地方留在里面，回头一步就能到。 */
@@ -100,12 +107,14 @@ public final class LinuxFileChooser {
     private boolean details;
 
     private LinuxFileChooser(Transport transport, String startDir, boolean multi,
-                             boolean save) {
+                             boolean save, boolean directory) {
         this.transport = transport;
         this.startDir = startDir;
         this.multi = multi;
         this.save = save;
-        dialog = new JDialog((java.awt.Frame) null, I18n.t(Strings.FILE_TITLE), true);
+        this.directory = directory;
+        dialog = new JDialog((java.awt.Frame) null, I18n.t(directory
+                ? Strings.DIR_TITLE : Strings.FILE_TITLE), true);
         dialog.setName("bioenv.linuxFileChooser");
         dialog.setContentPane(build());
         dialog.pack();
@@ -119,13 +128,15 @@ public final class LinuxFileChooser {
      * @param startDir  初始目录，通常是设置好的工作目录；为空时用主目录
      * @param multi     是否允许多选（输入参数通常是）
      * @param save      保存模式：选目录 + 填文件名（输出参数用）
+     * @param directory 这个参数要的是目录，选中的文件夹要能当值返回
      */
     public static List<String> open(Transport transport, String startDir,
-                                    boolean multi, boolean save) {
+                                    boolean multi, boolean save, boolean directory) {
         if (java.awt.GraphicsEnvironment.isHeadless()) {
             return new ArrayList<String>();
         }
-        LinuxFileChooser c = new LinuxFileChooser(transport, startDir, multi, save);
+        LinuxFileChooser c =
+                new LinuxFileChooser(transport, startDir, multi, save, directory);
         c.dialog.setLocationRelativeTo(null);
         c.load(c.initialDir());
         c.dialog.setVisible(true);
@@ -334,6 +345,31 @@ public final class LinuxFileChooser {
             }
             return;
         }
+        // 目录参数：选中的文件夹就是<b>值</b>，不是"进去"。
+        //
+        // 这是被用户指出来的：`-b <dir>`、`-f <dir>` 这类参数要的就是一个目录，可选中
+        // 文件夹被一律当成"进去"，于是目录参数根本拿不到值，只能选文件。
+        //
+        // 什么都没选时给当前这一层，这样"就在这个目录"也能表达——和选工作目录那个
+        // 窗口一致。
+        if (directory) {
+            List<String> dirPicked = new ArrayList<String>();
+            for (Row r : sel) {
+                if (r.dir) {
+                    dirPicked.add(LinuxDirList.childOf(current, r.name));
+                } else {
+                    // 选中的是文件：它所在的目录才是这个参数要的东西。
+                    dirPicked.add(current);
+                }
+            }
+            if (dirPicked.isEmpty()) {
+                dirPicked.add(current);
+            }
+            result = dirPicked;
+            dialog.dispose();
+            return;
+        }
+
         List<String> picked = new ArrayList<String>();
         for (Row r : sel) {
             if (!r.dir) {
@@ -341,7 +377,7 @@ public final class LinuxFileChooser {
             }
         }
         if (picked.isEmpty()) {
-            // 只选了目录（或者什么都没选）：那就先进去，这是 Windows 的行为。
+            // 文件模式下，选中文件夹＝进去，这是 Windows 的行为。
             Row r = sel.isEmpty() ? null : sel.get(0);
             if (r != null && r.dir) {
                 load(LinuxDirList.childOf(current, r.name));

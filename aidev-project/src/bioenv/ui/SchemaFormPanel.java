@@ -2794,10 +2794,13 @@ public final class SchemaFormPanel extends JPanel {
          * @param startDir  初始目录，通常是设置好的工作目录
          * @param multi     允许多选
          * @param save      保存模式（输出参数）：选目录 + 填文件名
+         * @param directory 这个参数要的是<b>目录</b>（如 {@code -b <dir>}），所以选中的
+         *                  文件夹要能当值返回，而不只是进去
          * @return 选中的远端绝对路径；取消返回空表
          */
         java.util.List<String> browseFiles(Object transport, String startDir,
-                                           boolean multi, boolean save);
+                                           boolean multi, boolean save,
+                                           boolean directory);
     }
 
     public void setFileBrowser(FileBrowser browser) {
@@ -2857,7 +2860,7 @@ public final class SchemaFormPanel extends JPanel {
             start = typed.trim();
         }
         java.util.List<String> picked = fileBrowser.browseFiles(currentTransport,
-                start, multi, save && !directory);
+                start, multi, save && !directory, directory);
         if (picked == null || picked.isEmpty()) {
             return;
         }
