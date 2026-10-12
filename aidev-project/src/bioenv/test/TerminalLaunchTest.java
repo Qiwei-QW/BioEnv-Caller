@@ -31,6 +31,7 @@ public final class TerminalLaunchTest {
         quoting();
         transcript();
         channels();
+        scriptFile();
         layers();
         printing();
         System.out.println(failures == 0
@@ -86,9 +87,18 @@ public final class TerminalLaunchTest {
         check("WSL 用 -d 传发行版",
                 wsl.indexOf("-d") >= 0 && wsl.get(wsl.indexOf("-d") + 1).equals("Ubuntu"),
                 wsl.toString());
-        check("WSL 读 profile（-lc）", wsl.contains("-lc"), wsl.toString());
-        check("WSL 的脚本是最后一个参数",
-                wsl.get(wsl.size() - 1).equals("evolver"), wsl.toString());
+        // 现在传的是"脚本文件的路径"，末尾两个元素是 bash + 路径。
+        check("WSL 末尾用 bash 跑脚本文件",
+                wsl.get(wsl.size() - 2).equals("bash")
+                        && wsl.get(wsl.size() - 1).equals("evolver"),
+                wsl.toString());
+        // 关键：argv 里<b>不能有</b>任何含空格或引号的元素。wt.exe 会重新解析命令行，
+        // 带空格的那一段会被拆散 —— 实测过，窗口开出来了却在跑脚本的尾巴。
+        for (int i = 0; i < wsl.size(); i++) {
+            String a = wsl.get(i);
+            check("WSL 第 " + i + " 个参数不含空格/引号", 
+                    a.indexOf(' ') < 0 && a.indexOf('"') < 0, a);
+        }
 
         // 发行版为空时不该出现一个空的 -d 值。
         List<String> noDistro = TerminalLaunch.channelArgv(false, "", "ls");
@@ -99,11 +109,44 @@ public final class TerminalLaunchTest {
         check("SSH 用 ssh.exe", ssh.get(0).equals("ssh.exe"), ssh.toString());
         check("SSH 带 -t 分配 PTY", ssh.contains("-t"), ssh.toString());
         check("SSH 带目标主机", ssh.contains("qw@10.0.0.5"), ssh.toString());
-        check("SSH 的脚本是最后一个参数",
-                ssh.get(ssh.size() - 1).equals("evolver"), ssh.toString());
+        check("SSH 末尾用 bash 跑脚本文件",
+                ssh.get(ssh.size() - 2).equals("bash")
+                        && ssh.get(ssh.size() - 1).equals("evolver"),
+                ssh.toString());
+        for (int i = 0; i < ssh.size(); i++) {
+            String a = ssh.get(i);
+            check("SSH 第 " + i + " 个参数不含空格/引号",
+                    a.indexOf(' ') < 0 && a.indexOf('"') < 0, a);
+        }
         // BatchMode=yes 会禁止一切提问——那正是交互做不到的原因，这里刻意不带。
         check("刻意不带 BatchMode（用户能在终端里输密码）",
                 !ssh.toString().contains("BatchMode"), ssh.toString());
+    }
+
+    /** 脚本走文件：路径怎么算、内容怎么写进去。 */
+    private static void scriptFile() {
+        eq("工作目录下的脚本文件名固定", "/home/qw/shili/tbvterm.sh",
+                TerminalLaunch.scriptFilePath("/home/qw/shili"));
+        eq("末尾斜杠不会产生双斜杠", "/home/qw/shili/tbvterm.sh",
+                TerminalLaunch.scriptFilePath("/home/qw/shili/"));
+        eq("没有工作目录时用相对名", "tbvterm.sh",
+                TerminalLaunch.scriptFilePath(""));
+
+        // base64：脚本里那些单引号、美元符、换行都不能原样进 shell。
+        String cmd = TerminalLaunch.writeScriptCommand("/home/qw/x.sh",
+                "echo 'hi' $HOME\nnext");
+        check("写入用 base64 -d", cmd.contains("base64 -d"), cmd);
+        check("重定向到脚本文件", cmd.contains("> '/home/qw/x.sh'"), cmd);
+        // 编码后的载荷里不该出现脚本原文的任何片段——出现了就说明没编码。
+        check("载荷里不含脚本原文", !cmd.contains("$HOME"), cmd);
+        // 反过来：解出来必须和原文一模一样。
+        // 载荷在倒数第二个引号对里：从 " | base64" 往前找那对引号。
+        int end = cmd.indexOf("' |");
+        int start = cmd.lastIndexOf("'", end - 1);
+        String b64 = cmd.substring(start + 1, end);
+        String back = new String(java.util.Base64.getDecoder().decode(b64),
+                java.nio.charset.StandardCharsets.UTF_8);
+        eq("解回来和原文一致", "echo 'hi' $HOME\nnext", back);
     }
 
     private static void layers() {

@@ -3249,9 +3249,51 @@ public final class MainPanel extends JPanel {
                 : pendingDistro;
         final String log = bioenv.core.TerminalLaunch.transcriptPath(
                 workdir == null ? "" : workdir);
+        final String scriptFile =
+                bioenv.core.TerminalLaunch.scriptFilePath(workdir == null ? "" : workdir);
         final String session = bioenv.core.TerminalLaunch.sessionScript(script, log);
+
+        // 先把脚本写进远端文件，再启动终端。
+        //
+        // 启动行里因此只剩一个"脚本文件的路径"，没有任何元素含空格或引号 ——
+        // 实测过：把整段脚本塞进 argv，wt.exe 重新解析命令行时会把那一段拆散，
+        // 窗口开出来了，跑的却是脚本的尾巴。写文件这条路把引号问题整个绕开。
+        final Transport chan = wsl;
+        if (chan == null) {
+            appendLog(I18n.t(Strings.LOG_TERMINAL_NO_TRANSCRIPT));
+            return;
+        }
         final java.util.List<String> inner =
-                bioenv.core.TerminalLaunch.channelArgv(ssh, target, session);
+                bioenv.core.TerminalLaunch.channelArgv(ssh, target, scriptFile);
+        new javax.swing.SwingWorker<Boolean, Void>() {
+            @Override
+            protected Boolean doInBackground() {
+                return chan.runBashCapture(
+                        bioenv.core.TerminalLaunch.writeScriptCommand(scriptFile, session)
+                ).ok();
+            }
+
+            @Override
+            protected void done() {
+                boolean written;
+                try {
+                    written = Boolean.TRUE.equals(get());
+                } catch (Exception ex) {
+                    written = false;
+                }
+                if (!written) {
+                    // 脚本没写下去就别开终端了：开了也是跑一个不存在的文件，
+                    // 用户看到的会是另一个更难懂的错误。
+                    appendLog(I18n.t(Strings.LOG_TERMINAL_NO_TRANSCRIPT));
+                    return;
+                }
+                launchTerminal(inner, log);
+            }
+        }.execute();
+    }
+
+    /** 真正启动终端窗口的那一步；三层，从好到保底。 */
+    private void launchTerminal(final java.util.List<String> inner, final String log) {
 
         boolean started = false;
         for (bioenv.core.TerminalLaunch.Layer layer : new bioenv.core.TerminalLaunch.Layer[]{

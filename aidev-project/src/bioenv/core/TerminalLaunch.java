@@ -128,8 +128,20 @@ public final class TerminalLaunch {
      * @param script         要在远端跑的那段脚本
      */
     public static List<String> channelArgv(boolean ssh, String targetOrDistro,
-                                           String script) {
+                                           String scriptPath) {
+        // 只传"脚本文件的路径"，不传脚本本身。
+        //
+        // 这是被真实报错逼出来的：原来把整段多行脚本塞进一个 argv 元素，而
+        // <b>wt.exe 会重新解析命令行</b>，那一段活不下来 —— 实测的现象是窗口开出来了，
+        // 但只有脚本的尾巴被当成要启动的程序：
+        //
+        //   [出现错误 2147942402 (0x80070002) (启动" touch 'tbvterm.log.done' 2>/dev/null 时)]
+        //
+        // 换成路径之后，argv 里<b>没有任何元素含空格或引号</b>（脚本写在无空格的目录下），
+        // wt 再怎么解析也拆不坏。脚本内容改用 base64 写进文件，见
+        // {@link #writeScriptCommand}。
         List<String> argv = new ArrayList<String>();
+        String path = scriptPath == null ? "" : scriptPath.trim();
         if (ssh) {
             argv.add("ssh.exe");
             // -t 分配 PTY：交互式程序要它；不加的话远端工具会以为没有终端，
@@ -142,7 +154,8 @@ public final class TerminalLaunch {
             if (targetOrDistro != null && !targetOrDistro.trim().isEmpty()) {
                 argv.add(targetOrDistro.trim());
             }
-            argv.add(script);
+            argv.add("bash");
+            argv.add(path);
             return argv;
         }
         argv.add("wsl.exe");
@@ -152,10 +165,32 @@ public final class TerminalLaunch {
         }
         argv.add("--");
         argv.add("bash");
-        // -l 让 profile 被读（conda 的初始化常在里面），-c 执行这段脚本。
-        argv.add("-lc");
-        argv.add(script);
+        argv.add(path);
         return argv;
+    }
+
+    /** 会话脚本文件的路径：放在工作目录下，名字固定。 */
+    public static String scriptFilePath(String workdir) {
+        if (workdir == null || workdir.trim().isEmpty()) {
+            return "tbvterm.sh";
+        }
+        String d = workdir.trim();
+        return d.endsWith("/") ? d + "tbvterm.sh" : d + "/tbvterm.sh";
+    }
+
+    /**
+     * 把脚本内容写进远端文件的命令。
+     *
+     * <p>用 <b>base64</b> 而不是 heredoc：脚本里会出现单引号、美元符、反引号、换行，
+     * 任何一层转义写错都会让文件内容悄悄变形，而变形之后的表现是"终端里跑的东西不对"，
+     * 极难查。base64 的字母表里没有 shell 元字符，写进去就是写进去。
+     */
+    public static String writeScriptCommand(String scriptPath, String script) {
+        byte[] raw = (script == null ? "" : script)
+                .getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        String b64 = java.util.Base64.getEncoder().encodeToString(raw);
+        return "printf '%s' " + posixQuote(b64) + " | base64 -d > "
+                + posixQuote(scriptPath);
     }
 
     /**
