@@ -1398,16 +1398,25 @@ public final class MainPanel extends JPanel {
                     setStatusKey(Strings.STATUS_NO_PROFILE);
                 } else {
                     // Prefer whatever was selected before, so a refresh does not
-                    // silently move the user to a different machine.
-                    String keep = sshTarget == null ? null : displayNameOf(sshTarget);
-                    if (keep != null && all.contains(keep)) {
-                        distroBox.setSelectedItem(keep);
-                    } else {
-                        // 还没有选择时，回到上次用的那一台。
-                        String remembered = targetMemory.vmProfile();
-                        if (!remembered.isEmpty() && all.contains(remembered)) {
-                            distroBox.setSelectedItem(remembered);
-                        }
+                    // silently move the user to a different machine; failing that, go
+                    // back to the machine used last time.
+                    //
+                    // 名字清单单独拼一份，<b>不要</b>拿字符串去 contains(all)。
+                    //
+                    // all 是 List<SshTarget>，而这里比的是显示名。List.contains 接受
+                    // Object，所以 all.contains("某台机器") 编译通过、运行时拿
+                    // SshTarget.equals(String) 比 —— 恒为 false。这正是"下次打开回到
+                    // 的不是上次那台"的原因：两条分支都落空，下拉框就停在第一项。
+                    // 这类错编译器不会报，只会静静地什么都不做。
+                    java.util.List<String> names = new java.util.ArrayList<String>();
+                    for (vmadapt.core.SshTarget t : all) {
+                        names.add(displayNameOf(t));
+                    }
+                    String chosen = profileToSelect(names,
+                            sshTarget == null ? null : displayNameOf(sshTarget),
+                            targetMemory.vmProfile());
+                    if (chosen != null) {
+                        distroBox.setSelectedItem(chosen);
                     }
                     // 列表填好后 JComboBox 本来就会停在第一项上，也就是说配置已经
                     // 选好了。以前这里一律说「选一个再点扫描」，于是用户每次切到
@@ -1477,6 +1486,33 @@ public final class MainPanel extends JPanel {
      * <p>别名可能重复（存储层允许），所以选中后一律再回查一遍完整列表按名字
      * 取值，而不是把下拉框里的字符串直接当主机用。
      */
+    /**
+     * 列表填好之后该选中哪一项；都不匹配时返回 null（保持框里的默认位置）。
+     *
+     * <p>抽成纯函数是为了能无头断言。放到这里之前，这段判断是内联的，而且
+     * <b>比错了列表</b>：拿显示名（String）去 {@code List<SshTarget>.contains}，恒为
+     * false，于是"回到上次用的那台"从来没生效过——表现为每次打开都停在第一项。
+     * {@code List.contains} 的参数是 Object，编译器不会拦，所以这个错只能靠测试守。
+     *
+     * @param names      列表里实际存在的显示名
+     * @param keep       当前已选中的那台（本次会话里正在用的）
+     * @param remembered 上次用过的配置名（写在盘上的）
+     */
+    public static String profileToSelect(java.util.List<String> names, String keep,
+                                         String remembered) {
+        if (names == null || names.isEmpty()) {
+            return null;
+        }
+        if (keep != null && names.contains(keep)) {
+            return keep;
+        }
+        if (remembered != null && !remembered.trim().isEmpty()
+                && names.contains(remembered.trim())) {
+            return remembered.trim();
+        }
+        return null;
+    }
+
     private static String displayNameOf(vmadapt.core.SshTarget t) {
         // 规则由存储层提供，界面和"按显示名删除"用的是同一条，不会两边分岔。
         return vmadapt.core.ConnectionStore.displayName(t);
