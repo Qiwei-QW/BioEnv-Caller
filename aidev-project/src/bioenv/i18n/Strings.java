@@ -157,6 +157,57 @@ public final class Strings {
     /** 语言切换工具提示。 */
     public static final String LANG_TOOLTIP = "lang.tooltip";
 
+    // ------------------------------------------------------------------
+    // 浏览 Linux 目录的对话框（布局对齐 Windows 的「打开」窗口）
+    // ------------------------------------------------------------------
+
+    public static final String DIR_TITLE = "dir.title";
+    public static final String DIR_LOOK_IN = "dir.lookIn";
+    public static final String DIR_FOLDER_NAME = "dir.folderName";
+    public static final String DIR_FILE_TYPE = "dir.fileType";
+    public static final String DIR_TYPE_FOLDERS = "dir.typeFolders";
+    public static final String DIR_UP = "dir.up";
+    public static final String DIR_HOME = "dir.home";
+    public static final String DIR_MKDIR = "dir.mkdir";
+    public static final String DIR_VIEW_LIST = "dir.viewList";
+    public static final String DIR_VIEW_DETAILS = "dir.viewDetails";
+    public static final String DIR_OPEN = "dir.open";
+    public static final String DIR_CANCEL = "dir.cancel";
+    public static final String DIR_CHOOSE = "dir.choose";
+    public static final String DIR_LOADING = "dir.loading";
+    public static final String DIR_LOAD_FAILED = "dir.loadFailed";
+    public static final String DIR_EMPTY = "dir.empty";
+    public static final String DIR_COUNT = "dir.count";
+    public static final String DIR_NO_CHANNEL = "dir.noChannel";
+    public static final String DIR_MKDIR_PROMPT = "dir.mkdirPrompt";
+    public static final String DIR_MKDIR_BAD_NAME = "dir.mkdirBadName";
+    public static final String DIR_COL_NAME = "dir.colName";
+    public static final String DIR_COL_PERMS = "dir.colPerms";
+    public static final String DIR_COL_MODIFIED = "dir.colModified";
+
+    // ------------------------------------------------------------------
+    // 选文件的二选一，以及 Linux 侧的文件窗口
+    // ------------------------------------------------------------------
+
+    /** 「...」按钮弹出的两项。 */
+    public static final String PICK_WINDOWS_FILE = "pick.windowsFile";
+    public static final String PICK_LINUX_FILE = "pick.linuxFile";
+    public static final String PICK_CHOOSER_TITLE = "pick.chooserTitle";
+    /** Linux 侧文件窗口的标题与文案。 */
+    public static final String FILE_TITLE = "file.title";
+    public static final String FILE_NAME_LABEL = "file.nameLabel";
+    public static final String FILE_FILTER = "file.filter";
+    public static final String FILE_FILTER_TIP = "file.filterTip";
+    public static final String FILE_NO_FILES = "file.noFiles";
+    public static final String FILE_COUNT = "file.count";
+    public static final String FILE_SELECTED = "file.selected";
+    public static final String FILE_SAVE_HINT = "file.saveHint";
+    /** 两栏的标题：左栏是能进去的目录，右栏是能选的文件。 */
+    public static final String FILE_COL_DIRS = "file.colDirs";
+    public static final String FILE_COL_FILES = "file.colFiles";
+    /** 「文件类型」下拉里的"全部"。 */
+    public static final String FILE_TYPE_ALL = "file.typeAll";
+
     /**
      * 风格切换器上的三套风格名，以及它的工具提示。
      *
@@ -1026,6 +1077,60 @@ public final class Strings {
         put(ZH_TEXT, EN_TEXT, THEME_TOOLTIP, "切换界面风格：经典 / 浅色 / 深色",
                 "Switch interface style: Classic / Light / Dark");
 
+        put(ZH_TEXT, EN_TEXT, DIR_TITLE, "选择 Linux 上的目录", "Choose a folder on Linux");
+        put(ZH_TEXT, EN_TEXT, DIR_LOOK_IN, "查找：", "Look in:");
+        put(ZH_TEXT, EN_TEXT, DIR_FOLDER_NAME, "文件夹名：", "Folder name:");
+        put(ZH_TEXT, EN_TEXT, DIR_FILE_TYPE, "文件类型：", "Files of type:");
+        // 这个下拉在这个对话框里没有筛选作用——它只列目录。放一项在这儿是为了
+        // 版式和 Windows 的「打开」窗口一致，而不是留一个空控件让人以为坏了。
+        put(ZH_TEXT, EN_TEXT, DIR_TYPE_FOLDERS, "文件夹", "Folders");
+        put(ZH_TEXT, EN_TEXT, DIR_UP, "向上一级", "Up one level");
+        put(ZH_TEXT, EN_TEXT, DIR_HOME, "主目录", "Home");
+        put(ZH_TEXT, EN_TEXT, DIR_MKDIR, "新建文件夹", "New folder");
+        put(ZH_TEXT, EN_TEXT, DIR_VIEW_LIST, "列表", "List");
+        put(ZH_TEXT, EN_TEXT, DIR_VIEW_DETAILS, "详细信息", "Details");
+        put(ZH_TEXT, EN_TEXT, DIR_OPEN, "打开", "Open");
+        put(ZH_TEXT, EN_TEXT, DIR_CANCEL, "取消", "Cancel");
+        put(ZH_TEXT, EN_TEXT, DIR_CHOOSE, "选择这个目录", "Choose this folder");
+        put(ZH_TEXT, EN_TEXT, DIR_LOADING, "正在读取…", "Reading...");
+        put(ZH_TEXT, EN_TEXT, DIR_LOAD_FAILED, "读取失败：{0}", "Could not read: {0}");
+        put(ZH_TEXT, EN_TEXT, DIR_EMPTY, "（这里没有子目录）", "(no sub-folders here)");
+        put(ZH_TEXT, EN_TEXT, DIR_COUNT, "共 {0} 个子目录", "{0} sub-folders");
+        put(ZH_TEXT, EN_TEXT, DIR_NO_CHANNEL,
+                "还没有建立到 Linux 侧的连接。请先连上再选目录。",
+                "Not connected to the Linux side yet. Connect first, then pick a folder.");
+        put(ZH_TEXT, EN_TEXT, DIR_MKDIR_PROMPT, "新文件夹的名字：", "Name for the new folder:");
+        put(ZH_TEXT, EN_TEXT, DIR_MKDIR_BAD_NAME,
+                "名字里不能带「/」。要建多层目录，请先进到上层再建。",
+                "The name cannot contain \"/\". To nest folders, go into the parent first.");
+        put(ZH_TEXT, EN_TEXT, DIR_COL_NAME, "名称", "Name");
+        put(ZH_TEXT, EN_TEXT, DIR_COL_PERMS, "权限", "Permissions");
+        put(ZH_TEXT, EN_TEXT, DIR_COL_MODIFIED, "修改时间", "Modified");
+
+        put(ZH_TEXT, EN_TEXT, PICK_WINDOWS_FILE, "Windows 上的文件…",
+                "A file on Windows...");
+        put(ZH_TEXT, EN_TEXT, PICK_LINUX_FILE, "Linux 工作目录里的文件…",
+                "A file in the Linux working directory...");
+        put(ZH_TEXT, EN_TEXT, PICK_CHOOSER_TITLE, "选择哪一侧的文件", "Where is the file?");
+        put(ZH_TEXT, EN_TEXT, FILE_TITLE, "选择 Linux 上的文件", "Choose a file on Linux");
+        put(ZH_TEXT, EN_TEXT, FILE_NAME_LABEL, "文件名：", "File name:");
+        put(ZH_TEXT, EN_TEXT, FILE_FILTER, "只显示名字含：", "Names containing:");
+        put(ZH_TEXT, EN_TEXT, FILE_FILTER_TIP,
+                "按名字包含的文字过滤。目录不受影响，仍然可以进去。",
+                "Show only names containing this text. Directories are unaffected.");
+        put(ZH_TEXT, EN_TEXT, FILE_NO_FILES, "（这个目录里没有文件）",
+                "(no files in this directory)");
+        put(ZH_TEXT, EN_TEXT, FILE_COUNT, "{0} 个文件", "{0} files");
+        put(ZH_TEXT, EN_TEXT, FILE_SELECTED, "已选 {0} 个", "{0} selected");
+        put(ZH_TEXT, EN_TEXT, FILE_TYPE_ALL, "所有文件", "All files");
+        put(ZH_TEXT, EN_TEXT, FILE_COL_DIRS, "文件夹（点进去）",
+                "Folders (click to enter)");
+        put(ZH_TEXT, EN_TEXT, FILE_COL_FILES, "文件（选中带走）",
+                "Files (select to use)");
+        put(ZH_TEXT, EN_TEXT, FILE_SAVE_HINT,
+                "在左边选一个目录，再在下面填文件名。",
+                "Pick a directory on the left, then type a file name below.");
+
         // --- MainPanel：按钮 ---
         put(ZH_TEXT, EN_TEXT, MENU_RUN, "运行", "Run");
         put(ZH_TEXT, EN_TEXT, MENU_STOP, "停止", "Stop");
@@ -1575,10 +1680,16 @@ public final class Strings {
         put(ZH_TEXT, EN_TEXT, FORM_OPTION_SHOWN_OF, "显示 {0} / 共 {1}",
                 "{0} of {1}");
         put(ZH_TEXT, EN_TEXT, FORM_OPTIONS_TITLE, "选项", "Options");
+        // 这句只在 SSH 下出现：WSL 与 Windows 之间有 /mnt/c，Windows 路径本来就能用，
+        // 说了反而让人以为漏做了一步。所以文案针对 SSH 写，并说清为什么。
         put(ZH_TEXT, EN_TEXT, FORM_NOTE_COPYDIR,
-                "请先点企鹅图标，在 Linux 侧建一个工作目录；之后这个文件会自动复制过去。",
-                "Press the penguin first to make a working directory on the Linux "
-                        + "side; this file is then copied across for you.");
+                "在 SSH 模式下，工作目录要填 Linux 侧的路径（如 /home/you/work）："
+                        + "远端看不到本机的 C:\\。点企鹅图标可以在这里选一个，"
+                        + "之后本机的文件会自动复制过去。",
+                "Over SSH the working directory must be a path on the Linux side "
+                        + "(such as /home/you/work): the remote cannot see this "
+                        + "machine's C:. Press the penguin to pick one, and files from "
+                        + "this machine are then copied across.");
         put(ZH_TEXT, EN_TEXT, FORM_COPY_FAILED,
                 "无法复制 {0} 个文件；路径保持原样未改。",
                 "Could not copy {0} file(s); the path was left as it was.");

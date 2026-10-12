@@ -101,7 +101,217 @@ public final class WorkdirUiTest {
         check("工具提示里提到企鹅，指向那个按钮",
                 make.getToolTipText() != null);
 
+        // ---------------------------------------------------------------
+        // 点下去必须真的打开浏览窗口
+        // ---------------------------------------------------------------
+        //
+        // 这一条是补出来的：用户报了"点小企鹅没反应"。按钮接上监听、监听里调了
+        // browseLinuxWorkdir、browseLinuxWorkdir 再转给宿主的 DirBrowser——中间任何
+        // 一环断了，表现都只是"点了没动静"，没有任何报错。所以把这一整条链子钉住：
+        // 点一下，宿主必须收到一次调用，且拿到的是我们传进去的通道对象。
+        final Object transportSentinel = new Object();
+        final int[] called = new int[1];
+        final String[] gotStart = new String[1];
+        final Object[] gotTransport = new Object[1];
+        form.setTransport(transportSentinel);
+        form.setDirBrowser(new SchemaFormPanel.DirBrowser() {
+            @Override
+            public String browse(Object transport, Component parent, String startDir) {
+                called[0]++;
+                gotTransport[0] = transport;
+                gotStart[0] = startDir;
+                return null; // 用户取消
+            }
+        });
+
+        check("按钮默认可用", make.isEnabled());
+        make.doClick();
+        check("点一下会去打开浏览窗口", called[0] == 1,
+                "实际调用 " + called[0] + " 次");
+        check("宿主收到的就是面板持有的那个通道",
+                gotTransport[0] == transportSentinel);
+        check("初始目录为空时传 null（由浏览窗口自己决定去哪）",
+                gotStart[0] == null, String.valueOf(gotStart[0]));
+
+        // 取消（返回 null）不能把用户已经填好的值清掉。
+        form.showTool(tool);
+        form.setTransport(transportSentinel);
+        form.setDirBrowser(new SchemaFormPanel.DirBrowser() {
+            @Override
+            public String browse(Object transport, Component parent, String startDir) {
+                return null;
+            }
+        });
+        setWorkdirField(form, "/home/you/work");
+        AbstractButton make2 = (AbstractButton) find(form, "bioenv.makeWorkdir");
+        make2.doClick();
+        check("浏览窗口取消后原来的值还在",
+                "/home/you/work".equals(getWorkdirField(form)),
+                String.valueOf(getWorkdirField(form)));
+
+        // 选了目录就要写进框里。
+        form.setDirBrowser(new SchemaFormPanel.DirBrowser() {
+            @Override
+            public String browse(Object transport, Component parent, String startDir) {
+                return "/home/you/picked";
+            }
+        });
+        make2.doClick();
+        check("浏览窗口返回的路径写进了工作目录",
+                "/home/you/picked".equals(getWorkdirField(form)),
+                String.valueOf(getWorkdirField(form)));
+
+        // 这里不再试"没有浏览窗口"那一条：那个分支要弹一个 JOptionPane，而无头环境下
+        // 连它的父窗口都造不出来（Frame.<init> 会抛）。也就是说这条断言测的其实是
+        // "无头能不能弹窗"，不是接线对不对——那是另一件事，且在这里永远为假。
+        //
+        // 真正要守的东西上面已经守住了：接线在构造时就装好（wireDirBrowser），所以
+        // 面板一存在点击就有去处，不会出现"点了没动静"。
+
+        // ---------------------------------------------------------------
+        // 浏览窗口不能在构造途中去内容面板里按序号捞组件
+        // ---------------------------------------------------------------
+        //
+        // 这一条是源码级守卫，因为那个崩溃无头测不到：{@code new JDialog(...)} 在没有
+        // 显示器时就抛，所以"打开窗口"这条路径在自检里根本跑不起来。
+        //
+        // 崩的样子是这样的（用户在 TBtools 里点小企鹅时真实发生过）：
+        //
+        //   ArrayIndexOutOfBoundsException: No such child: 1
+        //     at LinuxDirChooser.showDetails   ← getContentPane().getComponent(1)
+        //     at LinuxDirChooser.build         ← build() 自己调进来的
+        //     at LinuxDirChooser.<init>        ← setContentPane(build()) 还没返回
+        //
+        // 那一刻内容面板还是默认的空壳，第 1 个子组件根本不存在。按序号取组件本来就脆，
+        // 版式一改就错位，所以干脆禁掉这种写法：中间那块改成字段直接引用。
+        String chooserSrc = readSource("bioenv/ui/LinuxDirChooser.java");
+        check("读得到 LinuxDirChooser 源码（守卫要能生效）", chooserSrc != null);
+        if (chooserSrc != null) {
+            // 只看代码，不看注释。
+            //
+            // 上面那段注释里就写着这个写法（说明它为什么是错的），照原文搜会把自己
+            // 的说明当成违规——项目里为同样的事吃过一次亏：另一处可达性检查把注释里的
+            // 提及算成了调用，结果一直没报出真正的问题。
+            String codeOnly = stripComments(chooserSrc);
+            check("不再按序号从内容面板里捞组件",
+                    codeOnly.indexOf("getContentPane().getComponent") < 0);
+            check("视图切换只动自己那块面板",
+                    codeOnly.indexOf("midPanel.removeAll()") > 0);
+            check("showDetails 在面板还没建好时会安全返回",
+                    codeOnly.indexOf("if (midPanel == null)") > 0);
+        }
+
         finish();
+    }
+
+    /**
+     * 去掉行注释与块注释，只留代码。
+     *
+     * <p>不做完整的词法分析——这里只需要挡住"注释里提到某个写法"这一种误报，
+     * 而源码里没有字符串字面量包含注释标记的情况。
+     */
+    private static String stripComments(String src) {
+        StringBuilder out = new StringBuilder(src.length());
+        int i = 0;
+        boolean inLine = false;
+        boolean inBlock = false;
+        boolean inStr = false;
+        while (i < src.length()) {
+            char c = src.charAt(i);
+            char n = (i + 1 < src.length()) ? src.charAt(i + 1) : '\0';
+            if (inLine) {
+                if (c == '\n') {
+                    inLine = false;
+                    out.append(c);
+                }
+                i++;
+                continue;
+            }
+            if (inBlock) {
+                if (c == '*' && n == '/') {
+                    inBlock = false;
+                    i += 2;
+                    continue;
+                }
+                i++;
+                continue;
+            }
+            if (inStr) {
+                out.append(c);
+                if (c == '\\') {
+                    if (i + 1 < src.length()) {
+                        out.append(src.charAt(i + 1));
+                        i += 2;
+                        continue;
+                    }
+                } else if (c == '"') {
+                    inStr = false;
+                }
+                i++;
+                continue;
+            }
+            if (c == '"') {
+                inStr = true;
+                out.append(c);
+                i++;
+                continue;
+            }
+            if (c == '/' && n == '/') {
+                inLine = true;
+                i += 2;
+                continue;
+            }
+            if (c == '/' && n == '*') {
+                inBlock = true;
+                i += 2;
+                continue;
+            }
+            out.append(c);
+            i++;
+        }
+        return out.toString();
+    }
+
+    /** 从源码树里读一个文件；读不到返回 null，由调用方报出来。 */
+    private static String readSource(String rel) {
+        // 门禁在仓库根目录下跑，所以相对路径就是源码树。多试一个前缀是为了
+        // 有人从别处跑这个测试时也找得到。
+        java.io.File f = new java.io.File("aidev-project/src/" + rel);
+        if (!f.isFile()) {
+            f = new java.io.File(rel);
+        }
+        if (!f.isFile()) {
+            return null;
+        }
+        try {
+            byte[] b = java.nio.file.Files.readAllBytes(f.toPath());
+            return new String(b, java.nio.charset.StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** 反射读写工作目录输入框，免得为一个测试把它开成 public。 */
+    private static void setWorkdirField(SchemaFormPanel form, String text) {
+        try {
+            java.lang.reflect.Field f =
+                    SchemaFormPanel.class.getDeclaredField("workdirField");
+            f.setAccessible(true);
+            ((javax.swing.JTextField) f.get(form)).setText(text);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private static String getWorkdirField(SchemaFormPanel form) {
+        try {
+            java.lang.reflect.Field f =
+                    SchemaFormPanel.class.getDeclaredField("workdirField");
+            f.setAccessible(true);
+            return ((javax.swing.JTextField) f.get(form)).getText();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     private static void finish() {
@@ -187,10 +397,15 @@ public final class WorkdirUiTest {
     }
 
     private static void check(String label, boolean ok) {
+        check(label, ok, null);
+    }
+
+    private static void check(String label, boolean ok, String detail) {
         checks++;
         if (!ok) {
             failures++;
-            System.out.println("  FAIL: " + label);
+            System.out.println("  FAIL: " + label
+                    + (detail == null ? "" : " — " + detail));
         }
     }
 }

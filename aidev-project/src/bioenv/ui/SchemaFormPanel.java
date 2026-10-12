@@ -2118,27 +2118,41 @@ public final class SchemaFormPanel extends JPanel {
                 JButton browse = new JButton("...");
                 browse.setMargin(new Insets(0, 6, 0, 6));
                 browse.setToolTipText(chooserHint(directory, multi, save));
+                final boolean wantDirectory = directory;
                 browse.addActionListener(new ActionListener() {
                     @Override
                     public void actionPerformed(ActionEvent e) {
-                        if (multi) {
-                            java.util.List<java.io.File> files =
-                                    FileDialogs.chooseMany(HintText.realText(field),
-                                            SchemaFormPanel.this);
-                            if (!files.isEmpty()) {
-                                HintText.clear(field);
-                                field.setText(joinPaths(files));
-                                fireChange();
+                        // 先问"文件在哪一侧"。
+                        //
+                        // 原来这里直接开 Windows 的选择器：选中的本地文件会被上传到
+                        // Linux 工作目录，参数再改写成远端路径。数据在本机时这是对的，
+                        // 但数据<b>本来就在远端</b>时（远端刚跑完一步，结果就躺在那儿）
+                        // 用户没法直接选它——只能先弄一份到本机再传回去。
+                        //
+                        // 所以多问一句。两边写入参数的形式都是"一条路径"：Windows 那条
+                        // 照旧（后面 copyOnEnter 会把它传上去并改写），Linux 那条原样写入，
+                        // 因为远端路径本来就该长那样，上传逻辑只认 Windows 路径会自动跳过。
+                        javax.swing.JPopupMenu menu = new javax.swing.JPopupMenu();
+                        javax.swing.JMenuItem win = new javax.swing.JMenuItem(
+                                I18n.t(Strings.PICK_WINDOWS_FILE));
+                        win.addActionListener(new ActionListener() {
+                            @Override
+                            public void actionPerformed(ActionEvent a) {
+                                pickWindows(field, wantDirectory, multi, save);
                             }
-                            return;
-                        }
-                        java.io.File f = FileDialogs.choose(HintText.realText(field),
-                                directory, save, SchemaFormPanel.this);
-                        if (f != null) {
-                            HintText.clear(field);
-                            field.setText(f.getAbsolutePath());
-                            fireChange();
-                        }
+                        });
+                        javax.swing.JMenuItem lin = new javax.swing.JMenuItem(
+                                I18n.t(Strings.PICK_LINUX_FILE));
+                        lin.setEnabled(fileBrowser != null);
+                        lin.addActionListener(new ActionListener() {
+                            @Override
+                            public void actionPerformed(ActionEvent a) {
+                                pickLinux(field, wantDirectory, multi, save);
+                            }
+                        });
+                        menu.add(win);
+                        menu.add(lin);
+                        menu.show(browse, 0, browse.getHeight());
                     }
                 });
                 row.add(browse, BorderLayout.EAST);
@@ -2242,7 +2256,10 @@ public final class SchemaFormPanel extends JPanel {
         makeWorkButton.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                makeLinuxWorkdir();
+                // 原来是"自动建一个带时间戳的目录"。那既不让人看见远端长什么样，
+                // 也没法选已有的目录 —— 现在改成打开浏览窗口（版式对齐 Windows 的
+                // 「打开」窗口），用户能进能退、能新建、也能直接挑一个现成的。
+                browseLinuxWorkdir();
             }
         });
         buttons.add(makeWorkButton);
@@ -2254,6 +2271,7 @@ public final class SchemaFormPanel extends JPanel {
         JButton browse = new JButton(WindowsMark.shared());
         browse.setMargin(new Insets(1, 5, 1, 5));
         browse.setName("bioenv.chooseWorkdir");
+        chooseWorkdirButton = browse;
         browse.setToolTipText(I18n.t(Strings.FORM_CHOOSE_WORKDIR));
         browse.getAccessibleContext().setAccessibleName(
                 I18n.t(Strings.FORM_CHOOSE_WORKDIR));
@@ -2274,6 +2292,11 @@ public final class SchemaFormPanel extends JPanel {
             }
         });
         buttons.add(browse);
+        chooseWorkdirButton = browse;
+        // 建好之后立刻按当前通道摆一次。setRemoteChannel 可能在按钮存在之前就被调用过
+        // （宿主在构造早期设的），那时它只能记下标志、碰不到控件；所以这里要补一次，
+        // 否则 SSH 下那个按钮照样显示出来。
+        applyWorkdirButtonVisibility();
         row.add(buttons, BorderLayout.EAST);
 
         // 标签独立一行，输入框在下一行占满宽度：路径通常很长，和标签挤一行时
@@ -2320,9 +2343,22 @@ public final class SchemaFormPanel extends JPanel {
         }
         final String target = wslInputDir();
         if (target == null) {
-            // No working directory on the Linux side yet. Said once, and the path is
-            // left exactly as typed — the plugin does not invent a destination.
-            noteOnce("copydir", I18n.t(Strings.FORM_NOTE_COPYDIR));
+            // 没有"Linux 侧的工作目录"可落脚。
+            //
+            // 但**只在 SSH 下**这句话才成立，这是被用户指出来的：他在 WSL 模式下把工作
+            // 目录设成 C:\Users\...\pep、输入也选了 Windows 路径，界面却让他"先在
+            // Linux 侧建一个工作目录"——可那条路本来就能跑。
+            //
+            // WSL 与 Windows 之间有 /mnt/c 这条共享，CommandBuilder 会把工作目录和参数
+            // 里的 Windows 路径都翻译成 /mnt/c/... 再交给远端（见它第 86、411 行）。也
+            // 就是说：WSL 模式下用 Windows 工作目录是**用户的正当选择**，不需要复制，
+            // 更不需要建 Linux 目录，界面上什么都不该说。
+            //
+            // SSH 下不同：远端看不到本机的 C:\，那条路径在那边没有意义，提示必须留着
+            // ——但要说明白原因，而不是让人以为漏做了一步。
+            if (remoteChannel) {
+                noteOnce("copydir", I18n.t(Strings.FORM_NOTE_COPYDIR));
+            }
             return;
         }
         if (inputCopier == null) {
@@ -2471,7 +2507,13 @@ public final class SchemaFormPanel extends JPanel {
         if (wd.isEmpty() || !wd.startsWith("/")) {
             return null;
         }
-        return wd.endsWith("/") ? wd + "inputs" : wd + "/inputs";
+        // 直接放进工作目录本身，不再多加一层 inputs。
+        //
+        // 原来加那一层是为了"一次运行读的和产出的都放在一起，拷回来一次就够"。但用户
+        // 挑工作目录时心里想的就是"东西放这儿"，再自己长出一层子目录，等于把他设的
+        // 路径悄悄改了样——他会看着 /home/qw/shili/inputs/pep 问"这个 inputs 哪来的"。
+        // 工作目录就是落脚点，原样用它。
+        return wd.endsWith("/") ? wd.substring(0, wd.length() - 1) : wd;
     }
     /**
      * Makes a working directory on the Linux side and puts its path in the field.
@@ -2480,6 +2522,47 @@ public final class SchemaFormPanel extends JPanel {
      * themselves: the plugin knows the home directory, and the user would otherwise
      * have to open a terminal to find out what to type.
      */
+    /**
+     * 打开浏览窗口选一个 Linux 侧的目录，把选中的路径写进工作目录。
+     *
+     * <p>浏览窗口由宿主提供（见 {@link DirBrowser}），因为面板不该知道怎么连过去。
+     * 窗口返回 null 表示取消——此时<b>保持原值不动</b>，而不是把框清空。
+     */
+    private void browseLinuxWorkdir() {
+        if (dirBrowser == null) {
+            javax.swing.JOptionPane.showMessageDialog(this,
+                    I18n.t(Strings.FORM_NO_WSL_FOR_WORKDIR));
+            return;
+        }
+        String start = workdirField.getText().trim();
+        String picked = dirBrowser.browse(currentTransport,
+                SchemaFormPanel.this, start.isEmpty() ? null : start);
+        if (picked != null && !picked.trim().isEmpty()) {
+            workdirField.setText(picked.trim());
+            fireChange();
+        }
+    }
+
+    /**
+     * 当前通道对象，由宿主通过 {@link #setTransport} 放进来。
+     *
+     * <p>类型是 {@code Object} 而不是 {@code bioenv.core.Transport}：这个面板与传输层
+     * 之间只通过若干小接口打交道，不为一个参数把整个 core 依赖引进来。宿主知道它装的
+     * 是什么。
+     */
+    public void setTransport(Object transport) {
+        this.currentTransport = transport;
+    }
+
+    private Object currentTransport;
+
+    /** SSH 下藏起"选本机目录"那个按钮；WSL 下才显示。 */
+    private void applyWorkdirButtonVisibility() {
+        if (chooseWorkdirButton != null) {
+            chooseWorkdirButton.setVisible(!remoteChannel);
+        }
+    }
+
     private void makeLinuxWorkdir() {
         if (workdirMaker == null) {
             javax.swing.JOptionPane.showMessageDialog(this,
@@ -2653,6 +2736,46 @@ public final class SchemaFormPanel extends JPanel {
         this.workdirMaker = maker;
     }
 
+    /**
+     * 浏览 Linux 侧的目录，用来选工作目录。
+     *
+     * <p>为什么要有这个口子：工作目录是<b>远端</b> Linux 上的一条路径，而面板不该知道
+     * 怎么连过去（WSL 还是 SSH）。WSL 与 SSH 都实现了 {@code Transport.runBashCapture}，
+     * 所以宿主那边一套实现就够了。
+     */
+    public interface DirBrowser {
+        /**
+         * 弹出浏览窗口。
+         *
+         * @param transport 当前通道；宿主自己知道该给哪一个
+         * @param parent    父窗口
+         * @param startDir  初始目录
+         * @return 用户选的绝对路径；取消返回 null
+         */
+        String browse(Object transport, java.awt.Component parent, String startDir);
+    }
+
+    public void setDirBrowser(DirBrowser browser) {
+        this.dirBrowser = browser;
+    }
+
+    private DirBrowser dirBrowser;
+
+    /**
+     * 当前通道是否<b>不是本机</b>（也就是 SSH）。
+     *
+     * <p>面板据此决定要不要显示那个"选本机目录"的按钮：WSL 下本机与 Linux 之间有共享
+     * （{@code /mnt/c}），选本机目录是有意义的；SSH 下远端看不到本机的 {@code C:\}，
+     * 那个按钮只会把一条在本机才成立的路径塞进远端的工作目录。
+     */
+    public void setRemoteChannel(boolean remote) {
+        this.remoteChannel = remote;
+        applyWorkdirButtonVisibility();
+    }
+
+    private boolean remoteChannel;
+    private JButton chooseWorkdirButton;
+
     private WorkdirMaker workdirMaker;
 
     /**
@@ -2670,6 +2793,100 @@ public final class SchemaFormPanel extends JPanel {
 
     public void setInputCopier(InputCopier copier) {
         this.inputCopier = copier;
+    }
+
+    /**
+     * 挑一个<b>已经在 Linux 侧</b>的文件，用来填参数。
+     *
+     * <p>和 {@link InputCopier} 是两件事：那个负责把本机文件传上去，这个负责<b>不传</b>
+     * ——文件本来就在远端，直接挑它。面板不该知道怎么连过去，所以开成口子。
+     */
+    public interface FileBrowser {
+        /**
+         * @param transport 当前通道
+         * @param startDir  初始目录，通常是设置好的工作目录
+         * @param multi     允许多选
+         * @param save      保存模式（输出参数）：选目录 + 填文件名
+         * @param directory 这个参数要的是<b>目录</b>（如 {@code -b <dir>}），所以选中的
+         *                  文件夹要能当值返回，而不只是进去
+         * @return 选中的远端绝对路径；取消返回空表
+         */
+        java.util.List<String> browseFiles(Object transport, String startDir,
+                                           boolean multi, boolean save,
+                                           boolean directory);
+    }
+
+    public void setFileBrowser(FileBrowser browser) {
+        this.fileBrowser = browser;
+    }
+
+    private FileBrowser fileBrowser;
+
+    /** Windows 那一侧：本地选择器 + 之后的自动上传。 */
+    private void pickWindows(JTextField field, boolean directory, boolean multi,
+                             boolean save) {
+        if (multi) {
+            java.util.List<java.io.File> files =
+                    FileDialogs.chooseMany(HintText.realText(field),
+                            SchemaFormPanel.this);
+            if (!files.isEmpty()) {
+                HintText.clear(field);
+                field.setText(joinPaths(files));
+                fireChange();
+            }
+            return;
+        }
+        java.io.File f = FileDialogs.choose(HintText.realText(field),
+                directory, save, SchemaFormPanel.this);
+        if (f != null) {
+            HintText.clear(field);
+            field.setText(f.getAbsolutePath());
+            fireChange();
+        }
+    }
+
+    /**
+     * Linux 那一侧：从远端已有的文件里挑。
+     *
+     * <p>写进去的是<b>远端路径</b>，不再经过上传——{@code copyOnEnter} 只认 Windows
+     * 路径，会自动跳过它。这正是这里要的效果：文件已经在远端，不该再传一遍。
+     */
+    private void pickLinux(JTextField field, boolean directory, boolean multi,
+                           boolean save) {
+        if (fileBrowser == null) {
+            return;
+        }
+        // 从哪开始找：工作目录是用户刚挑好的地方，东西多半就在那儿。
+        //
+        // 直接用工作目录那个框，不另存一份副本——它就是工作目录，多一份副本就多一个
+        // 会跟主值不一致的地方。框里若是 Windows 路径（WSL 下允许），对远端没意义，
+        // 那就退回主目录。
+        String start = null;
+        String wd = workdirField == null ? null : workdirField.getText();
+        if (wd != null && !wd.trim().isEmpty()
+                && !vmadapt.core.RemoteFiles.looksLikeWindowsPath(wd.trim())) {
+            start = wd.trim();
+        }
+        String typed = HintText.realText(field);
+        if (typed != null && !typed.trim().isEmpty()
+                && !vmadapt.core.RemoteFiles.looksLikeWindowsPath(typed.trim())) {
+            start = typed.trim();
+        }
+        java.util.List<String> picked = fileBrowser.browseFiles(currentTransport,
+                start, multi, save && !directory, directory);
+        if (picked == null || picked.isEmpty()) {
+            return;
+        }
+        HintText.clear(field);
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < picked.size(); i++) {
+            if (i > 0) {
+                sb.append(", ");
+            }
+            sb.append(picked.get(i));
+        }
+        field.setText(sb.toString());
+        fireChange();
     }
 
     private InputCopier inputCopier;

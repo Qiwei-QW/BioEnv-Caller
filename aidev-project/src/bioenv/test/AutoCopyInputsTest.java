@@ -77,18 +77,39 @@ public final class AutoCopyInputsTest {
         JTextField input = fieldFor(form, "-f");
         check("the input field exists", input != null);
 
-        line("[with no working directory, nothing is moved and the path is kept]");
+        line("[WSL: a Windows working directory is a legitimate choice, so say nothing]");
+        // 用户报的正是这一条：WSL 模式下把工作目录设成 C:\...\pep、输入也选 Windows
+        // 路径，界面却让他"先在 Linux 侧建一个工作目录"。
+        //
+        // 那句话在 WSL 下是错的。WSL 与 Windows 之间有 /mnt/c 这条共享，CommandBuilder
+        // 会把工作目录与参数里的 Windows 路径都翻译成 /mnt/c/...（见它第 86、411 行），
+        // 所以那条路本来就能跑，既不需要复制也不需要建 Linux 目录。
         if (input != null) {
             input.setText("C:\\data\\pep.fa");
         }
+        status.clear();
+        form.setRemoteChannel(false);
         form.copyOnEnterForTest(schema.option("-f"), input);
         check("the path is left exactly as typed",
                 input != null && "C:\\data\\pep.fa".equals(input.getText()));
-        check("and the user is told what to do first",
-                status.toString().contains(
-                        bioenv.i18n.I18n.t(bioenv.i18n.Strings.FORM_NOTE_COPYDIR)));
+        check("WSL 下不提「建 Linux 工作目录」",
+                !status.toString().contains(
+                        bioenv.i18n.I18n.t(bioenv.i18n.Strings.FORM_NOTE_COPYDIR)),
+                status.toString());
         // Nothing was invented: the plugin does not choose a destination.
         check("no copy was attempted", form.wslInputDirForTest() == null);
+        line("");
+
+        line("[SSH: a Windows working directory cannot work, so say why]");
+        // SSH 下不同：远端看不到本机的 C:\，提示必须留着。
+        status.clear();
+        form.setRemoteChannel(true);
+        form.copyOnEnterForTest(schema.option("-f"), input);
+        check("SSH 下要说清楚为什么不能用 Windows 路径",
+                status.toString().contains(
+                        bioenv.i18n.I18n.t(bioenv.i18n.Strings.FORM_NOTE_COPYDIR)),
+                status.toString());
+        form.setRemoteChannel(false);
         line("");
 
         line("[the destination is beside the working directory, on the Linux side]");
@@ -98,15 +119,20 @@ public final class AutoCopyInputsTest {
             wd.setText("/home/qw/bioenv_work/probe_20260926");
         }
         System.out.println("      inputs would go to: " + form.wslInputDirForTest());
-        check("inputs go into a folder beside it",
-                "/home/qw/bioenv_work/probe_20260926/inputs"
+        // 直接落在工作目录本身，不再多加一层 inputs。
+        //
+        // 原设计是"一次运行读的和产出的都放一起，拷回来一次就够"，但用户设完
+        // /home/qw/shili 之后看到文件落在 /home/qw/shili/inputs/pep，会问那个 inputs
+        // 是哪来的——他设的路径被悄悄改样了。工作目录就是落脚点。
+        check("inputs go into the working directory itself",
+                "/home/qw/bioenv_work/probe_20260926"
                         .equals(form.wslInputDirForTest()));
-        // A trailing slash must not produce a doubled one.
+        // 末尾斜杠要去掉，不能变成 "/home/qw/work/"，也不能出现双斜杠。
         if (wd != null) {
             wd.setText("/home/qw/work/");
         }
-        check("a trailing slash does not double",
-                "/home/qw/work/inputs".equals(form.wslInputDirForTest()));
+        check("a trailing slash is dropped, not doubled",
+                "/home/qw/work".equals(form.wslInputDirForTest()));
         if (wd != null) {
             wd.setText("/home/qw/work");
         }
@@ -291,6 +317,16 @@ public final class AutoCopyInputsTest {
             }
         }
         c.doLayout();
+    }
+
+    private static void check(String label, boolean ok, String detail) {
+        if (ok) {
+            pass++;
+            System.out.println("  PASS  " + label);
+        } else {
+            fail++;
+            System.out.println("  FAIL  " + label + " -- " + detail);
+        }
     }
 
     private static void check(String label, boolean ok) {

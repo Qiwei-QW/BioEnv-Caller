@@ -334,6 +334,42 @@ public final class MainPanel extends JPanel {
 
     /**
      * Applies initial divider positions once the panel has been laid out.' Adopts a registry and its collaborators as the panel's live state. */
+    /**
+     * 装上"浏览 Linux 目录"的口子。
+     *
+     * <p>在构造器里调用，因为它在<b>任何连接建立之前</b>就该可用：用户可能在一台还没
+     * 连过的机器上点那个按钮。真正缺的是通道对象，而那不是"没接线"，是"还没连上"——
+     * 浏览窗口会自己把这件事说清楚。
+     *
+     * <p>WSL 与 SSH 共用同一套：两者都实现了 {@code Transport.runBashCapture}，所以这里
+     * 不需要按通道分叉。
+     */
+    private void wireDirBrowser() {
+        // 同一个窗口既能挑目录（工作目录），也能挑文件（参数）。
+        formPanel.setFileBrowser(new SchemaFormPanel.FileBrowser() {
+            @Override
+            public java.util.List<String> browseFiles(Object transport, String startDir,
+                                                      boolean multi, boolean save,
+                                                      boolean directory) {
+                return transport instanceof Transport
+                        ? LinuxFileChooser.open((Transport) transport, startDir,
+                                multi, save, directory)
+                        : new java.util.ArrayList<String>();
+            }
+        });
+        formPanel.setDirBrowser(new SchemaFormPanel.DirBrowser() {
+            @Override
+            public String browse(Object transport, java.awt.Component parent,
+                                 String startDir) {
+                return transport instanceof Transport
+                        ? LinuxDirChooser.open((Transport) transport, parent, startDir)
+                        : null;
+            }
+        });
+    }
+
+    /**
+     * Applies initial divider positions once the panel has been laid out.' Adopts a registry and its collaborators as the panel's live state. */
     private void adoptRegistry(ToolRegistry reg, EnvScanner sc,
                                Transport bridge, EnvRunner er) {
         this.registry = reg;
@@ -357,6 +393,12 @@ public final class MainPanel extends JPanel {
         // mode is a degraded version of the other.
         final WslBridge makerBridge = bridge instanceof WslBridge
                 ? (WslBridge) bridge : null;
+        // 浏览窗口要用当前通道去列目录；是不是 SSH 决定那个"选本机目录"按钮显不显示。
+        //
+        // SSH 下必须藏起来：远端看不到本机的 C:\，那条路径落到远端工作目录里毫无意义。
+        // WSL 下留着是有用的 —— /mnt/c 是通往 Windows 的真实共享，选本机目录确实能用。
+        formPanel.setTransport(bridge);
+        formPanel.setRemoteChannel(makerBridge == null);
         formPanel.setWorkdirMaker(new SchemaFormPanel.WorkdirMaker() {
             @Override
             public String make(String label) {
@@ -386,6 +428,7 @@ public final class MainPanel extends JPanel {
                 return files.lastFailure();
             }
         });
+        // 浏览 Linux 侧的目录由构造器装好（见 wireDirBrowser），这里只更新通道。
         formPanel.setInputCopier(new SchemaFormPanel.InputCopier() {
             @Override
             public java.util.List<String> copyInto(java.util.List<String> sources,
@@ -529,6 +572,16 @@ public final class MainPanel extends JPanel {
         add(buildCenter(), BorderLayout.CENTER);
         add(buildStatusBar(), BorderLayout.SOUTH);
         wireEvents();
+        // 浏览 Linux 目录的口子在构造时装好，<b>不能</b>放到 adoptRegistry 里。
+        //
+        // adoptRegistry 只在"扫描过 / 恢复过"之后才跑，而用户完全可能在一台还没连过的
+        // 机器上就点那个企鹅按钮（面板显示 "No tool selected" 时它就在那儿）。放在
+        // adoptRegistry 里的话，那种状态下 dirBrowser 是 null，点下去什么也不会发生——
+        // 而且不报错，只是"没反应"，这正是不好查的地方。
+        //
+        // 通道对象另外由 adoptRegistry 更新：它随连接而变。没有通道时浏览窗口会自己
+        // 说明"还没连上"，那比一个点了没动静的按钮清楚得多。
+        wireDirBrowser();
         // Refresh the panel's own display text when the language changes. Registered
         // last, so every component it touches already exists; the callback runs on
         // the EDT (I18n dispatches there), so plain setText is correct.

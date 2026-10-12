@@ -57,6 +57,15 @@ public final class ConnectionEntryPointsTest {
             JComboBox<?> box = distroBox(panel);
 
             // -----------------------------------------------------------
+            // 0. 浏览 Linux 目录的接线必须在构造时就装好
+            // -----------------------------------------------------------
+            // 这条守的是用户报的「点小企鹅没反应」：接线原来装在 adoptRegistry 里，而
+            // 它只在扫描/恢复之后才跑。在一台还没连过的机器上点那个按钮，dirBrowser
+            // 还是 null——不报错，只是什么都不发生。
+            check("构造完就已经装好浏览目录的接线（不依赖有没有连过）",
+                    dirBrowserOf(panel) != null);
+
+            // -----------------------------------------------------------
             // 1. SSH 方式：下拉框必须有「＋ 新增配置」这一项
             // -----------------------------------------------------------
             selectMode(panel, 1);
@@ -168,6 +177,20 @@ public final class ConnectionEntryPointsTest {
         Field f = MainPanel.class.getDeclaredField(name);
         f.setAccessible(true);
         return f.get(target);
+    }
+
+    /**
+     * 取 formPanel 上"浏览 Linux 目录"的接线。
+     *
+     * <p>用户报的「点小企鹅没反应」就是这条线断在 adoptRegistry 里：那个方法只在
+     * 扫描/恢复之后才跑，而在一台还没连过的机器上面板照样显示工作目录那一行。所以
+     * 这里断言它<b>构造完就已经接好</b>，不依赖有没有连过。
+     */
+    private static Object dirBrowserOf(MainPanel p) throws Exception {
+        Object form = field(p, "formPanel");
+        java.lang.reflect.Field f = form.getClass().getDeclaredField("dirBrowser");
+        f.setAccessible(true);
+        return f.get(form);
     }
 
     private static JComboBox<?> distroBox(MainPanel p) throws Exception {
