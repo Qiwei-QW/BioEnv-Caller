@@ -196,6 +196,23 @@ public final class LinuxDirListTest {
         check("没有文件时仍然算成功", empty.ok(), empty.problem);
         check("没有文件时 files 为空", empty.files.isEmpty());
 
+        // 详细信息：目录和文件都要有权限/时间，且名字末尾的 "/" 不能漏进名字里。
+        LinuxDirList.Listing det = LinuxDirList.parseFilesDetails(
+                Arrays.asList("/home/you",
+                        "sub/\tdrwxr-xr-x\t2026-10-11 14:03",
+                        "At.pep\t-rw-r--r--\t2026-10-11 14:04"),
+                Collections.<String>emptyList(), 0);
+        check("详细信息里目录进了 dirs",
+                det.dirs.equals(Collections.singletonList("sub")), det.dirs.toString());
+        check("详细信息里文件进了 files",
+                det.files.equals(Collections.singletonList("At.pep")), det.files.toString());
+        check("详细信息带权限与时间", det.entries.size() == 2
+                && !det.entries.get(0).perms.isEmpty()
+                && !det.entries.get(0).modified.isEmpty(),
+                det.entries.toString());
+        check("详细信息里名字没有残留的 /",
+                !det.entries.get(0).name.endsWith("/"), det.entries.get(0).name);
+
         // 进不去时不该被当成"这个目录里没东西"。
         LinuxDirList.Listing bad = LinuxDirList.parseFiles(
                 Collections.<String>emptyList(),

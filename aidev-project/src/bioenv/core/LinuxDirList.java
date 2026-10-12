@@ -294,6 +294,112 @@ public final class LinuxDirList {
     }
 
     /**
+     * 列目录+文件，每条带权限与修改时间（详细信息视图用）。
+     *
+     * <p>名字后面带一个 {@code /} 表示是目录——{@code ls -1p} 那个约定继续用，因为
+     * 调用方要靠它分图标、分行为。名字里可能有 tab 吗？可能没有：Unix 文件名允许 tab，
+     * 但真出现时坏的是这一行的可读性，不是数据（解析按第一个 tab 切）。
+     */
+    public static String filesDetailsScript(String dir, String nameContains) {
+        String target = (dir == null || dir.trim().isEmpty()) ? "~" : dir.trim();
+        String quoted = vmadapt.core.RemoteFiles.expandHomeTemplate(target);
+        String filter = nameContains == null ? "" : nameContains.trim();
+        String filterLine = "";
+        if (!filter.isEmpty()) {
+            StringBuilder esc = new StringBuilder();
+            for (int i = 0; i < filter.length(); i++) {
+                char ch = filter.charAt(i);
+                if (ch == '/' || ch == '&' || ch == '\\' || ch == '\n') {
+                    esc.append('\\');
+                }
+                esc.append(ch);
+            }
+            filterLine = "  case \"$e\" in */) ;; *) "
+                    + "case \"$e\" in *" + esc + "*) ;; *) continue ;; esac ;; esac\n";
+        }
+        return "d=" + quoted + "\n"
+                + "if ! cd \"$d\" 2>/dev/null; then\n"
+                + "  echo '__TBVM_NO_SUCH_DIR__' >&2\n"
+                + "  exit 3\n"
+                + "fi\n"
+                + "pwd -P\n"
+                + "for e in * .[!.]*; do\n"
+                + "  [ -e \"$e\" ] || continue\n"
+                + filterLine
+                + "  if [ -d \"$e\" ]; then n=\"$e/\"; else n=\"$e\"; fi\n"
+                + "  printf '%s\\t%s\\t%s\\n' \"$n\""
+                + " \"$(stat -c %A \"$e\" 2>/dev/null)\""
+                + " \"$(stat -c %y \"$e\" 2>/dev/null | cut -c1-16)\"\n"
+                + "done\n"
+                + "exit 0\n";
+    }
+
+    /**
+     * 解析 {@link #filesDetailsScript} 的输出。
+     *
+     * <p>仍走 {@link #parseFiles}：它认名字末尾的 {@code /}，所以目录进 {@code dirs}、
+     * 文件进 {@code files}；随后把逐条的权限/时间填进 {@code entries}，顺序与 dirs+files
+     * 合并后的顺序一致（目录在前，各自按名字排）。
+     */
+    public static Listing parseFilesDetails(List<String> stdout, List<String> stderr,
+                                            int exit) {
+        // 这里<b>不能</b>委托给 parseFiles。
+        //
+        // 详情输出是 tab 分隔的（名字 \t 权限 \t 时间），而 parseFiles 是拿<b>整行</b>去
+        // 看末尾有没有 "/" 的——"sub/\tdrwxr-xr-x\t..." 这一整行末尾不是斜杠，于是目录
+        // 被判成了文件。测试第一次跑就抓到了。
+        //
+        // 教训记一次：解析器是按某一种输出格式写的，换一种格式就得换一个解析器。复用
+        // 看着省事，实际是把两种格式揉进同一个判断里，而那个判断只对其中一种成立。
+        Listing out = new Listing();
+        List<String> err = stderr == null ? Collections.<String>emptyList() : stderr;
+        for (String line : err) {
+            if (line != null && line.contains(NO_SUCH_DIR)) {
+                out.problem = "目录不存在，或者没有权限进入。";
+                return out;
+            }
+        }
+        if (stdout == null || stdout.isEmpty()) {
+            out.problem = exit == 0
+                    ? "没有拿到回显（目录可能不可读）。"
+                    : "列目录失败（退出码 " + exit + "）。";
+            return out;
+        }
+        out.path = stdout.get(0) == null ? "" : stdout.get(0).trim();
+        if (out.path.isEmpty() || !out.path.startsWith("/")) {
+            out.problem = "回显的路径不像绝对路径：" + out.path;
+            return out;
+        }
+        for (int i = 1; i < stdout.size(); i++) {
+            String line = stdout.get(i);
+            if (line == null || line.trim().isEmpty()) {
+                continue;
+            }
+            // 先按 tab 切，再看名字部分的末尾——顺序不能反。
+            String[] parts = line.split("\t", -1);
+            String raw = parts[0].trim();
+            boolean isDir = raw.endsWith("/");
+            String name = isDir ? raw.substring(0, raw.length() - 1) : raw;
+            if (name.isEmpty() || ".".equals(name) || "..".equals(name)) {
+                continue;
+            }
+            Entry e = new Entry();
+            e.name = name;
+            e.perms = parts.length > 1 ? parts[1].trim() : "";
+            e.modified = parts.length > 2 ? parts[2].trim() : "";
+            out.entries.add(e);
+            if (isDir) {
+                out.dirs.add(name);
+            } else {
+                out.files.add(name);
+            }
+        }
+        Collections.sort(out.dirs, String.CASE_INSENSITIVE_ORDER);
+        Collections.sort(out.files, String.CASE_INSENSITIVE_ORDER);
+        return out;
+    }
+
+    /**
      * 解析 {@link #filesScript} 的输出。
      *
      * <p>沿用 {@link Listing}：{@code dirs} 放<b>子目录</b>名，{@code files} 放<b>文件</b>名。

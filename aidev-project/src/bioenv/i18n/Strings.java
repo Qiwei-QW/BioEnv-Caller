@@ -205,6 +205,8 @@ public final class Strings {
     /** 两栏的标题：左栏是能进去的目录，右栏是能选的文件。 */
     public static final String FILE_COL_DIRS = "file.colDirs";
     public static final String FILE_COL_FILES = "file.colFiles";
+    /** 「文件类型」下拉里的"全部"。 */
+    public static final String FILE_TYPE_ALL = "file.typeAll";
 
     /**
      * 风格切换器上的三套风格名，以及它的工具提示。
@@ -1120,6 +1122,7 @@ public final class Strings {
                 "(no files in this directory)");
         put(ZH_TEXT, EN_TEXT, FILE_COUNT, "{0} 个文件", "{0} files");
         put(ZH_TEXT, EN_TEXT, FILE_SELECTED, "已选 {0} 个", "{0} selected");
+        put(ZH_TEXT, EN_TEXT, FILE_TYPE_ALL, "所有文件", "All files");
         put(ZH_TEXT, EN_TEXT, FILE_COL_DIRS, "文件夹（点进去）",
                 "Folders (click to enter)");
         put(ZH_TEXT, EN_TEXT, FILE_COL_FILES, "文件（选中带走）",

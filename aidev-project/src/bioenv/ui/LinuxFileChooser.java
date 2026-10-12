@@ -13,6 +13,7 @@ import java.util.List;
 import javax.swing.BorderFactory;
 import javax.swing.DefaultListModel;
 import javax.swing.JButton;
+import javax.swing.JComboBox;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JList;
@@ -29,32 +30,45 @@ import bioenv.i18n.Strings;
 /**
  * 挑一个<b>已经在 Linux 侧</b>的文件（或几个）。
  *
- * <h2>为什么要有它</h2>
+ * <h2>版式照 Windows 的「打开」窗口</h2>
  *
- * <p>参数的「...」原来只给 Windows 侧的文件：选中的本地文件会被上传到 Linux 工作目录，
- * 再把参数改写成远端路径。这在"数据在本机"时是对的，可数据<b>本来就在远端</b>时
- * （远端跑过一步、结果就躺在那儿）用户没法直接选它，只能先想办法弄一份到本机再传回去。
+ * <pre>
+ *   查找(I):  [ /home/qw/shili                      v ] [↑][⌂][＋][列表][详细]
+ *   ┌──────────────────────────────────────────────────────┐
+ *   │  📁 inputs        📁 OrthoFinder                      │
+ *   │  📄 At.pep        📄 Os.pep        📄 Ta_A.pep        │
+ *   └──────────────────────────────────────────────────────┘
+ *   文件夹名(N): [ /home/qw/shili/At.pep ]
+ *   文件类型(T): [ 所有文件                v ]
+ *                                    [打开] [取消]
+ * </pre>
  *
- * <p>所以「...」现在先问一句"文件在哪一侧"，这一侧就是 Linux 的答案。选中的路径
- * <b>原样写进参数</b>——它本来就是远端路径，上传那套逻辑（{@code copyOnEnter}）只认
- * Windows 路径，会自动跳过它。
+ * <h2>为什么是"一个列表"而不是"左目录右文件"</h2>
  *
- * <h2>默认打开设置好的工作目录</h2>
+ * <p>第一版分了两栏：左边目录、右边文件，各带标题。那不是大家熟悉的做法，用起来要在
+ * 两栏之间来回看。Windows 那个窗口是<b>一个列表</b>：文件夹和文件混在一起、<b>文件夹
+ * 排在前面</b>，靠<b>图标</b>区分——想进去就双击文件夹，想选就双击文件。用户已经会
+ * 这个了，照抄比自创好。
  *
- * <p>工作目录是用户刚刚挑好的地方，东西多半就在那儿。没设过就从主目录开始。
+ * <h2>选中的路径是远端路径</h2>
  *
- * <h2>两种模式</h2>
- *
- * <ul>
- *   <li><b>打开</b>（输入）：列现有文件，可单选或多选。</li>
- *   <li><b>保存</b>（输出）：输出通常还不存在，所以是"选一个目录 + 在下面填文件名"，
- *       和 Windows 侧的保存对话框语义一致。</li>
- * </ul>
- *
- * <p>布局与 {@link LinuxDirChooser} 一致，也就和 Windows 那个「打开」窗口一致：
- * 查找、上一级、主目录、新建文件夹、列表、详细信息、文件名、打开/取消。
+ * <p>写进参数后原样使用：{@code copyOnEnter} 只认 Windows 路径，会自动跳过它，
+ * 也就是"东西已经在远端，不要再传一遍"。
  */
 public final class LinuxFileChooser {
+
+    /** 列表里的一行。目录和文件在同一个列表里，靠 dir 区分图标与双击行为。 */
+    private static final class Row {
+        final String name;
+        final boolean dir;
+        String perms = "";
+        String modified = "";
+
+        Row(String name, boolean dir) {
+            this.name = name;
+            this.dir = dir;
+        }
+    }
 
     private final Transport transport;
     private final String startDir;
@@ -62,27 +76,28 @@ public final class LinuxFileChooser {
     private final boolean save;
 
     private final JDialog dialog;
-    private final JTextField lookIn = new JTextField(26);
+    /** 查找(I)：路径，可编辑可下拉——走过的地方留在里面，回头一步就能到。 */
+    private final JComboBox<String> lookIn = new JComboBox<String>();
     private final JTextField fileName = new JTextField(26);
-    private final JTextField filter = new JTextField(18);
-
-    private final DefaultListModel<String> dirModel = new DefaultListModel<String>();
-    private final JList<String> dirList = new JList<String>(dirModel);
-    private final DefaultListModel<String> fileModel = new DefaultListModel<String>();
-    private final JList<String> fileList = new JList<String>(fileModel);
-
+    private final JComboBox<String> fileType = new JComboBox<String>(
+            new String[]{I18n.t(Strings.FILE_TYPE_ALL)});
+    private final DefaultListModel<Row> model = new DefaultListModel<Row>();
+    private final JList<Row> list = new JList<Row>(model);
     private final JLabel status = new JLabel(" ");
-    private final JButton up = iconButton(Strings.DIR_UP);
-    private final JButton home = iconButton(Strings.DIR_HOME);
-    private final JButton mkdir = iconButton(Strings.DIR_MKDIR);
+
+    private final JButton up = toolButton(I18n.t(Strings.DIR_UP));
+    private final JButton home = toolButton(I18n.t(Strings.DIR_HOME));
+    private final JButton mkdir = toolButton(I18n.t(Strings.DIR_MKDIR));
+    private final JButton viewList = toolButton(I18n.t(Strings.DIR_VIEW_LIST));
+    private final JButton viewDetails = toolButton(I18n.t(Strings.DIR_VIEW_DETAILS));
+
     private final JButton open = new JButton(I18n.t(Strings.DIR_OPEN));
     private final JButton cancel = new JButton(I18n.t(Strings.DIR_CANCEL));
 
-    /** 中间那块：建的时候存下来，切换视图只动它，不去内容面板里按序号捞。 */
-    private JPanel midPanel;
-
     private String current = "";
     private List<String> result = new ArrayList<String>();
+    /** 详细信息视图。 */
+    private boolean details;
 
     private LinuxFileChooser(Transport transport, String startDir, boolean multi,
                              boolean save) {
@@ -90,12 +105,11 @@ public final class LinuxFileChooser {
         this.startDir = startDir;
         this.multi = multi;
         this.save = save;
-        String title = save ? I18n.t(Strings.DIR_TITLE) : I18n.t(Strings.FILE_TITLE);
-        dialog = new JDialog((java.awt.Frame) null, title, true);
+        dialog = new JDialog((java.awt.Frame) null, I18n.t(Strings.FILE_TITLE), true);
         dialog.setName("bioenv.linuxFileChooser");
         dialog.setContentPane(build());
         dialog.pack();
-        dialog.setMinimumSize(new Dimension(600, 460));
+        dialog.setMinimumSize(new Dimension(620, 430));
     }
 
     /**
@@ -125,8 +139,8 @@ public final class LinuxFileChooser {
         return "~";
     }
 
-    private static JButton iconButton(String key) {
-        JButton b = new JButton(I18n.t(key));
+    private static JButton toolButton(String text) {
+        JButton b = new JButton(text);
         b.setMargin(new java.awt.Insets(2, 6, 2, 6));
         b.setFocusable(false);
         return b;
@@ -139,6 +153,7 @@ public final class LinuxFileChooser {
         root.add(buildMiddle(), BorderLayout.CENTER);
         root.add(buildBottom(), BorderLayout.SOUTH);
 
+        open.setName("bioenv.fileOpen");
         up.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
@@ -154,9 +169,19 @@ public final class LinuxFileChooser {
         mkdir.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                // 这个窗口不建目录：要建就先用工作目录那个按钮建好再来。
-                // 放一个按不动的按钮不如放一句说明。
-                status.setText(I18n.t(Strings.FILE_SAVE_HINT));
+                makeDirectory();
+            }
+        });
+        viewList.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                showDetails(false);
+            }
+        });
+        viewDetails.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                showDetails(true);
             }
         });
         open.addActionListener(new ActionListener() {
@@ -172,40 +197,52 @@ public final class LinuxFileChooser {
                 dialog.dispose();
             }
         });
-        // 双击目录进去；双击文件＝选中它（保存模式下则是把名字填进文件名框）。
-        MouseAdapter nav = new MouseAdapter() {
+
+        // 双击：文件夹进去，文件选中。和 Windows 那个窗口一致。
+        list.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
                 if (e.getClickCount() != 2) {
                     return;
                 }
-                String d = dirList.getSelectedValue();
-                if (d != null) {
-                    load(LinuxDirList.childOf(current, d));
+                Row r = list.getSelectedValue();
+                if (r == null) {
                     return;
                 }
-                String f = fileList.getSelectedValue();
-                if (f != null) {
-                    if (save) {
-                        fileName.setText(f);
-                    } else {
-                        accept();
-                    }
+                if (r.dir) {
+                    load(LinuxDirList.childOf(current, r.name));
+                } else if (save) {
+                    fileName.setText(r.name);
+                } else {
+                    accept();
                 }
             }
-        };
-        dirList.addMouseListener(nav);
-        fileList.addMouseListener(nav);
+        });
+        // 选中一行就把名字填到"文件夹名"里——按下「打开」之前就看得见选的是谁。
+        list.addListSelectionListener(new javax.swing.event.ListSelectionListener() {
+            @Override
+            public void valueChanged(javax.swing.event.ListSelectionEvent e) {
+                if (!e.getValueIsAdjusting()) {
+                    Row r = list.getSelectedValue();
+                    fileName.setText(r == null ? current
+                            : LinuxDirList.childOf(current, r.name));
+                }
+            }
+        });
         lookIn.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                load(lookIn.getText());
+                Object v = lookIn.getEditor().getItem();
+                if (v != null) {
+                    load(v.toString());
+                }
             }
         });
-        filter.addActionListener(new ActionListener() {
+        // 「文件类型」在这个窗口里就是按名字过滤。可编辑，所以也能直接打一段进去。
+        fileType.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                load(current);
+                load(current.isEmpty() ? initialDir() : current);
             }
         });
         return root;
@@ -214,101 +251,139 @@ public final class LinuxFileChooser {
     private JPanel buildTop() {
         JPanel top = new JPanel(new BorderLayout(6, 0));
         top.add(new JLabel(I18n.t(Strings.DIR_LOOK_IN)), BorderLayout.WEST);
+        lookIn.setEditable(true);
+        lookIn.setPreferredSize(new Dimension(300, lookIn.getPreferredSize().height));
         top.add(lookIn, BorderLayout.CENTER);
-        JPanel icons = new JPanel(new FlowLayout(FlowLayout.LEFT, 3, 0));
-        icons.add(up);
-        icons.add(home);
-        icons.add(mkdir);
-        top.add(icons, BorderLayout.EAST);
+        JPanel tools = new JPanel(new FlowLayout(FlowLayout.LEFT, 3, 0));
+        tools.add(up);
+        tools.add(home);
+        tools.add(mkdir);
+        tools.add(viewList);
+        tools.add(viewDetails);
+        top.add(tools, BorderLayout.EAST);
         return top;
     }
 
     private JPanel buildMiddle() {
-        dirList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        fileList.setSelectionMode(multi
+        list.setSelectionMode(multi
                 ? ListSelectionModel.MULTIPLE_INTERVAL_SELECTION
                 : ListSelectionModel.SINGLE_SELECTION);
-        dirList.setVisibleRowCount(7);
-        fileList.setVisibleRowCount(12);
-        dirList.setCellRenderer(new MarkRenderer(true));
-        fileList.setCellRenderer(new MarkRenderer(false));
-
-        // 两栏各自说清是什么。
-        //
-        // 原来左栏顶着一个"筛选"标签——那是我写错了：左栏是目录列表，跟筛选毫无关系，
-        // 而真正的筛选输入框在右栏。同一个词出现两次、又都不在图里该在的位置，看的人
-        // 只能猜。现在左栏是"文件夹（点进去）"，右栏是"文件（选中带走）"，筛选那行
-        // 写在右栏标题下面、并标出它是干什么的。
-        JPanel dirs = new JPanel(new BorderLayout(0, 2));
-        dirs.add(new JLabel(I18n.t(Strings.FILE_COL_DIRS)), BorderLayout.NORTH);
-        JScrollPane dp = new JScrollPane(dirList);
-        dp.setPreferredSize(new Dimension(200, 250));
-        dirs.add(dp, BorderLayout.CENTER);
-
-        JPanel files = new JPanel(new BorderLayout(0, 2));
-        JPanel head = new JPanel(new BorderLayout(4, 2));
-        head.add(new JLabel(I18n.t(Strings.FILE_COL_FILES)), BorderLayout.NORTH);
-        JPanel filterRow = new JPanel(new BorderLayout(4, 0));
-        filterRow.add(new JLabel(I18n.t(Strings.FILE_FILTER)), BorderLayout.WEST);
-        filterRow.add(filter, BorderLayout.CENTER);
-        filter.setToolTipText(I18n.t(Strings.FILE_FILTER_TIP));
-        head.add(filterRow, BorderLayout.CENTER);
-        files.add(head, BorderLayout.NORTH);
-        files.add(new JScrollPane(fileList), BorderLayout.CENTER);
-
-        midPanel = new JPanel(new BorderLayout(6, 0));
-        midPanel.add(dirs, BorderLayout.WEST);
-        midPanel.add(files, BorderLayout.CENTER);
-        JPanel wrap = new JPanel(new BorderLayout(0, 4));
-        wrap.add(midPanel, BorderLayout.CENTER);
-        wrap.add(status, BorderLayout.SOUTH);
-        return wrap;
+        list.setCellRenderer(new RowRenderer());
+        list.setVisibleRowCount(14);
+        JPanel mid = new JPanel(new BorderLayout(0, 4));
+        mid.add(new JScrollPane(list), BorderLayout.CENTER);
+        mid.add(status, BorderLayout.SOUTH);
+        return mid;
     }
 
     private JPanel buildBottom() {
+        JPanel form = new JPanel(new java.awt.GridLayout(2, 1, 0, 4));
         JPanel r1 = new JPanel(new BorderLayout(6, 0));
         r1.add(new JLabel(I18n.t(Strings.FILE_NAME_LABEL)), BorderLayout.WEST);
         r1.add(fileName, BorderLayout.CENTER);
+        JPanel r2 = new JPanel(new BorderLayout(6, 0));
+        r2.add(new JLabel(I18n.t(Strings.DIR_FILE_TYPE)), BorderLayout.WEST);
+        fileType.setEditable(true);
+        r2.add(fileType, BorderLayout.CENTER);
+        form.add(r1);
+        form.add(r2);
+
         JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
         actions.add(open);
         actions.add(cancel);
         JPanel bottom = new JPanel(new BorderLayout(0, 8));
-        bottom.add(r1, BorderLayout.CENTER);
+        bottom.add(form, BorderLayout.CENTER);
         bottom.add(actions, BorderLayout.SOUTH);
         return bottom;
     }
 
-    /** 「打开」：把选中的东西变成结果。 */
+    /** 当前"文件类型"框里的过滤词；"所有文件"等于不过滤。 */
+    private String filterWord() {
+        Object v = fileType.isEditable()
+                ? fileType.getEditor().getItem() : fileType.getSelectedItem();
+        String s = v == null ? "" : v.toString().trim();
+        if (s.isEmpty() || s.equals(I18n.t(Strings.FILE_TYPE_ALL))) {
+            return "";
+        }
+        // "*.pep" 这种写法按后缀理解：去掉星号和点，留 "pep"。
+        if (s.startsWith("*.")) {
+            return s.substring(2);
+        }
+        if (s.startsWith("*")) {
+            return s.substring(1);
+        }
+        return s;
+    }
+
+    private void showDetails(boolean want) {
+        details = want;
+        list.repaint();
+        load(current.isEmpty() ? initialDir() : current);
+    }
+
+    /** 「打开」：选中目录就进去，选中文件就带走；保存模式下用"文件名"框。 */
     private void accept() {
-        List<String> picked = new ArrayList<String>();
+        List<Row> sel = list.getSelectedValuesList();
         if (save) {
-            // 保存模式：文件名框里的名字（可以用选中的文件预填）落在当前目录下。
             String name = fileName.getText() == null ? "" : fileName.getText().trim();
             if (!name.isEmpty()) {
-                if (name.startsWith("/")) {
-                    picked.add(name);
-                } else {
-                    picked.add(LinuxDirList.childOf(current, name));
-                }
+                result = new ArrayList<String>();
+                result.add(name.startsWith("/")
+                        ? name : LinuxDirList.childOf(current, name));
+                dialog.dispose();
             }
-        } else if (multi) {
-            for (Object o : fileList.getSelectedValues()) {
-                if (o != null) {
-                    picked.add(LinuxDirList.childOf(current, o.toString()));
-                }
-            }
-        } else {
-            String f = fileList.getSelectedValue();
-            if (f != null) {
-                picked.add(LinuxDirList.childOf(current, f));
+            return;
+        }
+        List<String> picked = new ArrayList<String>();
+        for (Row r : sel) {
+            if (!r.dir) {
+                picked.add(LinuxDirList.childOf(current, r.name));
             }
         }
         if (picked.isEmpty()) {
-            status.setText(I18n.t(Strings.FILE_NO_FILES));
+            // 只选了目录（或者什么都没选）：那就先进去，这是 Windows 的行为。
+            Row r = sel.isEmpty() ? null : sel.get(0);
+            if (r != null && r.dir) {
+                load(LinuxDirList.childOf(current, r.name));
+            } else {
+                status.setText(I18n.t(Strings.FILE_NO_FILES));
+            }
             return;
         }
         result = picked;
         dialog.dispose();
+    }
+
+    private void makeDirectory() {
+        if (transport == null) {
+            return;
+        }
+        String name = javax.swing.JOptionPane.showInputDialog(dialog,
+                I18n.t(Strings.DIR_MKDIR_PROMPT), I18n.t(Strings.DIR_MKDIR),
+                javax.swing.JOptionPane.PLAIN_MESSAGE);
+        if (name == null) {
+            return;
+        }
+        final String trimmed = name.trim();
+        if (trimmed.isEmpty() || trimmed.indexOf('/') >= 0) {
+            javax.swing.JOptionPane.showMessageDialog(dialog,
+                    I18n.t(Strings.DIR_MKDIR_BAD_NAME), I18n.t(Strings.DIR_MKDIR),
+                    javax.swing.JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        final String full = LinuxDirList.childOf(current, trimmed);
+        new javax.swing.SwingWorker<Void, Void>() {
+            @Override
+            protected Void doInBackground() {
+                transport.runBashCapture(LinuxDirList.mkdirScript(full));
+                return null;
+            }
+
+            @Override
+            protected void done() {
+                load(full);
+            }
+        }.execute();
     }
 
     private void load(final String dir) {
@@ -318,13 +393,18 @@ public final class LinuxFileChooser {
         }
         busy(true);
         status.setText(I18n.t(Strings.DIR_LOADING));
-        final String nameFilter = filter.getText();
+        final String word = filterWord();
+        final boolean wantDetails = details;
         new javax.swing.SwingWorker<LinuxDirList.Listing, Void>() {
             @Override
             protected LinuxDirList.Listing doInBackground() {
-                Transport.Result r = transport.runBashCapture(
-                        LinuxDirList.filesScript(dir, nameFilter));
-                return LinuxDirList.parseFiles(r.stdout(), r.stderr(), r.exitCode());
+                Transport.Result r = transport.runBashCapture(wantDetails
+                        ? LinuxDirList.filesDetailsScript(dir, word)
+                        : LinuxDirList.filesScript(dir, word));
+                return wantDetails
+                        ? LinuxDirList.parseFilesDetails(r.stdout(), r.stderr(),
+                                r.exitCode())
+                        : LinuxDirList.parseFiles(r.stdout(), r.stderr(), r.exitCode());
             }
 
             @Override
@@ -342,114 +422,140 @@ public final class LinuxFileChooser {
                     return;
                 }
                 current = got.path;
-                lookIn.setText(current);
-                dirModel.clear();
-                fileModel.clear();
-                // 上一级永远在第一项，不用退回再进——文件目录常常很深。
-                dirModel.addElement("..");
+                remember(current);
+                model.clear();
+                // 文件夹在前、文件在后，和 Windows 一样。
                 for (String d : got.dirs) {
-                    dirModel.addElement(d);
+                    Row r = new Row(d, true);
+                    fillDetail(r, got, d, true);
+                    model.addElement(r);
                 }
                 for (String f : got.files) {
-                    fileModel.addElement(f);
+                    Row r = new Row(f, false);
+                    fillDetail(r, got, f, false);
+                    model.addElement(r);
                 }
-                if (fileModel.isEmpty()) {
-                    status.setText(I18n.t(Strings.FILE_NO_FILES));
-                } else {
-                    status.setText(I18n.t(Strings.FILE_COUNT,
-                            Integer.valueOf(fileModel.size())));
-                }
-                if (save && fileName.getText() != null
-                        && fileName.getText().trim().isEmpty()) {
-                    fileName.setText("");
-                }
-                dialog.setTitle(save
-                        ? I18n.t(Strings.DIR_TITLE) : I18n.t(Strings.FILE_TITLE));
+                fileName.setText(current);
+                status.setText(model.isEmpty()
+                        ? I18n.t(Strings.FILE_NO_FILES)
+                        : I18n.t(Strings.FILE_COUNT,
+                                Integer.valueOf(got.files.size())));
             }
         }.execute();
+    }
+
+    /** 详细信息视图里把权限/时间填进对应那一行。 */
+    private static void fillDetail(Row row, LinuxDirList.Listing got, String name,
+                                   boolean dir) {
+        for (LinuxDirList.Entry e : got.entries) {
+            if (got.dirs.contains(e.name) == dir && e.name.equals(name)) {
+                row.perms = e.perms;
+                row.modified = e.modified;
+                return;
+            }
+        }
+    }
+
+    /** 把走过的目录记进「查找」的下拉里，回头一步就能到。 */
+    private void remember(String dir) {
+        if (dir == null || dir.isEmpty()) {
+            return;
+        }
+        for (int i = 0; i < lookIn.getItemCount(); i++) {
+            if (dir.equals(lookIn.getItemAt(i))) {
+                return;
+            }
+        }
+        lookIn.addItem(dir);
+        lookIn.setSelectedItem(dir);
     }
 
     private void busy(boolean on) {
         up.setEnabled(!on);
         home.setEnabled(!on);
+        mkdir.setEnabled(!on);
+        viewList.setEnabled(!on);
+        viewDetails.setEnabled(!on);
         open.setEnabled(!on);
     }
 
-    /** 目录与文件的图标（画出来的，和别处一样不依赖图片资源）。 */
-    private static final class MarkRenderer
-            extends javax.swing.DefaultListCellRenderer {
+    /**
+     * 一行：图标 + 名字；详细信息视图在名字后面接上权限和时间。
+     *
+     * <p>图标是<b>画出来</b>的，和别处一样不依赖图片资源。文件夹与文件必须一眼分得开
+     * ——第一版两者长得一样，被指出来了。
+     */
+    private final class RowRenderer extends javax.swing.DefaultListCellRenderer {
         private static final long serialVersionUID = 1L;
-        private final boolean folder;
-        /** 目录列的 ".." 不配图标——它不是个目录，是个动作。 */
-        private final javax.swing.Icon folderIcon = new javax.swing.Icon() {
-            @Override
-            public int getIconWidth() {
-                return 16;
-            }
-
-            @Override
-            public int getIconHeight() {
-                return 16;
-            }
-
-            @Override
-            public void paintIcon(java.awt.Component c, java.awt.Graphics g,
-                                  int x, int y) {
-                java.awt.Graphics2D g2 = (java.awt.Graphics2D) g.create();
-                try {
-                    g2.setColor(new java.awt.Color(0xF2, 0xC0, 0x3C));
-                    g2.fillRect(x + 2, y + 3, 6, 3);
-                    g2.setColor(new java.awt.Color(0xFF, 0xD1, 0x54));
-                    g2.fillRect(x + 1, y + 5, 13, 8);
-                    g2.setColor(new java.awt.Color(0xE0, 0xA8, 0x1E));
-                    g2.drawRect(x + 1, y + 5, 13, 8);
-                } finally {
-                    g2.dispose();
-                }
-            }
-        };
-        private final javax.swing.Icon fileIcon = new javax.swing.Icon() {
-            @Override
-            public int getIconWidth() {
-                return 16;
-            }
-
-            @Override
-            public int getIconHeight() {
-                return 16;
-            }
-
-            @Override
-            public void paintIcon(java.awt.Component c, java.awt.Graphics g,
-                                  int x, int y) {
-                java.awt.Graphics2D g2 = (java.awt.Graphics2D) g.create();
-                try {
-                    g2.setColor(java.awt.Color.WHITE);
-                    g2.fillRect(x + 3, y + 2, 10, 12);
-                    g2.setColor(new java.awt.Color(0x8A, 0x8A, 0x8A));
-                    g2.drawRect(x + 3, y + 2, 10, 12);
-                    // 折角
-                    g2.fillRect(x + 9, y + 2, 4, 4);
-                } finally {
-                    g2.dispose();
-                }
-            }
-        };
-
-        MarkRenderer(boolean folder) {
-            this.folder = folder;
-        }
 
         @Override
         public java.awt.Component getListCellRendererComponent(
-                javax.swing.JList<?> list, Object value, int index,
+                javax.swing.JList<?> l, Object value, int index,
                 boolean selected, boolean focused) {
-            super.getListCellRendererComponent(list, value, index, selected, focused);
-            String text = value == null ? "" : value.toString();
-            setIcon("..".equals(text) ? null : (folder ? folderIcon : fileIcon));
+            super.getListCellRendererComponent(l, value, index, selected, focused);
+            Row r = (Row) value;
+            setIcon(r.dir ? Icons.FOLDER : Icons.FILE);
             setIconTextGap(6);
             setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 4));
+            if (details && !r.perms.isEmpty()) {
+                setText(r.name + "      " + r.perms + "      " + r.modified);
+            } else {
+                setText(r.name);
+            }
             return this;
+        }
+    }
+
+    /** 两个小图标，画出来的。 */
+    private static final class Icons {
+        static final javax.swing.Icon FOLDER = new Mark(true);
+        static final javax.swing.Icon FILE = new Mark(false);
+
+        private static final class Mark implements javax.swing.Icon {
+            private final boolean folder;
+
+            Mark(boolean folder) {
+                this.folder = folder;
+            }
+
+            @Override
+            public int getIconWidth() {
+                return 16;
+            }
+
+            @Override
+            public int getIconHeight() {
+                return 16;
+            }
+
+            @Override
+            public void paintIcon(java.awt.Component c, java.awt.Graphics g,
+                                  int x, int y) {
+                java.awt.Graphics2D g2 = (java.awt.Graphics2D) g.create();
+                try {
+                    g2.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING,
+                            java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+                    if (folder) {
+                        g2.setColor(new java.awt.Color(0xF2, 0xC0, 0x3C));
+                        g2.fillRect(x + 2, y + 3, 6, 3);
+                        g2.setColor(new java.awt.Color(0xFF, 0xD1, 0x54));
+                        g2.fillRect(x + 1, y + 5, 13, 8);
+                        g2.setColor(new java.awt.Color(0xD8, 0x9E, 0x14));
+                        g2.drawRect(x + 1, y + 5, 13, 8);
+                    } else {
+                        g2.setColor(java.awt.Color.WHITE);
+                        g2.fillRect(x + 3, y + 2, 10, 12);
+                        g2.setColor(new java.awt.Color(0x7A, 0x7A, 0x7A));
+                        g2.drawRect(x + 3, y + 2, 10, 12);
+                        // 折角：一个小三角，看起来才像一张纸
+                        g2.setColor(new java.awt.Color(0xD0, 0xD0, 0xD0));
+                        g2.fillPolygon(new int[]{x + 9, x + 13, x + 13},
+                                new int[]{y + 2, y + 2, y + 6}, 3);
+                    }
+                } finally {
+                    g2.dispose();
+                }
+            }
         }
     }
 }
