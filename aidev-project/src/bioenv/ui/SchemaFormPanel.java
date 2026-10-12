@@ -2563,6 +2563,16 @@ public final class SchemaFormPanel extends JPanel {
 
     private Object currentTransport;
 
+    /**
+     * 当前工作目录（远端路径）；没有、或不是 Linux 路径时返回 null。
+     *
+     * <p>给"在终端中运行"用：终端里也要先 cd 到同一个地方，否则用户在图形界面选好的
+     * 工作目录到了终端就不作数了。
+     */
+    public String terminalWorkdir() {
+        return wslInputDir();
+    }
+
     /** SSH 下藏起"选本机目录"那个按钮；WSL 下才显示。 */
     private void applyWorkdirButtonVisibility() {
         if (chooseWorkdirButton != null) {

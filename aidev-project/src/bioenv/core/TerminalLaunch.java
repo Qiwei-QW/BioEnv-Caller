@@ -86,6 +86,35 @@ public final class TerminalLaunch {
         return "script -qec " + posixQuote(script) + " " + posixQuote(transcriptPath);
     }
 
+    /**
+     * 整场会话的命令：跑脚本 + 留记录 + <b>最后写一个标记文件</b>。
+     *
+     * <p>标记文件是给插件用的。终端窗口一起来，启动它的进程就返回了，插件<b>无法等待</b>
+     * 那场会话结束。所以让会话自己在跑完之后碰一个文件，插件轮询它就等于"等它结束"。
+     * 没有这个标记，就只能靠"文件多久没长大"来猜，那是不可靠的。
+     */
+    public static String sessionScript(String script, String transcriptPath) {
+        String log = posixQuote(transcriptPath);
+        return withTranscript(script, transcriptPath)
+                + " ; touch " + posixQuote(sentinelPath(transcriptPath)) + " 2>/dev/null";
+    }
+
+    /** 会话结束标记的路径：记录文件后面加 {@code .done}。 */
+    public static String sentinelPath(String transcriptPath) {
+        return transcriptPath == null ? ".done" : transcriptPath + ".done";
+    }
+
+    /** 读回记录的脚本；文件不在就给空。 */
+    public static String readTranscriptScript(String transcriptPath) {
+        return "cat " + posixQuote(transcriptPath) + " 2>/dev/null";
+    }
+
+    /** 标记文件是否已出现。 */
+    public static String sentinelCheckScript(String transcriptPath) {
+        return "test -f " + posixQuote(sentinelPath(transcriptPath))
+                + " && echo yes || echo no";
+    }
+
     /** 不留记录时的命令：原样就是那段脚本。 */
     public static String withoutTranscript(String script) {
         return script == null ? "" : script;

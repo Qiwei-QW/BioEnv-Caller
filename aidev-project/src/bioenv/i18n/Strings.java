@@ -207,6 +207,12 @@ public final class Strings {
     public static final String FILE_COL_FILES = "file.colFiles";
     /** 「文件类型」下拉里的"全部"。 */
     public static final String FILE_TYPE_ALL = "file.typeAll";
+    /** 「在终端中运行」按钮与它的日志。 */
+    public static final String MENU_RUN_IN_TERMINAL = "menu.runInTerminal";
+    public static final String LOG_TERMINAL_STARTED = "log.terminalStarted";
+    public static final String LOG_TERMINAL_COPIED = "log.terminalCopied";
+    public static final String LOG_TERMINAL_TRANSCRIPT = "log.terminalTranscript";
+    public static final String LOG_TERMINAL_NO_TRANSCRIPT = "log.terminalNoTranscript";
 
     /**
      * 风格切换器上的三套风格名，以及它的工具提示。
@@ -1123,6 +1129,21 @@ public final class Strings {
         put(ZH_TEXT, EN_TEXT, FILE_COUNT, "{0} 个文件", "{0} files");
         put(ZH_TEXT, EN_TEXT, FILE_SELECTED, "已选 {0} 个", "{0} selected");
         put(ZH_TEXT, EN_TEXT, FILE_TYPE_ALL, "所有文件", "All files");
+        put(ZH_TEXT, EN_TEXT, MENU_RUN_IN_TERMINAL, "在终端中运行",
+                "Run in a terminal");
+        put(ZH_TEXT, EN_TEXT, LOG_TERMINAL_STARTED,
+                "已在终端中运行。交互在这个终端里进行。",
+                "Running in a terminal. Interact with it there.");
+        put(ZH_TEXT, EN_TEXT, LOG_TERMINAL_COPIED,
+                "开不了终端窗口，命令已复制到剪贴板 —— 粘到你自己的终端里即可。",
+                "Could not open a terminal window; the command is on the "
+                        + "clipboard - paste it into your own terminal.");
+        put(ZH_TEXT, EN_TEXT, LOG_TERMINAL_TRANSCRIPT, "会话记录（{0}）：",
+                "Session transcript ({0}):");
+        put(ZH_TEXT, EN_TEXT, LOG_TERMINAL_NO_TRANSCRIPT,
+                "没有取回会话记录（终端可能还没关，或远端没有 script 命令）。",
+                "No transcript came back (the terminal may still be open, or the "
+                        + "remote side has no script command).");
         put(ZH_TEXT, EN_TEXT, FILE_COL_DIRS, "文件夹（点进去）",
                 "Folders (click to enter)");
         put(ZH_TEXT, EN_TEXT, FILE_COL_FILES, "文件（选中带走）",

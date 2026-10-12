@@ -187,6 +187,15 @@ public final class MainPanel extends JPanel {
     private final JTextArea logArea = new JTextArea(12, 40);
     private final JButton runButton = new JButton(I18n.t(Strings.MENU_RUN));
     private final JButton stopButton = new JButton(I18n.t(Strings.MENU_STOP));
+    /**
+     * 「在终端中运行」：把命令交给一个<b>真终端</b>，而不是在输出面板里跑。
+     *
+     * <p>交互式工具（PAML 的 evolver 那种打印菜单等人输数字的）在面板里跑不了：整条
+     * 运行路径都是非交互的（SSH 下还以 BatchMode=yes 禁掉一切提问），工具停在提示上
+     * 等输入，没人应答就放弃。要真正驱动它得分配 PTY、送键盘、解释 ANSI —— 那是一整套
+     * 终端仿真。而用户机器上本来就有终端，所以这里不模拟，只把命令交给它。
+     */
+    private final JButton terminalButton = new JButton(I18n.t(Strings.MENU_RUN_IN_TERMINAL));
     private final JButton clearLogButton = new JButton(I18n.t(Strings.MENU_CLEAR_LOG));
     /** "输出"标题：和清空按钮同处一行。 */
     private JLabel logTitle;
@@ -2093,6 +2102,7 @@ public final class MainPanel extends JPanel {
         stopButton.setEnabled(false);
         UiTheme.primary(runButton);
         actions.add(runButton);
+        actions.add(terminalButton);
         actions.add(stopButton);
         mainArea.add(actions, BorderLayout.SOUTH);
 
@@ -2303,6 +2313,13 @@ public final class MainPanel extends JPanel {
             @Override
             public void actionPerformed(ActionEvent e) {
                 startRun();
+            }
+        });
+
+        terminalButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                runInTerminal();
             }
         });
 
@@ -3197,6 +3214,124 @@ public final class MainPanel extends JPanel {
     private void updateRunEnabled() {
         runButton.setEnabled(selected != null && runner != null);
         toolAssistantButton.setEnabled(selected != null);
+    }
+
+    /**
+     * 把当前命令交给一个真终端去跑，跑完把会话记录回填到输出面板。
+     *
+     * <h2>三层，从好到保底</h2>
+     *
+     * <p>{@code wt.exe} → {@code cmd /c start} → 把命令复制到剪贴板。第三层不是凑数：
+     * 前两层在某些机器上都不在，而"复制出去自己粘"永远能用。
+     *
+     * <h2>怎么知道会话结束了</h2>
+     *
+     * <p>终端窗口一起来，启动它的进程就返回了，插件<b>等不到</b>那场会话。所以会话
+     * 脚本最后会 {@code touch} 一个标记文件，插件轮询它——见
+     * {@link bioenv.core.TerminalLaunch#sessionScript}。
+     */
+    private void runInTerminal() {
+        if (selected == null) {
+            return;
+        }
+        final Tool tool = selected;
+        final String typed = expandPreviewText(commandArea.getText());
+        final String condaRoot = scanner == null ? null : scanner.getCondaRoot();
+        final String workdir = formPanel.terminalWorkdir();
+        final String script = bioenv.core.CommandBuilder.wrapTyped(tool, typed,
+                condaRoot, workdir);
+        if (script == null || script.trim().isEmpty()) {
+            return;
+        }
+        final boolean ssh = isSshMode();
+        final String target = ssh
+                ? (sshFiles == null ? null : sshFiles.userHost())
+                : pendingDistro;
+        final String log = bioenv.core.TerminalLaunch.transcriptPath(
+                workdir == null ? "" : workdir);
+        final String session = bioenv.core.TerminalLaunch.sessionScript(script, log);
+        final java.util.List<String> inner =
+                bioenv.core.TerminalLaunch.channelArgv(ssh, target, session);
+
+        boolean started = false;
+        for (bioenv.core.TerminalLaunch.Layer layer : new bioenv.core.TerminalLaunch.Layer[]{
+                bioenv.core.TerminalLaunch.Layer.TERMINAL,
+                bioenv.core.TerminalLaunch.Layer.CONSOLE}) {
+            try {
+                new ProcessBuilder(
+                        bioenv.core.TerminalLaunch.launchArgv(layer, inner)).start();
+                started = true;
+                break;
+            } catch (Exception ex) {
+                // 这一层起不来就试下一层。两层都不行还有第三层，所以这里不报错。
+            }
+        }
+        appendLog("");
+        if (!started) {
+            // 第三层：命令本身复制走，用户粘到自己的终端里。
+            try {
+                java.awt.Toolkit.getDefaultToolkit().getSystemClipboard().setContents(
+                        new java.awt.datatransfer.StringSelection(
+                                bioenv.core.TerminalLaunch.printable(inner)), null);
+            } catch (Exception ex) {
+                // 剪贴板都没有的话也只能把命令写进日志，至少能手动拷。
+                appendLog(bioenv.core.TerminalLaunch.printable(inner));
+            }
+            appendLog(I18n.t(Strings.LOG_TERMINAL_COPIED));
+            return;
+        }
+        appendLog(I18n.t(Strings.LOG_TERMINAL_STARTED));
+        pollTranscript(log);
+    }
+
+    /**
+     * 等那场终端会话结束，然后把记录读回来贴进输出面板。
+     *
+     * <p>轮询标记文件，而不是等进程：终端窗口一起来启动它的进程就退了。上限 30 分钟，
+     * 免得用户开着窗口去吃饭，这个后台任务一辈子不结束。
+     */
+    private void pollTranscript(final String log) {
+        final Transport channel = wsl;
+        if (channel == null) {
+            return;
+        }
+        new javax.swing.SwingWorker<String, Void>() {
+            @Override
+            protected String doInBackground() {
+                String check = bioenv.core.TerminalLaunch.sentinelCheckScript(log);
+                for (int i = 0; i < 900; i++) {
+                    try {
+                        if (channel.runBashCapture(check).stdoutText().contains("yes")) {
+                            return channel.runBashCapture(
+                                    bioenv.core.TerminalLaunch.readTranscriptScript(log))
+                                    .stdoutText();
+                        }
+                        Thread.sleep(2000);
+                    } catch (InterruptedException ie) {
+                        return null;
+                    } catch (Exception ex) {
+                        return null;
+                    }
+                }
+                return null;
+            }
+
+            @Override
+            protected void done() {
+                String text;
+                try {
+                    text = get();
+                } catch (Exception ex) {
+                    text = null;
+                }
+                if (text == null || text.trim().isEmpty()) {
+                    appendLog(I18n.t(Strings.LOG_TERMINAL_NO_TRANSCRIPT));
+                    return;
+                }
+                appendLog(I18n.t(Strings.LOG_TERMINAL_TRANSCRIPT, log));
+                appendLog(text);
+            }
+        }.execute();
     }
 
     private void startRun() {
