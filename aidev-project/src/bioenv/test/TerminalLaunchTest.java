@@ -32,6 +32,7 @@ public final class TerminalLaunchTest {
         transcript();
         channels();
         scriptFile();
+        interactive();
         layers();
         printing();
         System.out.println(failures == 0
@@ -183,6 +184,45 @@ public final class TerminalLaunchTest {
         String back = new String(java.util.Base64.getDecoder().decode(b64),
                 java.nio.charset.StandardCharsets.UTF_8);
         eq("解回来和原文一致", "echo 'hi' $HOME\nnext", back);
+    }
+
+    /** 面板内交互：WSL 要多一层 script（造 PTY），SSH 复用 sshArgv。 */
+    private static void interactive() {
+        List<String> w = TerminalLaunch.wslInteractiveArgv("Ubuntu",
+                "/home/qw/shili/tbvterm.sh");
+        check("交互用 wsl.exe", w.get(0).equals("wsl.exe"), w.toString());
+        check("交互指定发行版", w.contains("Ubuntu"), w.toString());
+        // 这一条是核心：没有 script 就没有 PTY，远端程序会块缓冲，提示憋在缓冲区里。
+        check("交互带 script 造 PTY", w.contains("script"), w.toString());
+        check("交互用 -qec", w.contains("-qec"), w.toString());
+        check("交互把记录丢到 /dev/null（输出由插件自己收）",
+                w.get(w.size() - 1).equals("/dev/null"), w.toString());
+        check("交互把 'bash 脚本路径' 作为一个元素传给 script",
+                w.contains("bash /home/qw/shili/tbvterm.sh"), w.toString());
+
+        // 这一条<b>反过来</b>钉：这里允许元素含空格。
+        //
+        // 走 wt.exe 时不允许（它会重新解析命令行，带空格的元素会被拆散 —— 实测过）。
+        // 而这里由 ProcessBuilder 直接起进程，元素原样传下去。两边的规矩相反，写反了
+        // 都是 bug，所以把"这一侧允许"也写成断言，免得以后有人照着另一侧"修正"过来。
+        boolean hasSpace = false;
+        for (int i = 0; i < w.size(); i++) {
+            if (w.get(i).indexOf(' ') >= 0) {
+                hasSpace = true;
+            }
+        }
+        check("交互这一侧允许元素含空格（与终端那一侧相反）", hasSpace, w.toString());
+
+        // SSH 侧复用同一份命令行：-t 已经在远端给了 PTY。
+        List<String> s = TerminalLaunch.sshInteractiveArgv("qw@h", 2222,
+                "C:\\k\\id", "/x/tbvterm.sh");
+        check("交互 SSH 与终端 SSH 是同一份",
+                s.equals(TerminalLaunch.sshArgv("qw@h", 2222, "C:\\k\\id",
+                        "/x/tbvterm.sh")),
+                s.toString());
+        check("交互 SSH 带 -t（远端 PTY）", s.contains("-t"), s.toString());
+        check("交互 SSH 也带 accept-new", s.contains("StrictHostKeyChecking=accept-new"),
+                s.toString());
     }
 
     private static void layers() {

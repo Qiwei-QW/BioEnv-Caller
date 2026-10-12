@@ -202,6 +202,54 @@ public final class TerminalLaunch {
         return argv;
     }
 
+    /**
+     * 面板内交互：WSL 侧要在插件起的进程里造一个 PTY。
+     *
+     * <h2>为什么这里反而需要 {@code script}</h2>
+     *
+     * <p>交给终端窗口时不需要它 —— 那个窗口本身就是终端。但在面板里跑时，进程是插件
+     * 起的，stdin/stdout 都是<b>管道</b>。而 stdout 不是终端时，很多程序会切成块缓冲：
+     * 程序已经打印了提示、正在等你输入，那几行却<b>憋在缓冲区里</b>，界面上什么都看不到，
+     * 输入框也就无从下手。
+     *
+     * <p>{@code script -qec "<命令>" /dev/null} 一次给两样：它给远端命令分配一个 PTY
+     * （于是行缓冲、提示立刻出来），同时把它自己 stdin 的内容转发进那个 PTY
+     * （于是我们往管道里写就等于往远端程序的键盘里写）。
+     *
+     * <p>{@code -q} 不打印开场白，{@code -e} 把子命令的退出码带回来。
+     *
+     * <p><b>注意这里 "bash /path" 是一个含空格的元素，而这是允许的</b> ——
+     * 那个"argv 里不许有空格"的约束只存在于走 {@code wt.exe} 的时候（它会重新解析
+     * 命令行）。这里由 {@code ProcessBuilder} 直接起进程，元素原样传下去。两边写反了
+     * 都是 bug，所以测试把两种情形分别钉住了。
+     */
+    public static List<String> wslInteractiveArgv(String distro, String scriptPath) {
+        List<String> argv = new ArrayList<String>();
+        argv.add("wsl.exe");
+        if (distro != null && !distro.trim().isEmpty()) {
+            argv.add("-d");
+            argv.add(distro.trim());
+        }
+        argv.add("--");
+        argv.add("script");
+        argv.add("-qec");
+        argv.add("bash " + (scriptPath == null ? "" : scriptPath.trim()));
+        argv.add("/dev/null");
+        return argv;
+    }
+
+    /**
+     * 面板内交互：SSH 侧直接用 {@link #sshArgv}，不需要额外包装。
+     *
+     * <p>{@code ssh -t} 已经在<b>远端</b>分配了 PTY，而 ssh 的本地 stdin 是管道照样能写，
+     * 它会把内容转进那个 PTY。所以 {@code sshArgv} 出的命令行在"交给终端窗口"和
+     * "在面板里跑"两种用法下是同一份 —— 区别只在谁去启动它、谁去喂输入。
+     */
+    public static List<String> sshInteractiveArgv(String userHost, int port,
+                                                  String keyPath, String scriptPath) {
+        return sshArgv(userHost, port, keyPath, scriptPath);
+    }
+
     /** 会话脚本文件的路径：放在工作目录下，名字固定。 */
     public static String scriptFilePath(String workdir) {
         if (workdir == null || workdir.trim().isEmpty()) {
