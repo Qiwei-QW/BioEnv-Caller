@@ -220,6 +220,8 @@ public final class Strings {
     public static final String LOG_INTERACTIVE_STARTED = "log.interactiveStarted";
     public static final String LOG_INTERACTIVE_ENDED = "log.interactiveEnded";
     public static final String LOG_INTERACTIVE_FAILED = "log.interactiveFailed";
+    /** 运行时实际用的工作目录：出问题时一眼能看出它有没有 cd 对地方。 */
+    public static final String LOG_RUN_WORKDIR = "log.runWorkdir";
 
     /**
      * 风格切换器上的三套风格名，以及它的工具提示。
@@ -1157,6 +1159,8 @@ public final class Strings {
                 "Interactive run started. Answer below when the tool asks.");
         put(ZH_TEXT, EN_TEXT, LOG_INTERACTIVE_ENDED, "交互运行已结束。",
                 "Interactive run finished.");
+        put(ZH_TEXT, EN_TEXT, LOG_RUN_WORKDIR, "工作目录：{0}",
+                "Working directory: {0}");
         put(ZH_TEXT, EN_TEXT, LOG_INTERACTIVE_FAILED, "交互运行失败：{0}",
                 "Interactive run failed: {0}");
         put(ZH_TEXT, EN_TEXT, LOG_TERMINAL_NO_TRANSCRIPT,

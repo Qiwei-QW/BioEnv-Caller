@@ -2573,6 +2573,31 @@ public final class SchemaFormPanel extends JPanel {
         return wslInputDir();
     }
 
+    /**
+     * 工作目录框里的<b>原样文本</b>（可能是一条 Windows 路径），空则返回 null。
+     *
+     * <p>与 {@link #terminalWorkdir()} 的区别很重要，而且这里是我踩过的坑：
+     *
+     * <ul>
+     *   <li>{@link #wslInputDir()} 会把 Windows 路径判成 null —— 那是对的，因为它服务的是
+     *       "把本机文件 scp 到哪"，而那个目标必须是 Linux 路径；</li>
+     *   <li>但"运行前 cd 到哪"不该用那个过滤值。WSL 模式下填 Windows 路径是<b>合法</b>的，
+     *       {@code CommandBuilder.wrapTyped} 会把它翻译成 {@code /mnt/c/...}。</li>
+     * </ul>
+     *
+     * <p>我最初直接复用了过滤后的值，于是工作目录一填 Windows 路径，{@code workdir} 就是
+     * null，{@code wrapTyped} 里那条 {@code cd} <b>整条不生成</b> —— 工具在默认目录
+     * （WSL 的 home）里跑，结果文件落在那里而不是用户选的地方。用户报的"结果文件没在
+     * 工作目录里落盘"就是这个。
+     */
+    public String rawWorkdir() {
+        String wd = HintText.realText(workdirField);
+        if (wd == null || wd.trim().isEmpty()) {
+            return null;
+        }
+        return wd.trim();
+    }
+
     /** SSH 下藏起"选本机目录"那个按钮；WSL 下才显示。 */
     private void applyWorkdirButtonVisibility() {
         if (chooseWorkdirButton != null) {

@@ -3283,7 +3283,16 @@ public final class MainPanel extends JPanel {
         }
         final String typed = expandPreviewText(commandArea.getText());
         final String condaRoot = scanner == null ? null : scanner.getCondaRoot();
-        final String workdir = formPanel.terminalWorkdir();
+        // 用原样值，别用会把 Windows 路径滤成 null 的那个。
+        //
+        // 用户报的"结果文件没在工作目录里落盘"就是这个：WSL 模式下工作目录填
+        // C:... 是合法的，而 terminalWorkdir() 会把非 "/" 开头的判成 null，于是
+        // wrapTyped 里那条 cd 整条不生成 —— 工具在默认目录（WSL 的 home）里跑，
+        // 结果文件落在那里，而不是用户选的地方。
+        final String workdir = formPanel.rawWorkdir();
+        // 脚本与记录放在远端真实路径下；wrapTyped 里 cd 去的也是这里，两者必须一致。
+        final String remoteWorkdir = (workdir == null) ? null
+                : bioenv.core.WslBridge.toWslPath(workdir);
         final String script = bioenv.core.CommandBuilder.wrapTyped(selected, typed,
                 condaRoot, workdir);
         if (script == null || script.trim().isEmpty()) {
@@ -3296,9 +3305,14 @@ public final class MainPanel extends JPanel {
         final int port = (ssh && sshTarget != null) ? sshTarget.port : 0;
         final String keyPath = (ssh && sshTarget != null) ? sshTarget.keyPath : null;
         final String log = bioenv.core.TerminalLaunch.transcriptPath(
-                workdir == null ? "" : workdir);
+                remoteWorkdir == null ? "" : remoteWorkdir);
         final String scriptFile = bioenv.core.TerminalLaunch.scriptFilePath(
-                workdir == null ? "" : workdir);
+                remoteWorkdir == null ? "" : remoteWorkdir);
+        // 把实际用的工作目录写进日志：出问题时一眼能看出它有没有 cd 对地方。
+        // 这一条是被"结果文件没落在工作目录里"逼出来的 —— 当时日志里没有任何
+        // 线索指向 cd，只能靠读代码猜。
+        appendLog(I18n.t(Strings.LOG_RUN_WORKDIR,
+                remoteWorkdir == null ? "-" : remoteWorkdir));
         final String session = bioenv.core.TerminalLaunch.sessionScript(script, log);
         final Transport chan = wsl;
         if (chan == null) {
@@ -3457,7 +3471,16 @@ public final class MainPanel extends JPanel {
         final Tool tool = selected;
         final String typed = expandPreviewText(commandArea.getText());
         final String condaRoot = scanner == null ? null : scanner.getCondaRoot();
-        final String workdir = formPanel.terminalWorkdir();
+        // 用原样值，别用会把 Windows 路径滤成 null 的那个。
+        //
+        // 用户报的"结果文件没在工作目录里落盘"就是这个：WSL 模式下工作目录填
+        // C:... 是合法的，而 terminalWorkdir() 会把非 "/" 开头的判成 null，于是
+        // wrapTyped 里那条 cd 整条不生成 —— 工具在默认目录（WSL 的 home）里跑，
+        // 结果文件落在那里，而不是用户选的地方。
+        final String workdir = formPanel.rawWorkdir();
+        // 脚本与记录放在远端真实路径下；wrapTyped 里 cd 去的也是这里，两者必须一致。
+        final String remoteWorkdir = (workdir == null) ? null
+                : bioenv.core.WslBridge.toWslPath(workdir);
         final String script = bioenv.core.CommandBuilder.wrapTyped(tool, typed,
                 condaRoot, workdir);
         if (script == null || script.trim().isEmpty()) {
@@ -3472,9 +3495,10 @@ public final class MainPanel extends JPanel {
         final int port = (ssh && sshTarget != null) ? sshTarget.port : 0;
         final String keyPath = (ssh && sshTarget != null) ? sshTarget.keyPath : null;
         final String log = bioenv.core.TerminalLaunch.transcriptPath(
-                workdir == null ? "" : workdir);
+                remoteWorkdir == null ? "" : remoteWorkdir);
         final String scriptFile =
-                bioenv.core.TerminalLaunch.scriptFilePath(workdir == null ? "" : workdir);
+                bioenv.core.TerminalLaunch.scriptFilePath(
+                        remoteWorkdir == null ? "" : remoteWorkdir);
         final String session = bioenv.core.TerminalLaunch.sessionScript(script, log);
 
         // 先把脚本写进远端文件，再启动终端。
