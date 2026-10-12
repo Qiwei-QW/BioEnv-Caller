@@ -197,6 +197,24 @@ public final class MainPanel extends JPanel {
      */
     private final JButton terminalButton = new JButton(I18n.t(Strings.MENU_RUN_IN_TERMINAL));
     private final JButton clearLogButton = new JButton(I18n.t(Strings.MENU_CLEAR_LOG));
+    /**
+     * 「交互运行」：在输出区就地交互，不另开终端窗口。
+     *
+     * <p>与 {@link #terminalButton} 的分工：行式工具（PAML 的 evolver 那种"打印菜单等
+     * 你输数字"）走这个，就不用来回切窗口；全屏工具（top / vim）只有真终端能跑，走那个。
+     */
+    private final JButton interactiveButton = new JButton(I18n.t(Strings.MENU_RUN_INTERACTIVE));
+    /** 交互运行时的输入行；单行，回车即发。 */
+    private final JTextField interactiveInput = new JTextField();
+    /** 输入行所在的那一条；没有交互在跑时整条藏起来，免得白占地方。 */
+    private JPanel interactiveRow;
+    /**
+     * 正在跑的交互进程；null 表示没有。
+     *
+     * <p>它一直活着，随时能往它的 stdin 写 —— 这正是与 {@code startRun()} 的区别：
+     * 那个是"跑一段、收输出"，这个要能来回。
+     */
+    private volatile Process interactiveProcess;
     /** "输出"标题：和清空按钮同处一行。 */
     private JLabel logTitle;
     /** 命令预览下面那句说明（「可以直接在这里输入…」）。 */
@@ -2031,6 +2049,18 @@ public final class MainPanel extends JPanel {
         logPanel.setBorder(BorderFactory.createEmptyBorder(2, 2, 2, 2));
         logPanel.add(logHead, BorderLayout.NORTH);
         logPanel.add(new JScrollPane(logArea), BorderLayout.CENTER);
+        // 输入行贴在输出下面。放在输出这一列里（而不是底部按钮条）是因为它服务的就是
+        // 上面那段输出：提示在上面，回答在下面，视线不用移动。
+        interactiveRow = new JPanel(new BorderLayout(6, 0));
+        interactiveRow.setOpaque(false);
+        interactiveRow.add(new JLabel(I18n.t(Strings.INTERACTIVE_PROMPT)),
+                BorderLayout.WEST);
+        interactiveRow.add(interactiveInput, BorderLayout.CENTER);
+        interactiveInput.setToolTipText(I18n.t(Strings.INTERACTIVE_TIP));
+        interactiveInput.setName("bioenv.interactiveInput");
+        interactiveInput.setEnabled(false);
+        interactiveRow.setVisible(false);
+        logPanel.add(interactiveRow, BorderLayout.SOUTH);
         logPanel.setMinimumSize(new Dimension(160, 80));
         // A preferred width makes the split pane give the column this much on its
         // own, which is what survives later layout passes: a divider location set
@@ -2102,6 +2132,7 @@ public final class MainPanel extends JPanel {
         stopButton.setEnabled(false);
         UiTheme.primary(runButton);
         actions.add(runButton);
+        actions.add(interactiveButton);
         actions.add(terminalButton);
         actions.add(stopButton);
         mainArea.add(actions, BorderLayout.SOUTH);
@@ -2320,6 +2351,20 @@ public final class MainPanel extends JPanel {
             @Override
             public void actionPerformed(ActionEvent e) {
                 runInTerminal();
+            }
+        });
+
+        interactiveButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                startInteractive();
+            }
+        });
+        // 回车即发。单行输入配回车是终端的手感，用户不用去够按钮。
+        interactiveInput.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                sendInteractiveLine();
             }
         });
 
@@ -3214,6 +3259,167 @@ public final class MainPanel extends JPanel {
     private void updateRunEnabled() {
         runButton.setEnabled(selected != null && runner != null);
         toolAssistantButton.setEnabled(selected != null);
+    }
+
+    /**
+     * 在输出区就地交互：起一个<b>长驻</b>进程，把它的输出喂进输出面板，并让用户
+     * 在下面的输入行里回答工具的提问。
+     *
+     * <h2>与「在终端中运行」的区别</h2>
+     *
+     * <p>那个把命令交给一个终端窗口 —— 交互在那边发生，全屏程序也能跑，代价是要来回切
+     * 窗口。这个把交互留在面板里：输出、提问、回答都在同一处，行式工具用起来顺手得多。
+     * 两者不是替代关系，全屏工具（top / vim）只有窗口那个能跑。
+     *
+     * <h2>为什么 WSL 侧要多一层 script</h2>
+     *
+     * <p>面板里的进程是插件起的，stdin/stdout 都是管道；而 stdout 不是终端时很多程序会
+     * 切块缓冲 —— 提示憋在缓冲区里，界面上看不见，输入行也就无从下手。见
+     * {@link bioenv.core.TerminalLaunch#wslInteractiveArgv}。
+     */
+    private void startInteractive() {
+        if (selected == null || interactiveProcess != null) {
+            return;
+        }
+        final String typed = expandPreviewText(commandArea.getText());
+        final String condaRoot = scanner == null ? null : scanner.getCondaRoot();
+        final String workdir = formPanel.terminalWorkdir();
+        final String script = bioenv.core.CommandBuilder.wrapTyped(selected, typed,
+                condaRoot, workdir);
+        if (script == null || script.trim().isEmpty()) {
+            return;
+        }
+        final boolean ssh = isSshMode();
+        final String target = ssh
+                ? (sshFiles == null ? null : sshFiles.userHost())
+                : pendingDistro;
+        final int port = (ssh && sshTarget != null) ? sshTarget.port : 0;
+        final String keyPath = (ssh && sshTarget != null) ? sshTarget.keyPath : null;
+        final String log = bioenv.core.TerminalLaunch.transcriptPath(
+                workdir == null ? "" : workdir);
+        final String scriptFile = bioenv.core.TerminalLaunch.scriptFilePath(
+                workdir == null ? "" : workdir);
+        final String session = bioenv.core.TerminalLaunch.sessionScript(script, log);
+        final Transport chan = wsl;
+        if (chan == null) {
+            appendLog(I18n.t(Strings.LOG_TERMINAL_NO_TRANSCRIPT));
+            return;
+        }
+        new javax.swing.SwingWorker<Boolean, Void>() {
+            @Override
+            protected Boolean doInBackground() {
+                return chan.runBashCapture(
+                        bioenv.core.TerminalLaunch.writeScriptCommand(scriptFile, session)
+                ).ok();
+            }
+
+            @Override
+            protected void done() {
+                boolean written;
+                try {
+                    written = Boolean.TRUE.equals(get());
+                } catch (Exception ex) {
+                    written = false;
+                }
+                if (!written) {
+                    appendLog(I18n.t(Strings.LOG_INTERACTIVE_FAILED, scriptFile));
+                    return;
+                }
+                pumpInteractive(ssh
+                        ? bioenv.core.TerminalLaunch.sshInteractiveArgv(target, port,
+                                keyPath, scriptFile)
+                        : bioenv.core.TerminalLaunch.wslInteractiveArgv(target, scriptFile));
+            }
+        }.execute();
+    }
+
+    /** 起进程、把它的输出一路喂进面板，并在它退出时收尾。 */
+    private void pumpInteractive(final java.util.List<String> argv) {
+        final Process proc;
+        try {
+            ProcessBuilder pb = new ProcessBuilder(argv);
+            // 错误流并进输出流：工具的报错和它的提问混在一起才读得懂顺序，
+            // 分两路反而看不出"为什么它停下了"。
+            pb.redirectErrorStream(true);
+            proc = pb.start();
+        } catch (Exception ex) {
+            appendLog(I18n.t(Strings.LOG_INTERACTIVE_FAILED, String.valueOf(ex)));
+            return;
+        }
+        interactiveProcess = proc;
+        interactiveRow.setVisible(true);
+        interactiveInput.setEnabled(true);
+        interactiveInput.setText("");
+        interactiveInput.requestFocusInWindow();
+        appendLog("");
+        appendLog(I18n.t(Strings.LOG_INTERACTIVE_STARTED));
+
+        // 读在一个单独的线程上：进程一直活着，输出随时会来，不能占住事件线程。
+        Thread reader = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                java.io.BufferedReader in = null;
+                try {
+                    in = new java.io.BufferedReader(new java.io.InputStreamReader(
+                            proc.getInputStream(),
+                            java.nio.charset.StandardCharsets.UTF_8));
+                    String line;
+                    while ((line = in.readLine()) != null) {
+                        final String text = line;
+                        FileDialogs.onEdt(new Runnable() {
+                            @Override
+                            public void run() {
+                                appendLog(text);
+                            }
+                        });
+                    }
+                } catch (Exception ignored) {
+                    // 进程被杀时读会中断，这不是错误。
+                } finally {
+                    try {
+                        if (in != null) {
+                            in.close();
+                        }
+                    } catch (Exception ignored) {
+                        // 关不上也没别的办法。
+                    }
+                    try {
+                        proc.waitFor();
+                    } catch (InterruptedException ignored) {
+                        Thread.currentThread().interrupt();
+                    }
+                    FileDialogs.onEdt(new Runnable() {
+                        @Override
+                        public void run() {
+                            interactiveProcess = null;
+                            interactiveInput.setEnabled(false);
+                            interactiveInput.setText("");
+                            interactiveRow.setVisible(false);
+                            appendLog(I18n.t(Strings.LOG_INTERACTIVE_ENDED));
+                        }
+                    });
+                }
+            }
+        }, "bioenv-interactive");
+        reader.setDaemon(true);
+        reader.start();
+    }
+
+    /** 把输入行里的内容发给那个还活着的进程；回车触发。 */
+    private void sendInteractiveLine() {
+        Process p = interactiveProcess;
+        if (p == null) {
+            return;
+        }
+        String text = interactiveInput.getText();
+        interactiveInput.setText("");
+        try {
+            java.io.OutputStream os = p.getOutputStream();
+            os.write((text + "\n").getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            os.flush();
+        } catch (Exception ex) {
+            appendLog(I18n.t(Strings.LOG_INTERACTIVE_FAILED, String.valueOf(ex)));
+        }
     }
 
     /**

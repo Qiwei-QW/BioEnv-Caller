@@ -213,6 +213,13 @@ public final class Strings {
     public static final String LOG_TERMINAL_COPIED = "log.terminalCopied";
     public static final String LOG_TERMINAL_TRANSCRIPT = "log.terminalTranscript";
     public static final String LOG_TERMINAL_NO_TRANSCRIPT = "log.terminalNoTranscript";
+    /** 面板内交互运行。 */
+    public static final String MENU_RUN_INTERACTIVE = "menu.runInteractive";
+    public static final String INTERACTIVE_PROMPT = "interactive.prompt";
+    public static final String INTERACTIVE_TIP = "interactive.tip";
+    public static final String LOG_INTERACTIVE_STARTED = "log.interactiveStarted";
+    public static final String LOG_INTERACTIVE_ENDED = "log.interactiveEnded";
+    public static final String LOG_INTERACTIVE_FAILED = "log.interactiveFailed";
 
     /**
      * 风格切换器上的三套风格名，以及它的工具提示。
@@ -1140,6 +1147,18 @@ public final class Strings {
                         + "clipboard - paste it into your own terminal.");
         put(ZH_TEXT, EN_TEXT, LOG_TERMINAL_TRANSCRIPT, "会话记录（{0}）：",
                 "Session transcript ({0}):");
+        put(ZH_TEXT, EN_TEXT, MENU_RUN_INTERACTIVE, "交互运行", "Run interactively");
+        put(ZH_TEXT, EN_TEXT, INTERACTIVE_PROMPT, "输入：", "Input:");
+        put(ZH_TEXT, EN_TEXT, INTERACTIVE_TIP,
+                "工具提问时在这里打字，按回车发送。",
+                "Type here when the tool asks something, and press Enter to send.");
+        put(ZH_TEXT, EN_TEXT, LOG_INTERACTIVE_STARTED,
+                "已开始交互运行。工具提问时在下面的输入行里回答。",
+                "Interactive run started. Answer below when the tool asks.");
+        put(ZH_TEXT, EN_TEXT, LOG_INTERACTIVE_ENDED, "交互运行已结束。",
+                "Interactive run finished.");
+        put(ZH_TEXT, EN_TEXT, LOG_INTERACTIVE_FAILED, "交互运行失败：{0}",
+                "Interactive run failed: {0}");
         put(ZH_TEXT, EN_TEXT, LOG_TERMINAL_NO_TRANSCRIPT,
                 "没有取回会话记录（终端可能还没关，或远端没有 script 命令）。",
                 "No transcript came back (the terminal may still be open, or the "
