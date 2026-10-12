@@ -285,7 +285,10 @@ public final class LinuxDirList {
                 + "for e in * .[!.]*; do\n"
                 + "  [ -e \"$e\" ] || continue\n"
                 + filterLine
-                + "  printf '%s\\n' \"$e\"\n"
+                // 目录要带 "/" 后缀，和 ls -1p 一致。少了它，调用方分不出哪是目录，
+                // 目录会被当成文件塞进文件列表、配上文件图标——用户看到的正是那样。
+                + "  if [ -d \"$e\" ]; then printf '%s/\\n' \"$e\";"
+                + " else printf '%s\\n' \"$e\"; fi\n"
                 + "done\n"
                 + "exit 0\n";
     }

@@ -170,6 +170,11 @@ public final class LinuxDirListTest {
         String f = LinuxDirList.filesScript("/home/you", "a/b");
         check("过滤值里的斜杠被转义", !f.contains("*a/b*"), f);
 
+        // 目录必须带 "/" 后缀，否则调用方分不出哪是目录：目录会被当成文件塞进文件
+        // 列表、配上文件图标。这正是用户看到"文件夹和文件一样"的原因。
+        check("目录带 / 后缀，文件不带",
+                s.contains("printf '%s/") && s.contains("-d \"$e\""), s);
+
         // 目录与文件要分开：目录是走进去用的，文件是选来用的。
         LinuxDirList.Listing got = LinuxDirList.parseFiles(
                 Arrays.asList("/home/you", "sub/", "data.fa", "ref.gtf"),

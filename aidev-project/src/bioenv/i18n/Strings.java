@@ -202,6 +202,9 @@ public final class Strings {
     public static final String FILE_COUNT = "file.count";
     public static final String FILE_SELECTED = "file.selected";
     public static final String FILE_SAVE_HINT = "file.saveHint";
+    /** 两栏的标题：左栏是能进去的目录，右栏是能选的文件。 */
+    public static final String FILE_COL_DIRS = "file.colDirs";
+    public static final String FILE_COL_FILES = "file.colFiles";
 
     /**
      * 风格切换器上的三套风格名，以及它的工具提示。
@@ -1109,7 +1112,7 @@ public final class Strings {
         put(ZH_TEXT, EN_TEXT, PICK_CHOOSER_TITLE, "选择哪一侧的文件", "Where is the file?");
         put(ZH_TEXT, EN_TEXT, FILE_TITLE, "选择 Linux 上的文件", "Choose a file on Linux");
         put(ZH_TEXT, EN_TEXT, FILE_NAME_LABEL, "文件名：", "File name:");
-        put(ZH_TEXT, EN_TEXT, FILE_FILTER, "筛选：", "Filter:");
+        put(ZH_TEXT, EN_TEXT, FILE_FILTER, "只显示名字含：", "Names containing:");
         put(ZH_TEXT, EN_TEXT, FILE_FILTER_TIP,
                 "按名字包含的文字过滤。目录不受影响，仍然可以进去。",
                 "Show only names containing this text. Directories are unaffected.");
@@ -1117,6 +1120,10 @@ public final class Strings {
                 "(no files in this directory)");
         put(ZH_TEXT, EN_TEXT, FILE_COUNT, "{0} 个文件", "{0} files");
         put(ZH_TEXT, EN_TEXT, FILE_SELECTED, "已选 {0} 个", "{0} selected");
+        put(ZH_TEXT, EN_TEXT, FILE_COL_DIRS, "文件夹（点进去）",
+                "Folders (click to enter)");
+        put(ZH_TEXT, EN_TEXT, FILE_COL_FILES, "文件（选中带走）",
+                "Files (select to use)");
         put(ZH_TEXT, EN_TEXT, FILE_SAVE_HINT,
                 "在左边选一个目录，再在下面填文件名。",
                 "Pick a directory on the left, then type a file name below.");

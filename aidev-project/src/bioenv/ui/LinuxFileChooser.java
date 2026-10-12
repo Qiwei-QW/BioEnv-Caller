@@ -233,18 +233,27 @@ public final class LinuxFileChooser {
         dirList.setCellRenderer(new MarkRenderer(true));
         fileList.setCellRenderer(new MarkRenderer(false));
 
+        // 两栏各自说清是什么。
+        //
+        // 原来左栏顶着一个"筛选"标签——那是我写错了：左栏是目录列表，跟筛选毫无关系，
+        // 而真正的筛选输入框在右栏。同一个词出现两次、又都不在图里该在的位置，看的人
+        // 只能猜。现在左栏是"文件夹（点进去）"，右栏是"文件（选中带走）"，筛选那行
+        // 写在右栏标题下面、并标出它是干什么的。
         JPanel dirs = new JPanel(new BorderLayout(0, 2));
-        dirs.add(new JLabel(I18n.t(Strings.FILE_FILTER).replace("：", "")), BorderLayout.NORTH);
+        dirs.add(new JLabel(I18n.t(Strings.FILE_COL_DIRS)), BorderLayout.NORTH);
         JScrollPane dp = new JScrollPane(dirList);
         dp.setPreferredSize(new Dimension(200, 250));
         dirs.add(dp, BorderLayout.CENTER);
 
         JPanel files = new JPanel(new BorderLayout(0, 2));
+        JPanel head = new JPanel(new BorderLayout(4, 2));
+        head.add(new JLabel(I18n.t(Strings.FILE_COL_FILES)), BorderLayout.NORTH);
         JPanel filterRow = new JPanel(new BorderLayout(4, 0));
         filterRow.add(new JLabel(I18n.t(Strings.FILE_FILTER)), BorderLayout.WEST);
         filterRow.add(filter, BorderLayout.CENTER);
         filter.setToolTipText(I18n.t(Strings.FILE_FILTER_TIP));
-        files.add(filterRow, BorderLayout.NORTH);
+        head.add(filterRow, BorderLayout.CENTER);
+        files.add(head, BorderLayout.NORTH);
         files.add(new JScrollPane(fileList), BorderLayout.CENTER);
 
         midPanel = new JPanel(new BorderLayout(6, 0));

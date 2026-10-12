@@ -2494,7 +2494,13 @@ public final class SchemaFormPanel extends JPanel {
         if (wd.isEmpty() || !wd.startsWith("/")) {
             return null;
         }
-        return wd.endsWith("/") ? wd + "inputs" : wd + "/inputs";
+        // 直接放进工作目录本身，不再多加一层 inputs。
+        //
+        // 原来加那一层是为了"一次运行读的和产出的都放在一起，拷回来一次就够"。但用户
+        // 挑工作目录时心里想的就是"东西放这儿"，再自己长出一层子目录，等于把他设的
+        // 路径悄悄改了样——他会看着 /home/qw/shili/inputs/pep 问"这个 inputs 哪来的"。
+        // 工作目录就是落脚点，原样用它。
+        return wd.endsWith("/") ? wd.substring(0, wd.length() - 1) : wd;
     }
     /**
      * Makes a working directory on the Linux side and puts its path in the field.
