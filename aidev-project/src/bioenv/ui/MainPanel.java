@@ -3247,6 +3247,10 @@ public final class MainPanel extends JPanel {
         final String target = ssh
                 ? (sshFiles == null ? null : sshFiles.userHost())
                 : pendingDistro;
+        // 端口与密钥也要传下去，否则终端连的是"另一台"：非 22 端口连不上，
+        // 不带 -i 就不用配置里那把密钥。
+        final int port = (ssh && sshTarget != null) ? sshTarget.port : 0;
+        final String keyPath = (ssh && sshTarget != null) ? sshTarget.keyPath : null;
         final String log = bioenv.core.TerminalLaunch.transcriptPath(
                 workdir == null ? "" : workdir);
         final String scriptFile =
@@ -3263,8 +3267,9 @@ public final class MainPanel extends JPanel {
             appendLog(I18n.t(Strings.LOG_TERMINAL_NO_TRANSCRIPT));
             return;
         }
-        final java.util.List<String> inner =
-                bioenv.core.TerminalLaunch.channelArgv(ssh, target, scriptFile);
+        final java.util.List<String> inner = ssh
+                ? bioenv.core.TerminalLaunch.sshArgv(target, port, keyPath, scriptFile)
+                : bioenv.core.TerminalLaunch.wslArgv(target, scriptFile);
         new javax.swing.SwingWorker<Boolean, Void>() {
             @Override
             protected Boolean doInBackground() {

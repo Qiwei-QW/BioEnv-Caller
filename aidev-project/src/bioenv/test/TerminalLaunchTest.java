@@ -80,47 +80,83 @@ public final class TerminalLaunchTest {
     }
 
     private static void channels() {
-        // WSL：走 wsl.exe，读 profile（-l），再执行脚本。
-        List<String> wsl = TerminalLaunch.channelArgv(false, "Ubuntu", "evolver");
+        // WSL：走 wsl.exe，读 profile（-l），再执行脚本文本。
+        List<String> wsl = TerminalLaunch.wslArgv("Ubuntu", "/home/qw/shili/tbvterm.sh");
         check("WSL 用 wsl.exe", wsl.get(0).equals("wsl.exe"), wsl.toString());
         check("WSL 指定发行版", wsl.contains("Ubuntu"), wsl.toString());
-        check("WSL 用 -d 传发行版",
-                wsl.indexOf("-d") >= 0 && wsl.get(wsl.indexOf("-d") + 1).equals("Ubuntu"),
-                wsl.toString());
-        // 现在传的是"脚本文件的路径"，末尾两个元素是 bash + 路径。
         check("WSL 末尾用 bash 跑脚本文件",
                 wsl.get(wsl.size() - 2).equals("bash")
-                        && wsl.get(wsl.size() - 1).equals("evolver"),
+                        && wsl.get(wsl.size() - 1).equals("/home/qw/shili/tbvterm.sh"),
                 wsl.toString());
-        // 关键：argv 里<b>不能有</b>任何含空格或引号的元素。wt.exe 会重新解析命令行，
-        // 带空格的那一段会被拆散 —— 实测过，窗口开出来了却在跑脚本的尾巴。
-        for (int i = 0; i < wsl.size(); i++) {
-            String a = wsl.get(i);
-            check("WSL 第 " + i + " 个参数不含空格/引号", 
-                    a.indexOf(' ') < 0 && a.indexOf('"') < 0, a);
-        }
+        check("空发行版就不传 -d",
+                !TerminalLaunch.wslArgv("", "x.sh").contains("-d"));
+        noSpaces("WSL", wsl);
 
-        // 发行版为空时不该出现一个空的 -d 值。
-        List<String> noDistro = TerminalLaunch.channelArgv(false, "", "ls");
-        check("空发行版就不传 -d", !noDistro.contains("-d"), noDistro.toString());
-
-        // SSH：-t 分配 PTY，这是交互能不能用的关键。
-        List<String> ssh = TerminalLaunch.channelArgv(true, "qw@10.0.0.5", "evolver");
+        // SSH：这里几条是用户实测报回来的，一条都不能少。
+        List<String> ssh = TerminalLaunch.sshArgv("qw@10.0.0.5", 0, null, "/x/tbvterm.sh");
         check("SSH 用 ssh.exe", ssh.get(0).equals("ssh.exe"), ssh.toString());
         check("SSH 带 -t 分配 PTY", ssh.contains("-t"), ssh.toString());
+        // 关键：插件自己的连接一律带 accept-new（见 SshCommand），终端必须一样。
+        // 少了它 ssh 用默认的 ask，用户就会看到"确认主机指纹"的提问，而插件那边不会 ——
+        // 同一台机器两种行为。实测截图里停在的正是那句 Are you sure you want to continue。
+        check("SSH 带 StrictHostKeyChecking=accept-new",
+                ssh.contains("StrictHostKeyChecking=accept-new"), ssh.toString());
+        check("SSH 的 -o 和它的值是分开的两个元素",
+                ssh.indexOf("-o") >= 0
+                        && ssh.get(ssh.indexOf("-o") + 1)
+                                .equals("StrictHostKeyChecking=accept-new"),
+                ssh.toString());
         check("SSH 带目标主机", ssh.contains("qw@10.0.0.5"), ssh.toString());
         check("SSH 末尾用 bash 跑脚本文件",
                 ssh.get(ssh.size() - 2).equals("bash")
-                        && ssh.get(ssh.size() - 1).equals("evolver"),
+                        && ssh.get(ssh.size() - 1).equals("/x/tbvterm.sh"),
                 ssh.toString());
-        for (int i = 0; i < ssh.size(); i++) {
-            String a = ssh.get(i);
-            check("SSH 第 " + i + " 个参数不含空格/引号",
-                    a.indexOf(' ') < 0 && a.indexOf('"') < 0, a);
-        }
-        // BatchMode=yes 会禁止一切提问——那正是交互做不到的原因，这里刻意不带。
         check("刻意不带 BatchMode（用户能在终端里输密码）",
                 !ssh.toString().contains("BatchMode"), ssh.toString());
+        noSpaces("SSH", ssh);
+
+        // 非 22 端口：不带的话终端会连到 22，连的是"另一台"。
+        List<String> withPort =
+                TerminalLaunch.sshArgv("qw@h", 2222, null, "/x.sh");
+        check("非 22 端口带上 -p",
+                withPort.indexOf("-p") >= 0
+                        && withPort.get(withPort.indexOf("-p") + 1).equals("2222"),
+                withPort.toString());
+        check("22 端口不必写出来",
+                !TerminalLaunch.sshArgv("qw@h", 22, null, "/x.sh").contains("-p"));
+        noSpaces("带端口", withPort);
+
+        // 密钥：不带 -i 就不会用配置里那把钥匙。
+        List<String> withKey = TerminalLaunch.sshArgv("qw@h", 0,
+                "C:\\Users\\q\\.ssh\\id_ed25519", "/x.sh");
+        check("带 -i 指定密钥",
+                withKey.indexOf("-i") >= 0
+                        && withKey.get(withKey.indexOf("-i") + 1)
+                                .endsWith("id_ed25519"),
+                withKey.toString());
+        noSpaces("带密钥", withKey);
+
+        // 密钥路径含空格时宁可不带，也不能破坏"没有元素含空格"这条不变式。
+        List<String> spacedKey = TerminalLaunch.sshArgv("qw@h", 0,
+                "C:\\Program Files\\k\\id", "/x.sh");
+        check("密钥路径含空格就不带 -i（不变式优先）",
+                !spacedKey.contains("-i"), spacedKey.toString());
+        noSpaces("密钥含空格", spacedKey);
+    }
+
+    /**
+     * argv 里不许出现含空格或双引号的元素。
+     *
+     * <p>这是实测逼出来的不变式：{@code wt.exe} 会重新解析命令行，带空格的那一段会被
+     * 拆散 —— 现象是窗口开出来了，跑的却是脚本的尾巴。钉住这条性质，比钉某个具体拼法
+     * 更能防住以后改坏。
+     */
+    private static void noSpaces(String what, List<String> argv) {
+        for (int i = 0; i < argv.size(); i++) {
+            String a = argv.get(i);
+            check(what + " 第 " + i + " 个参数不含空格/引号",
+                    a.indexOf(' ') < 0 && a.indexOf('"') < 0, a);
+        }
     }
 
     /** 脚本走文件：路径怎么算、内容怎么写进去。 */
@@ -150,7 +186,7 @@ public final class TerminalLaunchTest {
     }
 
     private static void layers() {
-        List<String> inner = TerminalLaunch.channelArgv(false, "Ubuntu", "evolver");
+        List<String> inner = TerminalLaunch.wslArgv("Ubuntu", "/x/tbvterm.sh");
 
         List<String> wt = TerminalLaunch.launchArgv(Layer.TERMINAL, inner);
         check("第一层用 wt.exe", wt.get(0).equals("wt.exe"), wt.toString());

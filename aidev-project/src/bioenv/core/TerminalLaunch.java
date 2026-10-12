@@ -127,45 +127,78 @@ public final class TerminalLaunch {
      * @param targetOrDistro SSH 时是 {@code user@host}；WSL 时是发行版名（可为空）
      * @param script         要在远端跑的那段脚本
      */
-    public static List<String> channelArgv(boolean ssh, String targetOrDistro,
-                                           String scriptPath) {
-        // 只传"脚本文件的路径"，不传脚本本身。
-        //
-        // 这是被真实报错逼出来的：原来把整段多行脚本塞进一个 argv 元素，而
-        // <b>wt.exe 会重新解析命令行</b>，那一段活不下来 —— 实测的现象是窗口开出来了，
-        // 但只有脚本的尾巴被当成要启动的程序：
-        //
-        //   [出现错误 2147942402 (0x80070002) (启动" touch 'tbvterm.log.done' 2>/dev/null 时)]
-        //
-        // 换成路径之后，argv 里<b>没有任何元素含空格或引号</b>（脚本写在无空格的目录下），
-        // wt 再怎么解析也拆不坏。脚本内容改用 base64 写进文件，见
-        // {@link #writeScriptCommand}。
+    /**
+     * WSL：在某个发行版里跑脚本文件。
+     *
+     * <p>{@code --} 之后是给 Linux 的命令，argv 里每个元素都不含空格或引号 ——
+     * 这一条是硬要求，见 {@link #sshArgv} 上面那段说明。
+     */
+    public static List<String> wslArgv(String distro, String scriptPath) {
         List<String> argv = new ArrayList<String>();
-        String path = scriptPath == null ? "" : scriptPath.trim();
-        if (ssh) {
-            argv.add("ssh.exe");
-            // -t 分配 PTY：交互式程序要它；不加的话远端工具会以为没有终端，
-            // 行为会变（关掉行编辑、改缓冲），正是要避免的那种。
-            //
-            // 刻意<b>不</b>传 -o BatchMode=yes。那个选项是为了防止无人值守时被密码
-            // 提示挂住；而这里用户就坐在终端前，能直接输密码 —— 挂住不再是风险，
-            // 反而是"能用密码登录"这个能力。
-            argv.add("-t");
-            if (targetOrDistro != null && !targetOrDistro.trim().isEmpty()) {
-                argv.add(targetOrDistro.trim());
-            }
-            argv.add("bash");
-            argv.add(path);
-            return argv;
-        }
         argv.add("wsl.exe");
-        if (targetOrDistro != null && !targetOrDistro.trim().isEmpty()) {
+        if (distro != null && !distro.trim().isEmpty()) {
             argv.add("-d");
-            argv.add(targetOrDistro.trim());
+            argv.add(distro.trim());
         }
         argv.add("--");
         argv.add("bash");
-        argv.add(path);
+        argv.add(scriptPath == null ? "" : scriptPath.trim());
+        return argv;
+    }
+
+    /**
+     * SSH：在远端跑脚本文件。
+     *
+     * <h2>必须和插件自己的连接用同一套选项</h2>
+     *
+     * <p>用户实测报回来的：终端里连着 {@code 127.0.0.1}，屏幕上停在
+     * {@code Are you sure you want to continue connecting (yes/no/[fingerprint])?} ——
+     * 而插件自己连同一台机器时从来不问。同一台机器、两种行为，用户只会觉得这是个 bug。
+     *
+     * <p>差别就在这里：插件自己的连接一律带 {@code StrictHostKeyChecking=accept-new}
+     * （见 {@code SshCommand}，注释写明了为什么这也是安全与可用的折中：首次自动写入
+     * known_hosts，之后仍严格校验）。这里原来什么都没带，于是 ssh 用了默认的 {@code ask}。
+     *
+     * <p>端口和密钥同理：{@code userHost()} 只给 {@code user@host}，非 22 端口会连错，
+     * 不带 {@code -i} 则不会用配置里那把密钥 —— 终端必须复现插件的连接，否则它跑的是
+     * 另一件事。
+     *
+     * <p><b>刻意不带 {@code BatchMode=yes}</b>：那个选项是为了防止无人值守时被密码提示
+     * 挂住，而这里用户就坐在终端前，能直接输密码 —— 挂住不再是风险，反而是能力。
+     *
+     * @param userHost   {@code user@host}
+     * @param port       端口；&lt;= 0 时按 ssh 默认（22）
+     * @param keyPath    私钥路径；为空则交给 ssh 自己找
+     * @param scriptPath 远端脚本文件
+     */
+    public static List<String> sshArgv(String userHost, int port, String keyPath,
+                                       String scriptPath) {
+        List<String> argv = new ArrayList<String>();
+        argv.add("ssh.exe");
+        // -t 分配 PTY：交互式程序要它；不加的话远端工具会以为没有终端，行为会变
+        // （关掉行编辑、改缓冲），正是要避免的那种。
+        argv.add("-t");
+        argv.add("-o");
+        argv.add("StrictHostKeyChecking=accept-new");
+        if (port > 0 && port != 22) {
+            argv.add("-p");
+            argv.add(String.valueOf(port));
+        }
+        // 密钥路径里若有空格就不带它。
+        //
+        // argv 里不许出现含空格的元素，否则 wt.exe 重新解析命令行时会把它拆散（实测过，
+        // 现象是窗口开出来了却在跑脚本的尾巴）。宁可退回让 ssh 自己找密钥，也不要为了
+        // 带上它而破坏这条不变式 —— 路径里有空格的情形极少，而且退回去仍然连得上。
+        String key = keyPath == null ? "" : keyPath.trim();
+        if (!key.isEmpty() && key.indexOf(' ') < 0 && key.indexOf('"') < 0) {
+            argv.add("-i");
+            argv.add(key);
+        }
+        if (userHost != null && !userHost.trim().isEmpty()) {
+            argv.add(userHost.trim());
+        }
+        argv.add("bash");
+        argv.add(scriptPath == null ? "" : scriptPath.trim());
         return argv;
     }
 
