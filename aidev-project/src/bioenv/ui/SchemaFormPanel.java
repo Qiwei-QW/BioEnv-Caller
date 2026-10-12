@@ -1650,7 +1650,14 @@ public final class SchemaFormPanel extends JPanel {
         p.add(new JLabel(I18n.t(Strings.FORM_RAW_ARGS)), BorderLayout.NORTH);
         configureRawArgs();
         p.add(new JScrollPane(rawArgsArea), BorderLayout.CENTER);
-        p.add(buildWorkdirRow(), BorderLayout.SOUTH);
+        // 这里<b>不</b>再放一条工作目录行。
+        //
+        // 它已经在 {@link #buildHead()} 里了，而页头对每个工具都显示——解析得出的和
+        // 解析不出的都有。这里再加一条，解析不出的工具就会同时出现两条（用户报的正是
+        // 这个），而且更糟：buildWorkdirRow() 会覆盖共用的 workdirField，于是页头那条
+        // 是死的——在里面打字，面板读的却是下面那条，输入的路径不会生效，还不报错。
+        //
+        // 工作目录属于页头，全局一条。
         return p;
     }
 
