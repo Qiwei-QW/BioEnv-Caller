@@ -3363,15 +3363,29 @@ public final class MainPanel extends JPanel {
                     in = new java.io.BufferedReader(new java.io.InputStreamReader(
                             proc.getInputStream(),
                             java.nio.charset.StandardCharsets.UTF_8));
-                    String line;
-                    while ((line = in.readLine()) != null) {
-                        final String text = line;
-                        FileDialogs.onEdt(new Runnable() {
-                            @Override
-                            public void run() {
-                                appendLog(text);
-                            }
-                        });
+                    // 按<b>字符块</b>读，不要按行读。
+                    //
+                    // 用户实测报回来的：evolver 的最后一句提示
+                    // 「tell me the full path-name of the file?」在插件里始终不出现。
+                    //
+                    // 原因是 readLine() 要等到换行或 EOF 才返回，而<b>提示末尾没有换行</b>
+                    // —— 程序打完它就停下来等输入了。于是那句话一直卡在读取器的缓冲区里，
+                    // 界面上永远看不到，用的人只会以为"输出不完整"。
+                    //
+                    // 这正是缓冲问题，只不过不在远端程序那一层，而在我们自己这一层。
+                    // 按块读、读到什么就立刻放出去，提示才跟得上。
+                    char[] buf = new char[1024];
+                    int n;
+                    while ((n = in.read(buf)) >= 0) {
+                        // 去掉回车字符：PTY 常常给的是 CR LF 两个，
+                        // 而单独一个 CR 会在文本区里留下看不见的字符。
+                        // 行内覆盖（进度条）因此会退化成追加，可以接受。
+                        String chunk = new String(buf, 0, n)
+                                .replace("\r", "");
+                        if (!chunk.isEmpty()) {
+                            // appendLogRaw 自己会切到事件线程，不额外加换行。
+                            appendLogRaw(chunk);
+                        }
                     }
                 } catch (Exception ignored) {
                     // 进程被杀时读会中断，这不是错误。
