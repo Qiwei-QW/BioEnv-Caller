@@ -207,6 +207,21 @@ public final class Strings {
     public static final String FILE_COL_FILES = "file.colFiles";
     /** 「文件类型」下拉里的"全部"。 */
     public static final String FILE_TYPE_ALL = "file.typeAll";
+    /** 「在终端中运行」按钮与它的日志。 */
+    public static final String MENU_RUN_IN_TERMINAL = "menu.runInTerminal";
+    public static final String LOG_TERMINAL_STARTED = "log.terminalStarted";
+    public static final String LOG_TERMINAL_COPIED = "log.terminalCopied";
+    public static final String LOG_TERMINAL_TRANSCRIPT = "log.terminalTranscript";
+    public static final String LOG_TERMINAL_NO_TRANSCRIPT = "log.terminalNoTranscript";
+    /** 面板内交互运行。 */
+    public static final String MENU_RUN_INTERACTIVE = "menu.runInteractive";
+    public static final String INTERACTIVE_PROMPT = "interactive.prompt";
+    public static final String INTERACTIVE_TIP = "interactive.tip";
+    public static final String LOG_INTERACTIVE_STARTED = "log.interactiveStarted";
+    public static final String LOG_INTERACTIVE_ENDED = "log.interactiveEnded";
+    public static final String LOG_INTERACTIVE_FAILED = "log.interactiveFailed";
+    /** 运行时实际用的工作目录：出问题时一眼能看出它有没有 cd 对地方。 */
+    public static final String LOG_RUN_WORKDIR = "log.runWorkdir";
 
     /**
      * 风格切换器上的三套风格名，以及它的工具提示。
@@ -772,6 +787,14 @@ public final class Strings {
 
     /** 表单：原始参数标签。 */
     public static final String FORM_RAW_ARGS = "form.rawArgs";
+    /**
+     * 帮助里一个参数都没列时，替代"原始参数"输入框的那段话。
+     *
+     * <p>这类工具（PAML 的 evolver / baseml / codeml）本来就不吃命令行选项：它们的参数
+     * 在<b>控制文件</b>里，或者靠<b>逐条提问</b>。再摆一个空的"原始参数"框，只会让人以为
+     * 自己漏填了什么 —— 所以藏掉它，换成"接下来该干什么"。
+     */
+    public static final String FORM_NO_PARAMS_HINT = "form.noParamsHint";
 
     /** 表单：返回到顶层。 */
     public static final String FORM_BACK_TO_TOP = "form.backToTop";
@@ -1123,6 +1146,35 @@ public final class Strings {
         put(ZH_TEXT, EN_TEXT, FILE_COUNT, "{0} 个文件", "{0} files");
         put(ZH_TEXT, EN_TEXT, FILE_SELECTED, "已选 {0} 个", "{0} selected");
         put(ZH_TEXT, EN_TEXT, FILE_TYPE_ALL, "所有文件", "All files");
+        put(ZH_TEXT, EN_TEXT, MENU_RUN_IN_TERMINAL, "在终端中运行",
+                "Run in a terminal");
+        put(ZH_TEXT, EN_TEXT, LOG_TERMINAL_STARTED,
+                "已在终端中运行。交互在这个终端里进行。",
+                "Running in a terminal. Interact with it there.");
+        put(ZH_TEXT, EN_TEXT, LOG_TERMINAL_COPIED,
+                "开不了终端窗口，命令已复制到剪贴板 —— 粘到你自己的终端里即可。",
+                "Could not open a terminal window; the command is on the "
+                        + "clipboard - paste it into your own terminal.");
+        put(ZH_TEXT, EN_TEXT, LOG_TERMINAL_TRANSCRIPT, "会话记录（{0}）：",
+                "Session transcript ({0}):");
+        put(ZH_TEXT, EN_TEXT, MENU_RUN_INTERACTIVE, "交互运行", "Run interactively");
+        put(ZH_TEXT, EN_TEXT, INTERACTIVE_PROMPT, "输入：", "Input:");
+        put(ZH_TEXT, EN_TEXT, INTERACTIVE_TIP,
+                "工具提问时在这里打字，按回车发送。",
+                "Type here when the tool asks something, and press Enter to send.");
+        put(ZH_TEXT, EN_TEXT, LOG_INTERACTIVE_STARTED,
+                "已开始交互运行。工具提问时在下面的输入行里回答。",
+                "Interactive run started. Answer below when the tool asks.");
+        put(ZH_TEXT, EN_TEXT, LOG_INTERACTIVE_ENDED, "交互运行已结束。",
+                "Interactive run finished.");
+        put(ZH_TEXT, EN_TEXT, LOG_RUN_WORKDIR, "工作目录：{0}",
+                "Working directory: {0}");
+        put(ZH_TEXT, EN_TEXT, LOG_INTERACTIVE_FAILED, "交互运行失败：{0}",
+                "Interactive run failed: {0}");
+        put(ZH_TEXT, EN_TEXT, LOG_TERMINAL_NO_TRANSCRIPT,
+                "没有取回会话记录（终端可能还没关，或远端没有 script 命令）。",
+                "No transcript came back (the terminal may still be open, or the "
+                        + "remote side has no script command).");
         put(ZH_TEXT, EN_TEXT, FILE_COL_DIRS, "文件夹（点进去）",
                 "Folders (click to enter)");
         put(ZH_TEXT, EN_TEXT, FILE_COL_FILES, "文件（选中带走）",
@@ -1635,6 +1687,20 @@ public final class Strings {
         put(ZH_TEXT, EN_TEXT, FORM_COMMAND_LABEL,
                 "命令（可以修改后再运行）", "Command (you can edit this, then run it)");
         put(ZH_TEXT, EN_TEXT, FORM_COMMAND_PREVIEW, "命令预览", "Command preview");
+        put(ZH_TEXT, EN_TEXT, FORM_NO_PARAMS_HINT,
+                "这个工具的帮助里没有命令行选项，它多半靠<b>交互回答</b>或<b>控制文件</b>工作。"
+                        + "<br>交互式的：点「<b>交互运行</b>」，按它的提问回答。"
+                        + "<br>靠控制文件的（如 PAML 的 <b>MCbase.dat</b>、<b>codeml.ctl</b>）："
+                        + "把文件放进工作目录，再运行。"
+                        + "<br>也可以直接在下面的<b>命令预览</b>里手写完整命令。",
+                "This tool's help lists no command-line options; it most likely works by "
+                        + "<b>answering prompts</b> or through a <b>control file</b>."
+                        + "<br>Interactive: press <b>Run interactively</b> and answer what "
+                        + "it asks."
+                        + "<br>Control file (PAML's <b>MCbase.dat</b>, <b>codeml.ctl</b>): put "
+                        + "the file in the working directory, then run."
+                        + "<br>You can also type the whole command in the <b>command "
+                        + "preview</b> below.");
         put(ZH_TEXT, EN_TEXT, FORM_RAW_ARGS, "原始参数", "Raw arguments");
         put(ZH_TEXT, EN_TEXT, FORM_BACK_TO_TOP, "返回顶层", "Back to top level");
         put(ZH_TEXT, EN_TEXT, FORM_BACK_TO_TOP_TIP, "回到 {0} 的参数。",

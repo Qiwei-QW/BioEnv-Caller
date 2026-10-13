@@ -172,6 +172,7 @@ try {
         'bioenv.test.ConnectionEntryPointsTest',
         'bioenv.test.LanguageSwitchTest',
         'bioenv.test.LinuxDirListTest',
+        'bioenv.test.TerminalLaunchTest',
         'bioenv.test.MultiChannelCacheTest',
         'bioenv.test.ProbeRouteTest',
         'bioenv.test.IncrementalScanTest',

@@ -187,7 +187,34 @@ public final class MainPanel extends JPanel {
     private final JTextArea logArea = new JTextArea(12, 40);
     private final JButton runButton = new JButton(I18n.t(Strings.MENU_RUN));
     private final JButton stopButton = new JButton(I18n.t(Strings.MENU_STOP));
+    /**
+     * 「在终端中运行」：把命令交给一个<b>真终端</b>，而不是在输出面板里跑。
+     *
+     * <p>交互式工具（PAML 的 evolver 那种打印菜单等人输数字的）在面板里跑不了：整条
+     * 运行路径都是非交互的（SSH 下还以 BatchMode=yes 禁掉一切提问），工具停在提示上
+     * 等输入，没人应答就放弃。要真正驱动它得分配 PTY、送键盘、解释 ANSI —— 那是一整套
+     * 终端仿真。而用户机器上本来就有终端，所以这里不模拟，只把命令交给它。
+     */
+    private final JButton terminalButton = new JButton(I18n.t(Strings.MENU_RUN_IN_TERMINAL));
     private final JButton clearLogButton = new JButton(I18n.t(Strings.MENU_CLEAR_LOG));
+    /**
+     * 「交互运行」：在输出区就地交互，不另开终端窗口。
+     *
+     * <p>与 {@link #terminalButton} 的分工：行式工具（PAML 的 evolver 那种"打印菜单等
+     * 你输数字"）走这个，就不用来回切窗口；全屏工具（top / vim）只有真终端能跑，走那个。
+     */
+    private final JButton interactiveButton = new JButton(I18n.t(Strings.MENU_RUN_INTERACTIVE));
+    /** 交互运行时的输入行；单行，回车即发。 */
+    private final JTextField interactiveInput = new JTextField();
+    /** 输入行所在的那一条；没有交互在跑时整条藏起来，免得白占地方。 */
+    private JPanel interactiveRow;
+    /**
+     * 正在跑的交互进程；null 表示没有。
+     *
+     * <p>它一直活着，随时能往它的 stdin 写 —— 这正是与 {@code startRun()} 的区别：
+     * 那个是"跑一段、收输出"，这个要能来回。
+     */
+    private volatile Process interactiveProcess;
     /** "输出"标题：和清空按钮同处一行。 */
     private JLabel logTitle;
     /** 命令预览下面那句说明（「可以直接在这里输入…」）。 */
@@ -2022,6 +2049,18 @@ public final class MainPanel extends JPanel {
         logPanel.setBorder(BorderFactory.createEmptyBorder(2, 2, 2, 2));
         logPanel.add(logHead, BorderLayout.NORTH);
         logPanel.add(new JScrollPane(logArea), BorderLayout.CENTER);
+        // 输入行贴在输出下面。放在输出这一列里（而不是底部按钮条）是因为它服务的就是
+        // 上面那段输出：提示在上面，回答在下面，视线不用移动。
+        interactiveRow = new JPanel(new BorderLayout(6, 0));
+        interactiveRow.setOpaque(false);
+        interactiveRow.add(new JLabel(I18n.t(Strings.INTERACTIVE_PROMPT)),
+                BorderLayout.WEST);
+        interactiveRow.add(interactiveInput, BorderLayout.CENTER);
+        interactiveInput.setToolTipText(I18n.t(Strings.INTERACTIVE_TIP));
+        interactiveInput.setName("bioenv.interactiveInput");
+        interactiveInput.setEnabled(false);
+        interactiveRow.setVisible(false);
+        logPanel.add(interactiveRow, BorderLayout.SOUTH);
         logPanel.setMinimumSize(new Dimension(160, 80));
         // A preferred width makes the split pane give the column this much on its
         // own, which is what survives later layout passes: a divider location set
@@ -2093,6 +2132,8 @@ public final class MainPanel extends JPanel {
         stopButton.setEnabled(false);
         UiTheme.primary(runButton);
         actions.add(runButton);
+        actions.add(interactiveButton);
+        actions.add(terminalButton);
         actions.add(stopButton);
         mainArea.add(actions, BorderLayout.SOUTH);
 
@@ -2303,6 +2344,27 @@ public final class MainPanel extends JPanel {
             @Override
             public void actionPerformed(ActionEvent e) {
                 startRun();
+            }
+        });
+
+        terminalButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                runInTerminal();
+            }
+        });
+
+        interactiveButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                startInteractive();
+            }
+        });
+        // 回车即发。单行输入配回车是终端的手感，用户不用去够按钮。
+        interactiveInput.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                sendInteractiveLine();
             }
         });
 
@@ -3197,6 +3259,372 @@ public final class MainPanel extends JPanel {
     private void updateRunEnabled() {
         runButton.setEnabled(selected != null && runner != null);
         toolAssistantButton.setEnabled(selected != null);
+    }
+
+    /**
+     * 在输出区就地交互：起一个<b>长驻</b>进程，把它的输出喂进输出面板，并让用户
+     * 在下面的输入行里回答工具的提问。
+     *
+     * <h2>与「在终端中运行」的区别</h2>
+     *
+     * <p>那个把命令交给一个终端窗口 —— 交互在那边发生，全屏程序也能跑，代价是要来回切
+     * 窗口。这个把交互留在面板里：输出、提问、回答都在同一处，行式工具用起来顺手得多。
+     * 两者不是替代关系，全屏工具（top / vim）只有窗口那个能跑。
+     *
+     * <h2>为什么 WSL 侧要多一层 script</h2>
+     *
+     * <p>面板里的进程是插件起的，stdin/stdout 都是管道；而 stdout 不是终端时很多程序会
+     * 切块缓冲 —— 提示憋在缓冲区里，界面上看不见，输入行也就无从下手。见
+     * {@link bioenv.core.TerminalLaunch#wslInteractiveArgv}。
+     */
+    private void startInteractive() {
+        if (selected == null || interactiveProcess != null) {
+            return;
+        }
+        final String typed = expandPreviewText(commandArea.getText());
+        final String condaRoot = scanner == null ? null : scanner.getCondaRoot();
+        // 用原样值，别用会把 Windows 路径滤成 null 的那个。
+        //
+        // 用户报的"结果文件没在工作目录里落盘"就是这个：WSL 模式下工作目录填
+        // C:... 是合法的，而 terminalWorkdir() 会把非 "/" 开头的判成 null，于是
+        // wrapTyped 里那条 cd 整条不生成 —— 工具在默认目录（WSL 的 home）里跑，
+        // 结果文件落在那里，而不是用户选的地方。
+        final String workdir = formPanel.rawWorkdir();
+        // 脚本与记录放在远端真实路径下；wrapTyped 里 cd 去的也是这里，两者必须一致。
+        final String remoteWorkdir = (workdir == null) ? null
+                : bioenv.core.WslBridge.toWslPath(workdir);
+        final String script = bioenv.core.CommandBuilder.wrapTyped(selected, typed,
+                condaRoot, workdir);
+        if (script == null || script.trim().isEmpty()) {
+            return;
+        }
+        final boolean ssh = isSshMode();
+        final String target = ssh
+                ? (sshFiles == null ? null : sshFiles.userHost())
+                : pendingDistro;
+        final int port = (ssh && sshTarget != null) ? sshTarget.port : 0;
+        final String keyPath = (ssh && sshTarget != null) ? sshTarget.keyPath : null;
+        // 交互路径只需要那个脚本文件，而且它也放 /tmp。
+        //
+        // 记录和结束标记在这里都是多余的：输出由面板自己逐块收（不靠 script 记），
+        // 进程什么时候结束读线程自己就知道（不靠标记文件轮询）。少两个文件，
+        // 也少一层嵌套的 script —— 外层那个已经给了 PTY。
+        final String tempBase = bioenv.core.TerminalLaunch.tempBase();
+        final String scriptFile = bioenv.core.TerminalLaunch.scriptFilePath(tempBase);
+        // 把实际用的工作目录写进日志：出问题时一眼能看出它有没有 cd 对地方。
+        // 这一条是被"结果文件没落在工作目录里"逼出来的 —— 当时日志里没有任何
+        // 线索指向 cd，只能靠读代码猜。
+        appendLog(I18n.t(Strings.LOG_RUN_WORKDIR,
+                remoteWorkdir == null ? "-" : remoteWorkdir));
+        final String session = script;
+        final Transport chan = wsl;
+        if (chan == null) {
+            appendLog(I18n.t(Strings.LOG_TERMINAL_NO_TRANSCRIPT));
+            return;
+        }
+        new javax.swing.SwingWorker<Boolean, Void>() {
+            @Override
+            protected Boolean doInBackground() {
+                return chan.runBashCapture(
+                        bioenv.core.TerminalLaunch.writeScriptCommand(scriptFile, session)
+                ).ok();
+            }
+
+            @Override
+            protected void done() {
+                boolean written;
+                try {
+                    written = Boolean.TRUE.equals(get());
+                } catch (Exception ex) {
+                    written = false;
+                }
+                if (!written) {
+                    appendLog(I18n.t(Strings.LOG_INTERACTIVE_FAILED, scriptFile));
+                    return;
+                }
+                pumpInteractive(ssh
+                        ? bioenv.core.TerminalLaunch.sshInteractiveArgv(target, port,
+                                keyPath, scriptFile)
+                        : bioenv.core.TerminalLaunch.wslInteractiveArgv(target, scriptFile));
+            }
+        }.execute();
+    }
+
+    /** 起进程、把它的输出一路喂进面板，并在它退出时收尾。 */
+    private void pumpInteractive(final java.util.List<String> argv) {
+        final Process proc;
+        try {
+            ProcessBuilder pb = new ProcessBuilder(argv);
+            // 错误流并进输出流：工具的报错和它的提问混在一起才读得懂顺序，
+            // 分两路反而看不出"为什么它停下了"。
+            pb.redirectErrorStream(true);
+            proc = pb.start();
+        } catch (Exception ex) {
+            appendLog(I18n.t(Strings.LOG_INTERACTIVE_FAILED, String.valueOf(ex)));
+            return;
+        }
+        interactiveProcess = proc;
+        interactiveRow.setVisible(true);
+        interactiveInput.setEnabled(true);
+        interactiveInput.setText("");
+        interactiveInput.requestFocusInWindow();
+        appendLog("");
+        appendLog(I18n.t(Strings.LOG_INTERACTIVE_STARTED));
+
+        // 读在一个单独的线程上：进程一直活着，输出随时会来，不能占住事件线程。
+        Thread reader = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                java.io.BufferedReader in = null;
+                try {
+                    in = new java.io.BufferedReader(new java.io.InputStreamReader(
+                            proc.getInputStream(),
+                            java.nio.charset.StandardCharsets.UTF_8));
+                    // 按<b>字符块</b>读，不要按行读。
+                    //
+                    // 用户实测报回来的：evolver 的最后一句提示
+                    // 「tell me the full path-name of the file?」在插件里始终不出现。
+                    //
+                    // 原因是 readLine() 要等到换行或 EOF 才返回，而<b>提示末尾没有换行</b>
+                    // —— 程序打完它就停下来等输入了。于是那句话一直卡在读取器的缓冲区里，
+                    // 界面上永远看不到，用的人只会以为"输出不完整"。
+                    //
+                    // 这正是缓冲问题，只不过不在远端程序那一层，而在我们自己这一层。
+                    // 按块读、读到什么就立刻放出去，提示才跟得上。
+                    char[] buf = new char[1024];
+                    int n;
+                    while ((n = in.read(buf)) >= 0) {
+                        // 去掉回车字符：PTY 常常给的是 CR LF 两个，
+                        // 而单独一个 CR 会在文本区里留下看不见的字符。
+                        // 行内覆盖（进度条）因此会退化成追加，可以接受。
+                        String chunk = new String(buf, 0, n)
+                                .replace("\r", "");
+                        if (!chunk.isEmpty()) {
+                            // appendLogRaw 自己会切到事件线程，不额外加换行。
+                            appendLogRaw(chunk);
+                        }
+                    }
+                } catch (Exception ignored) {
+                    // 进程被杀时读会中断，这不是错误。
+                } finally {
+                    try {
+                        if (in != null) {
+                            in.close();
+                        }
+                    } catch (Exception ignored) {
+                        // 关不上也没别的办法。
+                    }
+                    try {
+                        proc.waitFor();
+                    } catch (InterruptedException ignored) {
+                        Thread.currentThread().interrupt();
+                    }
+                    FileDialogs.onEdt(new Runnable() {
+                        @Override
+                        public void run() {
+                            interactiveProcess = null;
+                            interactiveInput.setEnabled(false);
+                            interactiveInput.setText("");
+                            interactiveRow.setVisible(false);
+                            appendLog(I18n.t(Strings.LOG_INTERACTIVE_ENDED));
+                        }
+                    });
+                }
+            }
+        }, "bioenv-interactive");
+        reader.setDaemon(true);
+        reader.start();
+    }
+
+    /** 把输入行里的内容发给那个还活着的进程；回车触发。 */
+    private void sendInteractiveLine() {
+        Process p = interactiveProcess;
+        if (p == null) {
+            return;
+        }
+        String text = interactiveInput.getText();
+        interactiveInput.setText("");
+        try {
+            java.io.OutputStream os = p.getOutputStream();
+            os.write((text + "\n").getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            os.flush();
+        } catch (Exception ex) {
+            appendLog(I18n.t(Strings.LOG_INTERACTIVE_FAILED, String.valueOf(ex)));
+        }
+    }
+
+    /**
+     * 把当前命令交给一个真终端去跑，跑完把会话记录回填到输出面板。
+     *
+     * <h2>三层，从好到保底</h2>
+     *
+     * <p>{@code wt.exe} → {@code cmd /c start} → 把命令复制到剪贴板。第三层不是凑数：
+     * 前两层在某些机器上都不在，而"复制出去自己粘"永远能用。
+     *
+     * <h2>怎么知道会话结束了</h2>
+     *
+     * <p>终端窗口一起来，启动它的进程就返回了，插件<b>等不到</b>那场会话。所以会话
+     * 脚本最后会 {@code touch} 一个标记文件，插件轮询它——见
+     * {@link bioenv.core.TerminalLaunch#sessionScript}。
+     */
+    private void runInTerminal() {
+        if (selected == null) {
+            return;
+        }
+        final Tool tool = selected;
+        final String typed = expandPreviewText(commandArea.getText());
+        final String condaRoot = scanner == null ? null : scanner.getCondaRoot();
+        // 用原样值，别用会把 Windows 路径滤成 null 的那个。
+        //
+        // 用户报的"结果文件没在工作目录里落盘"就是这个：WSL 模式下工作目录填
+        // C:... 是合法的，而 terminalWorkdir() 会把非 "/" 开头的判成 null，于是
+        // wrapTyped 里那条 cd 整条不生成 —— 工具在默认目录（WSL 的 home）里跑，
+        // 结果文件落在那里，而不是用户选的地方。
+        final String workdir = formPanel.rawWorkdir();
+        // 脚本与记录放在远端真实路径下；wrapTyped 里 cd 去的也是这里，两者必须一致。
+        final String remoteWorkdir = (workdir == null) ? null
+                : bioenv.core.WslBridge.toWslPath(workdir);
+        final String script = bioenv.core.CommandBuilder.wrapTyped(tool, typed,
+                condaRoot, workdir);
+        if (script == null || script.trim().isEmpty()) {
+            return;
+        }
+        final boolean ssh = isSshMode();
+        final String target = ssh
+                ? (sshFiles == null ? null : sshFiles.userHost())
+                : pendingDistro;
+        // 端口与密钥也要传下去，否则终端连的是"另一台"：非 22 端口连不上，
+        // 不带 -i 就不用配置里那把密钥。
+        final int port = (ssh && sshTarget != null) ? sshTarget.port : 0;
+        final String keyPath = (ssh && sshTarget != null) ? sshTarget.keyPath : null;
+        // 脚本与记录都放 /tmp：插件的记账不该落在用户的数据目录里。
+        final String tempBase = bioenv.core.TerminalLaunch.tempBase();
+        final String log = bioenv.core.TerminalLaunch.transcriptPath(tempBase);
+        final String scriptFile = bioenv.core.TerminalLaunch.scriptFilePath(tempBase);
+        final String session = bioenv.core.TerminalLaunch.sessionScript(script, log);
+
+        // 先把脚本写进远端文件，再启动终端。
+        //
+        // 启动行里因此只剩一个"脚本文件的路径"，没有任何元素含空格或引号 ——
+        // 实测过：把整段脚本塞进 argv，wt.exe 重新解析命令行时会把那一段拆散，
+        // 窗口开出来了，跑的却是脚本的尾巴。写文件这条路把引号问题整个绕开。
+        final Transport chan = wsl;
+        if (chan == null) {
+            appendLog(I18n.t(Strings.LOG_TERMINAL_NO_TRANSCRIPT));
+            return;
+        }
+        final java.util.List<String> inner = ssh
+                ? bioenv.core.TerminalLaunch.sshArgv(target, port, keyPath, scriptFile)
+                : bioenv.core.TerminalLaunch.wslArgv(target, scriptFile);
+        new javax.swing.SwingWorker<Boolean, Void>() {
+            @Override
+            protected Boolean doInBackground() {
+                return chan.runBashCapture(
+                        bioenv.core.TerminalLaunch.writeScriptCommand(scriptFile, session)
+                ).ok();
+            }
+
+            @Override
+            protected void done() {
+                boolean written;
+                try {
+                    written = Boolean.TRUE.equals(get());
+                } catch (Exception ex) {
+                    written = false;
+                }
+                if (!written) {
+                    // 脚本没写下去就别开终端了：开了也是跑一个不存在的文件，
+                    // 用户看到的会是另一个更难懂的错误。
+                    appendLog(I18n.t(Strings.LOG_TERMINAL_NO_TRANSCRIPT));
+                    return;
+                }
+                launchTerminal(inner, log);
+            }
+        }.execute();
+    }
+
+    /** 真正启动终端窗口的那一步；三层，从好到保底。 */
+    private void launchTerminal(final java.util.List<String> inner, final String log) {
+
+        boolean started = false;
+        for (bioenv.core.TerminalLaunch.Layer layer : new bioenv.core.TerminalLaunch.Layer[]{
+                bioenv.core.TerminalLaunch.Layer.TERMINAL,
+                bioenv.core.TerminalLaunch.Layer.CONSOLE}) {
+            try {
+                new ProcessBuilder(
+                        bioenv.core.TerminalLaunch.launchArgv(layer, inner)).start();
+                started = true;
+                break;
+            } catch (Exception ex) {
+                // 这一层起不来就试下一层。两层都不行还有第三层，所以这里不报错。
+            }
+        }
+        appendLog("");
+        if (!started) {
+            // 第三层：命令本身复制走，用户粘到自己的终端里。
+            try {
+                java.awt.Toolkit.getDefaultToolkit().getSystemClipboard().setContents(
+                        new java.awt.datatransfer.StringSelection(
+                                bioenv.core.TerminalLaunch.printable(inner)), null);
+            } catch (Exception ex) {
+                // 剪贴板都没有的话也只能把命令写进日志，至少能手动拷。
+                appendLog(bioenv.core.TerminalLaunch.printable(inner));
+            }
+            appendLog(I18n.t(Strings.LOG_TERMINAL_COPIED));
+            return;
+        }
+        appendLog(I18n.t(Strings.LOG_TERMINAL_STARTED));
+        pollTranscript(log);
+    }
+
+    /**
+     * 等那场终端会话结束，然后把记录读回来贴进输出面板。
+     *
+     * <p>轮询标记文件，而不是等进程：终端窗口一起来启动它的进程就退了。上限 30 分钟，
+     * 免得用户开着窗口去吃饭，这个后台任务一辈子不结束。
+     */
+    private void pollTranscript(final String log) {
+        final Transport channel = wsl;
+        if (channel == null) {
+            return;
+        }
+        new javax.swing.SwingWorker<String, Void>() {
+            @Override
+            protected String doInBackground() {
+                String check = bioenv.core.TerminalLaunch.sentinelCheckScript(log);
+                for (int i = 0; i < 900; i++) {
+                    try {
+                        if (channel.runBashCapture(check).stdoutText().contains("yes")) {
+                            return channel.runBashCapture(
+                                    bioenv.core.TerminalLaunch.readTranscriptScript(log))
+                                    .stdoutText();
+                        }
+                        Thread.sleep(2000);
+                    } catch (InterruptedException ie) {
+                        return null;
+                    } catch (Exception ex) {
+                        return null;
+                    }
+                }
+                return null;
+            }
+
+            @Override
+            protected void done() {
+                String text;
+                try {
+                    text = get();
+                } catch (Exception ex) {
+                    text = null;
+                }
+                if (text == null || text.trim().isEmpty()) {
+                    appendLog(I18n.t(Strings.LOG_TERMINAL_NO_TRANSCRIPT));
+                    return;
+                }
+                appendLog(I18n.t(Strings.LOG_TERMINAL_TRANSCRIPT, log));
+                appendLog(text);
+            }
+        }.execute();
     }
 
     private void startRun() {

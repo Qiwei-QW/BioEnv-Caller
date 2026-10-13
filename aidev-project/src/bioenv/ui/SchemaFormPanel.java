@@ -1364,7 +1364,10 @@ public final class SchemaFormPanel extends JPanel {
                         + tool.envName + I18n.t(Strings.FORM_STATUS_SEP)
                         + I18n.t(Strings.FORM_STATUS_UNREADABLE));
             }
-            add(buildFallbackPanel(), BorderLayout.CENTER);
+            // 只有"帮助里一个参数都没列"那一支才藏掉原始参数框。另一支（帮助<b>有</b>
+            // 结构、只是我们读不出来）必须留着它 —— 那是用户唯一能把参数传下去的地方，
+            // 藏了就真没法用了。
+            add(buildFallbackPanel(unstructured), BorderLayout.CENTER);
             revalidate();
             repaint();
             fireChange();
@@ -1645,10 +1648,22 @@ public final class SchemaFormPanel extends JPanel {
     }
 
     /** Fallback UI when no schema could be parsed. */
-    private JPanel buildFallbackPanel() {
+    private JPanel buildFallbackPanel(boolean noCommandLineOptions) {
         JPanel p = new JPanel(new BorderLayout(4, 4));
-        p.add(new JLabel(I18n.t(Strings.FORM_RAW_ARGS)), BorderLayout.NORTH);
         configureRawArgs();
+        if (noCommandLineOptions) {
+            // 帮助里一个参数都没列：这个工具本来就不吃命令行选项（PAML 那种靠控制文件
+            // 或逐条提问的）。再摆一个空的"原始参数"框，只会让人以为漏填了什么 ——
+            // 换成一句"接下来该干什么"。
+            //
+            // 命令预览仍然可以手写完整命令，所以把参数框藏起来并不等于没了办法。
+            JLabel hint = new JLabel("<html>" + I18n.t(Strings.FORM_NO_PARAMS_HINT)
+                    + "</html>");
+            UiTheme.role(hint, "muted");
+            p.add(hint, BorderLayout.NORTH);
+            return p;
+        }
+        p.add(new JLabel(I18n.t(Strings.FORM_RAW_ARGS)), BorderLayout.NORTH);
         p.add(new JScrollPane(rawArgsArea), BorderLayout.CENTER);
         // 这里<b>不</b>再放一条工作目录行。
         //
@@ -2562,6 +2577,41 @@ public final class SchemaFormPanel extends JPanel {
     }
 
     private Object currentTransport;
+
+    /**
+     * 当前工作目录（远端路径）；没有、或不是 Linux 路径时返回 null。
+     *
+     * <p>给"在终端中运行"用：终端里也要先 cd 到同一个地方，否则用户在图形界面选好的
+     * 工作目录到了终端就不作数了。
+     */
+    public String terminalWorkdir() {
+        return wslInputDir();
+    }
+
+    /**
+     * 工作目录框里的<b>原样文本</b>（可能是一条 Windows 路径），空则返回 null。
+     *
+     * <p>与 {@link #terminalWorkdir()} 的区别很重要，而且这里是我踩过的坑：
+     *
+     * <ul>
+     *   <li>{@link #wslInputDir()} 会把 Windows 路径判成 null —— 那是对的，因为它服务的是
+     *       "把本机文件 scp 到哪"，而那个目标必须是 Linux 路径；</li>
+     *   <li>但"运行前 cd 到哪"不该用那个过滤值。WSL 模式下填 Windows 路径是<b>合法</b>的，
+     *       {@code CommandBuilder.wrapTyped} 会把它翻译成 {@code /mnt/c/...}。</li>
+     * </ul>
+     *
+     * <p>我最初直接复用了过滤后的值，于是工作目录一填 Windows 路径，{@code workdir} 就是
+     * null，{@code wrapTyped} 里那条 {@code cd} <b>整条不生成</b> —— 工具在默认目录
+     * （WSL 的 home）里跑，结果文件落在那里而不是用户选的地方。用户报的"结果文件没在
+     * 工作目录里落盘"就是这个。
+     */
+    public String rawWorkdir() {
+        String wd = HintText.realText(workdirField);
+        if (wd == null || wd.trim().isEmpty()) {
+            return null;
+        }
+        return wd.trim();
+    }
 
     /** SSH 下藏起"选本机目录"那个按钮；WSL 下才显示。 */
     private void applyWorkdirButtonVisibility() {
