@@ -100,11 +100,19 @@ public final class DividerRangeTest {
         line("The tree divider stays movable at every window width tested.");
     }
 
+    /**
+     * 找命令树那一层的水平分隔条。
+     *
+     * <p>跳过左半边是 AI 助手的那一层 —— 它包在最外面，取"第一个水平分隔条"会拿到它，
+     * 而它的分隔条宽度是助手的收起宽度（30），不是树的宽度。
+     */
     private static JSplitPane findHorizontal(Container c) {
         for (Component child : c.getComponents()) {
             if (child instanceof JSplitPane
                     && ((JSplitPane) child).getOrientation()
-                        == JSplitPane.HORIZONTAL_SPLIT) {
+                        == JSplitPane.HORIZONTAL_SPLIT
+                    && !(((JSplitPane) child).getLeftComponent()
+                        instanceof bioenv.ui.AiAssistPanel)) {
                 return (JSplitPane) child;
             }
             if (child instanceof Container) {

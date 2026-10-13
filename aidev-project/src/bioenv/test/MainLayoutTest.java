@@ -94,15 +94,32 @@ public final class MainLayoutTest {
         line("=== Arrangement ===");
         line("");
 
-        line("[the top-level split is the toolbar and the rest]");
+        line("[the assistant is the far-left column]");
         JSplitPane outer = firstSplit(p);
         check("a split exists", outer != null);
         if (outer == null) {
             return;
         }
         check("it is horizontal", outer.getOrientation() == JSplitPane.HORIZONTAL_SPLIT);
-        check("the toolbar is on the left",
-                titleOf(outer.getLeftComponent()).contains(I18n.t(Strings.TITLE_TREE)));
+        // 这一条是**新约定**：最左边那一列现在是 AI 助手（默认收起），
+        // 命令树退到它右边。原来这里断言"最左是树"，布局改了，断言也跟着改 ——
+        // 但改的是"最左是什么"，不是把数字调松。
+        check("the assistant is on the far left",
+                outer.getLeftComponent() instanceof bioenv.ui.AiAssistPanel);
+        if (outer.getLeftComponent() instanceof bioenv.ui.AiAssistPanel) {
+            check("and it starts collapsed",
+                    ((bioenv.ui.AiAssistPanel) outer.getLeftComponent()).isCollapsed());
+        }
+
+        line("[the tree is the left of the next split in]");
+        // 按<b>内容</b>找那一层，不按层数：以后再往外包东西也不会坏。
+        JSplitPane tree = treeSplit(p);
+        check("the tree split exists", tree != null);
+        if (tree != null) {
+            check("the toolbar is on the left",
+                    titleOf(tree.getLeftComponent())
+                            .contains(I18n.t(Strings.TITLE_TREE)));
+        }
         line("");
 
         line("[the output is a column on the right]");
@@ -350,6 +367,31 @@ public final class MainLayoutTest {
             }
         }
         return false;
+    }
+
+    /**
+     * 找"左半边是命令树"那个水平分隔条。
+     *
+     * <p>按内容找，不按顺序：AI 助手那一层现在包在最外面，取"第一个分隔条"会拿到它。
+     */
+    private static JSplitPane treeSplit(Container c) {
+        for (Component ch : c.getComponents()) {
+            if (ch instanceof JSplitPane) {
+                JSplitPane s = (JSplitPane) ch;
+                if (s.getOrientation() == JSplitPane.HORIZONTAL_SPLIT
+                        && titleOf(s.getLeftComponent())
+                                .contains(I18n.t(Strings.TITLE_TREE))) {
+                    return s;
+                }
+            }
+            if (ch instanceof Container) {
+                JSplitPane found = treeSplit((Container) ch);
+                if (found != null) {
+                    return found;
+                }
+            }
+        }
+        return null;
     }
 
     private static JSplitPane firstSplit(Container c) {
