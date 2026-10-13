@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>BioEnv Caller · AI 助手</title>
+<style>
+  :root{
+    --bg:#f7f7f8; --panel:#ffffff; --line:#d8d8dc; --fg:#22242a; --muted:#6b6f76;
+    --accent:#1f6feb; --user:#e8f0fe; --ai:#f2f3f5; --err:#b3261e; --ok:#1a7f37; --warn:#9a6700;
+    --mono:Consolas,"Courier New",monospace;
+  }
+  body.theme-dark{
+    --bg:#1e1e22; --panel:#26262b; --line:#3a3a42; --fg:#e6e6ea; --muted:#9aa0a6;
+    --accent:#4c8dff; --user:#2a3a55; --ai:#2c2c33; --err:#ff8a80; --ok:#7ee787; --warn:#e3b341;
+  }
+  body.theme-light{ /* 浅色：比 classic 更白更亮 */ }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{
+    display:flex;flex-direction:column;background:var(--bg);color:var(--fg);
+    font:13px/1.55 "Microsoft YaHei",system-ui,sans-serif;
+  }
+  header{
+    padding:6px 10px;border-bottom:1px solid var(--line);background:var(--panel);
+    display:flex;align-items:center;gap:8px;flex:none;
+  }
+  header b{font-size:13px}
+  #status{font-size:11px;color:var(--muted);margin-left:auto;text-align:right}
+  #status.ok{color:var(--ok)} #status.bad{color:var(--err)} #status.warn{color:var(--warn)}
+  #log{flex:1;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:8px}
+  .m{max-width:100%;padding:7px 10px;border-radius:8px;white-space:pre-wrap;word-break:break-word}
+  .m.u{background:var(--user);align-self:flex-end}
+  .m.a{background:var(--ai);align-self:flex-start;border:1px solid var(--line)}
+  .m.e{background:transparent;color:var(--err);border:1px dashed var(--err);font-size:12px}
+  .m.s{background:transparent;color:var(--muted);font-size:12px;padding:2px 10px}
+  details.ctx{border:1px solid var(--line);border-radius:6px;background:var(--panel);font-size:12px}
+  details.ctx summary{cursor:pointer;padding:5px 8px;color:var(--muted)}
+  details.ctx pre{margin:0;padding:8px;max-height:200px;overflow:auto;font-family:var(--mono);font-size:11px}
+  footer{flex:none;border-top:1px solid var(--line);background:var(--panel);padding:8px}
+  .row{display:flex;gap:6px;align-items:flex-end}
+  textarea{
+    flex:1;resize:none;height:56px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;
+    background:var(--bg);color:var(--fg);font:13px/1.5 "Microsoft YaHei",system-ui,sans-serif;
+  }
+  button{
+    padding:6px 12px;border:1px solid var(--line);border-radius:6px;background:var(--bg);
+    color:var(--fg);cursor:pointer;font-size:12px;white-space:nowrap;
+  }
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button:disabled{opacity:.5;cursor:default}
+  .bar{display:flex;justify-content:space-between;align-items:center;margin-top:6px;font-size:11px;color:var(--muted)}
+  .diag{border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:10px 12px;font-size:12px}
+  .diag h3{margin:0 0 6px;font-size:13px}
+  .diag code{font-family:var(--mono);font-size:11px}
+  .diag table{border-collapse:collapse;margin-top:6px}
+  .diag td{padding:2px 10px 2px 0;vertical-align:top}
+  .diag td:first-child{color:var(--muted);white-space:nowrap}
+</style>
+</head>
+<body class="theme-classic">
+
+<header>
+  <b id="title">AI 助手</b>
+  <span id="status">正在检查…</span>
+</header>
+
+<div id="log"></div>
+
+<footer>
+  <details class="ctx" id="ctxBox">
+    <summary id="ctxSummary">本次将发送的内容</summary>
+    <pre id="ctxPre">（无）</pre>
+  </details>
+  <div class="row" style="margin-top:6px">
+    <textarea id="ask" placeholder="按 Enter 发送，Shift+Enter 换行"></textarea>
+    <button id="send" class="primary">发送</button>
+    <button id="stop" disabled>停止</button>
+  </div>
+  <div class="bar">
+    <span id="budget"></span>
+    <span id="model"></span>
+  </div>
+</footer>
+
+<script>
+"use strict";
+
+/* ================================================================
+ * BioEnv Caller · AI 助手（网页侧）
+ *
+ * 这个页面跑在 TBtools 注入的网页运行时里，通过 window.tbtools.ai 调用
+ * TBtools 的内置模型。
+ *
+ * ⚠ 这套接口是**实测出来的契约，不是官方文档** —— 用法从第三方插件 minisvg
+ *   的实际用法反推得到。升级 TBtools 之后要重新验证这里。
+ *
+ * 两条实测出来的行为，代码按它们写：
+ *   1. onDelta(s) 给的是**增量**（不是累计全文）—— 所以下面是累加；
+ *      最终以 promise 的返回值覆盖，避免两边不一致。
+ *   2. 桥不存在时 window.tbtools 整个是 undefined —— 必须先探测再用。
+ * ================================================================ */
+
+var bridge = null;           // window.tbtools.ai，没有就是 null
+var context = null;          // Java 推过来的上下文
+var busy = false;
+var abortFn = null;
+var history = [];            // [{role, content}]，只保留问答，不含 system
+
+var el = function (id) { return document.getElementById(id); };
+
+/* ---------------- 文案（中英） ---------------- */
+var T = {
+  zh: {
+    title: "AI 助手",
+    send: "发送", stop: "停止", ask: "按 Enter 发送，Shift+Enter 换行",
+    ctx: "本次将发送的内容", none: "（无）",
+    chk: "正在检查…", noBridge: "桥不可用", ready: "就绪", model: "模型：",
+    noBridgeWhy: "当前 TBtools 版本没有提供内置模型接口（需要 TBtools 2.558 或更高）。"
+      + "这个面板会一直留着，升级 TBtools 之后它会自动可用。",
+    ping: "试一句", pingPh: "确认模型能回话（这一步不消耗上下文）",
+    pingOk: "模型回话了：", pingFail: "模型没回话：",
+    empty: "先在左边选一个工具，然后问它「怎么用」或者「这个参数什么意思」。"
+  },
+  en: {
+    title: "AI assistant",
+    send: "Send", stop: "Stop", ask: "Enter to send, Shift+Enter for a new line",
+    ctx: "What will be sent", none: "(nothing)",
+    chk: "Checking…", noBridge: "No bridge", ready: "Ready", model: "Model: ",
+    noBridgeWhy: "This TBtools build does not expose the built-in model interface "
+      + "(TBtools 2.558 or newer is required). The panel stays here and becomes usable "
+      + "after you upgrade TBtools.",
+    ping: "Say hello", pingPh: "Check the model answers (uses no context)",
+    pingOk: "The model answered: ", pingFail: "The model did not answer: ",
+    empty: "Pick a tool on the left, then ask how to use it or what a parameter means."
+  }
+};
+var lang = "zh";
+function t(k) { return (T[lang] || T.zh)[k]; }
+
+/* ---------------- 错误分类 ----------------
+ * 这几个码来自 minisvg 的实测（tbWhy）。每一码用户该做的事都不同，
+ * 所以不合并成一句"失败"。 */
+function why(code) {
+  var zh = {
+    denied: "TBtools 拒绝了这次请求。可以点「脱敏后重试」——去掉路径和样本名再发一次。",
+    busy: "TBtools 正忙，等一下再试。",
+    closed: "到 TBtools 模型的桥已经关闭。",
+
+    invalid: "TBtools 读不懂这次请求（内容可能有问题）。",
+    too_many: "请求太多或消息条数超限。",
+    too_large: "内容太长。试试少带一些上下文。",
+    aborted: "已停止。"
+  };
+  var en = {
+    denied: "TBtools declined this request. Try \"Retry without paths\" to send it again "
+      + "with paths and sample names removed.",
+    busy: "TBtools is busy. Try again in a moment.",
+    closed: "The TBtools model bridge is closed.",
+    invalid: "TBtools could not read this request.",
+    too_many: "Too many messages or requests.",
+    too_large: "The content is too long. Send less context.",
+    aborted: "Stopped."
+  };
+  return (lang === "en" ? en : zh)[code] || String(code);
+}
+
+/* ---------------- 界面 ---------------- */
+function applyLang() {
+  document.documentElement.lang = lang === "en" ? "en" : "zh";
+  el("title").textContent = t("title");
+  el("send").textContent = busy ? t("stop") : t("send");
+  el("stop").textContent = t("stop");
+  el("ask").placeholder = t("ask");
+  el("ctxSummary").textContent = t("ctx");
+}
+
+function bubble(kind, text) {
+  var d = document.createElement("div");
+  d.className = "m " + kind;
+  d.textContent = text;
+  el("log").appendChild(d);
+  el("log").scrollTop = el("log").scrollHeight;
+  return d;
+}
+
+function setStatus(text, cls) {
+  var s = el("status");
+  s.textContent = text;
+  s.className = cls || "";
+}
+
+/* ---------------- 启动诊断（这一步就是冒烟测试） ---------------- */
+function boot() {
+  bridge = (window.tbtools && window.tbtools.ai) ? window.tbtools.ai : null;
+
+  var rows = [];
+  rows.push(["window.tbtools", window.tbtools ? "在" : "不在"]);
+  rows.push(["window.tbtools.ai", bridge ? "在" : "不在"]);
+  if (bridge) {
+    var keys = [];
+    for (var k in bridge) { keys.push(k); }
+    rows.push(["ai 上的方法", keys.length ? keys.join(", ") : "（枚举不到，可能是原生对象）"]);
+  }
+  rows.push(["location", location.href]);
+
+  var html = '<div class="diag"><h3>'
+    + (bridge ? "内置模型接口可用" : "内置模型接口不可用")
+    + "</h3><table>";
+  for (var i = 0; i < rows.length; i++) {
+    html += "<tr><td>" + rows[i][0] + "</td><td><code>"
+      + String(rows[i][1]).replace(/</g, "&lt;") + "</code></td></tr>";
+  }
+  html += "</table>";
+  if (!bridge) {
+    html += '<p style="margin:8px 0 0">' + t("noBridgeWhy") + "</p>";
+  }
+  html += "</div>";
+
+  var box = document.createElement("div");
+  box.innerHTML = html;
+  el("log").appendChild(box);
+
+  if (bridge) {
+    setStatus(t("ready"), "ok");
+    var b = document.createElement("div");
+    b.className = "row";
+    b.style.marginTop = "8px";
+    b.innerHTML = '<button id="ping">' + t("ping") + "</button>"
+      + '<span style="font-size:11px;color:var(--muted)">' + t("pingPh") + "</span>";
+    box.appendChild(b);
+    el("ping").onclick = ping;
+    if (typeof bridge.chat !== "function") {
+      setStatus("ai.chat 不是函数 —— 接口形状和预期不同", "bad");
+    }
+  } else {
+    setStatus(t("noBridge"), "bad");
+  }
+
+  bubble("s", t("empty"));
+  refreshCtx();
+}
+
+/* ---------------- 冒烟测试：让模型回一句 ---------------- */
+function ping() {
+  var btn = el("ping");
+  btn.disabled = true;
+  btn.textContent = t("ping") + " …";
+  var got = null;
+  try {
+    var p = bridge.chat(
+      [{ role: "user", content: "只回复两个字：通了" }],
+      { onDelta: function () {} }
+    );
+    Promise.resolve(p).then(function (r) {
+      got = (typeof r === "string") ? r : "(非字符串返回值)";
+      bubble("a", t("pingOk") + got);
+      setStatus(t("ready"), "ok");
+    }).catch(function (e) {
+      bubble("e", t("pingFail") + describe(e));
+      setStatus(t("noBridge"), "bad");
+    }).then(function () {
+      btn.disabled = false;
+      btn.textContent = t("ping");
+    });
+  } catch (e) {
+    bubble("e", t("pingFail") + describe(e));
+    btn.disabled = false;
+    btn.textContent = t("ping");
+  }
+}
+
+/** 把 reject 出来的东西变成一句人话。 */
+function describe(e) {
+  if (!e) { return "（没有错误信息）"; }
+  var code = (typeof e === "string") ? e : (e.code || e.reason || e.message || "");
+  if (code && why(code) !== String(code)) { return why(code); }
+  return String(code || e);
+}
+
+/* ---------------- Java 推过来的接口 ---------------- */
+window.tbvAi = {
+  /** Java 推上下文；参数是 JSON 字符串。 */
+  setContext: function (json) {
+    try {
+      context = (typeof json === "string") ? JSON.parse(json) : json;
+    } catch (e) {
+      context = null;
+    }
+    refreshCtx();
+  },
+  /** 主题：classic / light / dark —— 跟着插件的 UiTheme 走。 */
+  setTheme: function (name) {
+    var n = String(name || "classic").toLowerCase();
+    document.body.className = "theme-" + (n === "dark" ? "dark" : (n === "light" ? "light" : "classic"));
+    if (n === "dark") { document.body.classList.add("theme-dark"); }
+  },
+  /** 语言：zh / en —— 跟着插件的 I18n 走。 */
+  setLang: function (name) {
+    lang = (String(name).toLowerCase() === "en") ? "en" : "zh";
+    applyLang();
+  },
+  /** Java 想主动问一句（预留给以后的"一键解释报错"）。 */
+  ask: function (text) {
+    el("ask").value = text || "";
+    send();
+  }
+};
+
+/* ---------------- 上下文 ---------------- */
+function ctxText() {
+  if (!context) { return ""; }
+  var parts = [];
+  if (context.tool) { parts.push("[工具] " + context.tool + (context.env ? "  @" + context.env : "")); }
+  if (context.mode) { parts.push("[连接] " + context.mode + (context.workdir ? "  工作目录：" + context.workdir : "")); }
+  if (context.command) { parts.push("[当前命令]\n" + context.command); }
+  if (context.options && context.options.length) {
+    var lines = [];
+    for (var i = 0; i < context.options.length; i++) {
+      var o = context.options[i];
+      lines.push("  " + o.flag + (o.arg ? " " + o.arg : "")
+        + (o.description ? "  — " + o.description : "")
+        + (o.typeReason ? "  [" + o.kind + ": " + o.typeReason + "]" : ""));
+    }
+    parts.push("[参数表]\n" + lines.join("\n"));
+  }
+  if (context.help) { parts.push("[帮助原文]\n" + context.help); }
+  if (context.lastRun) {
+    parts.push("[上次运行] 退出码 " + context.lastRun.exit + "\n" + (context.lastRun.tail || ""));
+  }
+  if (context.docs) { parts.push("[插件用法（相关章节）]\n" + context.docs); }
+  return parts.join("\n\n");
+}
+
+function refreshCtx() {
+  var txt = ctxText();
+  el("ctxPre").textContent = txt || t("none");
+  el("budget").textContent = txt ? (txt.length + " 字符 / 上限约 32000") : "";
+}
+
+/* ---------------- 发送 ---------------- */
+function sysPrompt() {
+  var base = lang === "en"
+    ? "You are the assistant built into the TBtools plugin BioEnv Caller. It gives a GUI "
+      + "to bioinformatics command-line tools running on Linux (WSL or a remote host over SSH). "
+      + "Answer from the context provided; if the context does not contain the answer, say so "
+      + "rather than guessing. Be concise and practical. Never invent parameter names."
+    : "你是 TBtools 插件 BioEnv Caller 内置的助手。这个插件把 Linux（WSL 或 SSH 远程主机）上的"
+      + "生信命令行工具变成图形界面。请只依据给你的上下文回答；上下文里没有的，就说不知道，不要编。"
+      + "回答要简短、可操作。绝对不要编造参数名。";
+  return base;
+}
+
+function send() {
+  if (busy) { stop(); return; }
+  if (!bridge) { return; }
+
+  var q = el("ask").value.trim();
+  if (!q) { return; }
+  el("ask").value = "";
+
+  var ctx = ctxText();
+  var full = ctx ? ("以下是当前状态：\n\n" + ctx + "\n\n---\n\n问题：" + q) : q;
+
+  bubble("u", q);
+
+  var msgs = [{ role: "system", content: sysPrompt() }];
+  for (var i = 0; i < history.length; i++) { msgs.push(history[i]); }
+  msgs.push({ role: "user", content: full });
+
+  var box = bubble("a", "");
+  busy = true;
+  el("send").textContent = t("stop");
+  el("stop").disabled = false;
+
+  var base = "";
+  var p;
+  try {
+    p = bridge.chat(msgs, {
+      onDelta: function (s) {
+        // 实测：s 是增量。最终以 promise 的返回值覆盖。
+        base += (s || "");
+        box.textContent = base;
+        el("log").scrollTop = el("log").scrollHeight;
+      }
+    });
+  } catch (e) {
+    box.className = "m e";
+    box.textContent = describe(e);
+    finish();
+    return;
+  }
+
+  abortFn = function () { try { if (p && p.requestId) { bridge.abort(p.requestId); } } catch (e) {} };
+
+  Promise.resolve(p).then(function (r) {
+    if (typeof r === "string" && r) { box.textContent = r; }
+    history.push({ role: "user", content: full });
+    history.push({ role: "assistant", content: box.textContent });
+    if (history.length > 12) { history = history.slice(history.length - 12); }
+  }).catch(function (e) {
+    box.className = "m e";
+    var code = (typeof e === "string") ? e : (e && (e.code || e.reason));
+    box.textContent = describe(e);
+    if (code === "denied") { addRetry(q); }
+  }).then(finish);
+
+  function finish() {
+    busy = false;
+    abortFn = null;
+    el("send").textContent = t("send");
+    el("stop").disabled = true;
+    refreshCtx();
+  }
+}
+
+function stop() {
+  if (abortFn) { abortFn(); }
+}
+
+/** denied 之后给一个"脱敏后重试" —— 去掉绝对路径和明显的文件名。 */
+function addRetry(original) {
+  var d = document.createElement("div");
+  d.className = "m";
+  d.style.background = "transparent";
+  var b = document.createElement("button");
+  b.textContent = lang === "en" ? "Retry without paths" : "脱敏后重试";
+  b.onclick = function () {
+    var safe = original.replace(/(\/[\w.\-]+){2,}/g, "<路径>")
+                        .replace(/[A-Za-z]:\\[^\s"']+/g, "<路径>");
+    // 上下文也脱敏：只留工具名和参数名，不带原文。
+    var keep = context;
+    context = keep ? {
+      tool: keep.tool, env: keep.env, mode: keep.mode,
+      options: (keep.options || []).map(function (o) {
+        return { flag: o.flag, arg: o.arg, description: o.description, kind: o.kind };
+      })
+    } : null;
+    refreshCtx();
+    el("ask").value = safe;
+    d.remove();
+    send();
+  };
+  d.appendChild(b);
+  el("log").appendChild(d);
+  el("log").scrollTop = el("log").scrollHeight;
+}
+
+/* ---------------- 事件 ---------------- */
+el("send").onclick = send;
+el("stop").onclick = stop;
+el("ask").addEventListener("keydown", function (e) {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
+});
+
+applyLang();
+boot();
+</script>
+</body>
+</html>

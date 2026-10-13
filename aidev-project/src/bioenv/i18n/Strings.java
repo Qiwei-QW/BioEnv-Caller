@@ -215,6 +215,12 @@ public final class Strings {
     public static final String LOG_TERMINAL_NO_TRANSCRIPT = "log.terminalNoTranscript";
     /** 面板内交互运行。 */
     public static final String MENU_RUN_INTERACTIVE = "menu.runInteractive";
+    /** 最左侧的 AI 助手栏。 */
+    public static final String AI_TITLE = "ai.title";
+    public static final String AI_COLLAPSE = "ai.collapse";
+    public static final String AI_EXPAND = "ai.expand";
+    public static final String AI_LOADING = "ai.loading";
+    public static final String AI_NO_PAGE = "ai.noPage";
     public static final String INTERACTIVE_PROMPT = "interactive.prompt";
     public static final String INTERACTIVE_TIP = "interactive.tip";
     public static final String LOG_INTERACTIVE_STARTED = "log.interactiveStarted";
@@ -1158,6 +1164,13 @@ public final class Strings {
         put(ZH_TEXT, EN_TEXT, LOG_TERMINAL_TRANSCRIPT, "会话记录（{0}）：",
                 "Session transcript ({0}):");
         put(ZH_TEXT, EN_TEXT, MENU_RUN_INTERACTIVE, "交互运行", "Run interactively");
+        put(ZH_TEXT, EN_TEXT, AI_TITLE, "AI 助手", "AI assistant");
+        put(ZH_TEXT, EN_TEXT, AI_COLLAPSE, "收起 AI 助手", "Collapse the AI assistant");
+        put(ZH_TEXT, EN_TEXT, AI_EXPAND, "展开 AI 助手", "Expand the AI assistant");
+        put(ZH_TEXT, EN_TEXT, AI_LOADING, "展开后加载。", "Expands to load.");
+        put(ZH_TEXT, EN_TEXT, AI_NO_PAGE,
+                "找不到 ai.html。它应该和插件的主 jar 放在同一层。",
+                "ai.html was not found. It belongs beside the plugin's main jar.");
         put(ZH_TEXT, EN_TEXT, INTERACTIVE_PROMPT, "输入：", "Input:");
         put(ZH_TEXT, EN_TEXT, INTERACTIVE_TIP,
                 "工具提问时在这里打字，按回车发送。",

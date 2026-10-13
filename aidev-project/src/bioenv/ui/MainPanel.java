@@ -185,6 +185,35 @@ public final class MainPanel extends JPanel {
     private JPanel commandPanel;
     private final JTextArea commandArea = new JTextArea(3, 40);
     private final JTextArea logArea = new JTextArea(12, 40);
+    /**
+     * 最左侧那一栏：AI 助手。默认<b>收起</b>（只留一条窄边），点箭头展开。
+     *
+     * <p>它是网页（TBtools 的内置模型只以 JS 桥给插件页面），Java 侧只负责推上下文
+     * 和跟主题语言。见 {@link AiAssistPanel} / {@link bioenv.ai.AiWebView}。
+     */
+    private AiAssistPanel aiAssist;
+    private javax.swing.JSplitPane aiSplit;
+    /**
+     * 主题或语言一变就把它们推给网页。
+     *
+     * <p>做成独立监听器而不是改现有的 {@code themeRefresh}/{@code languageRefresh}：
+     * 那两条路径被很多测试盯着，能不动就不动。
+     */
+    private final Runnable aiSync = new Runnable() {
+        @Override
+        public void run() {
+            if (aiAssist == null) {
+                return;
+            }
+            try {
+                aiAssist.pushTheme(UiTheme.current());
+                aiAssist.pushLang(bioenv.i18n.Lang.EN == I18n.get() ? "en" : "zh");
+            } catch (Throwable ignored) {
+                // AI 那一栏出问题不能影响主题或语言的切换。
+            }
+        }
+    };
+
     private final JButton runButton = new JButton(I18n.t(Strings.MENU_RUN));
     private final JButton stopButton = new JButton(I18n.t(Strings.MENU_STOP));
     /**
@@ -334,6 +363,8 @@ public final class MainPanel extends JPanel {
     private JSplitPane logSplitRef;
     private JPanel formAndPreview;
     private boolean outerSplitPending;
+    /** AI 那一层的分隔条也要等布局完成后才能设位置。 */
+    private boolean aiSplitPending;
 
     /**
      * Applies initial divider positions once the panel has been laid out.' Starting width of the tool tree, in pixels. */
@@ -613,9 +644,12 @@ public final class MainPanel extends JPanel {
         // last, so every component it touches already exists; the callback runs on
         // the EDT (I18n dispatches there), so plain setText is correct.
         I18n.addListener(languageRefresh);
+        // AI 侧栏也要跟着语言走（它是个网页，得由 Java 推过去）。
+        I18n.addListener(aiSync);
         // 界面风格：先把上次的选择读进来（默认经典），再按它刷一遍；之后每次切换都走
         // 同一个 applyTheme()，所以两条路径不会长歪。
         UiTheme.addListener(themeRefresh);
+        UiTheme.addListener(aiSync);
         applyTheme();
         updateRunEnabled();
         // Put the panel back into the mode the user last used, BEFORE restoring
@@ -2161,7 +2195,42 @@ public final class MainPanel extends JPanel {
         // a real size; setting them now would be overwritten by layout.
         outerSplit = split;
         outerSplitPending = true;
-        return split;
+
+        // 最外层再包一层：AI 助手在最左，默认收起。
+        aiAssist = new AiAssistPanel(new Runnable() {
+            @Override
+            public void run() {
+                toggleAiAssist();
+            }
+        });
+        aiAssist.setCollapsed(true);
+        aiSplit = new javax.swing.JSplitPane(
+                javax.swing.JSplitPane.HORIZONTAL_SPLIT, aiAssist, split);
+        // resizeWeight 0：窗口变大时把多出来的宽度给右边内容，而不是给 AI 栏。
+        aiSplit.setResizeWeight(0);
+        aiSplit.setDividerSize(6);
+        aiSplit.setBorder(null);
+        aiSplitPending = true;
+        return aiSplit;
+    }
+
+    /** 展开/收起 AI 助手。 */
+    private void toggleAiAssist() {
+        if (aiAssist == null || aiSplit == null) {
+            return;
+        }
+        boolean collapsed = !aiAssist.isCollapsed();
+        aiAssist.setCollapsed(collapsed);
+        int width = collapsed ? AiAssistPanel.COLLAPSED_WIDTH : AiAssistPanel.EXPANDED_WIDTH;
+        aiSplit.setDividerLocation(width);
+        if (!collapsed) {
+            // 展开时才去创建网页：构造阶段绝不碰网页运行时。
+            aiAssist.ensureLoaded();
+            aiAssist.pushTheme(UiTheme.current());
+            aiAssist.pushLang(bioenv.i18n.Lang.EN == I18n.get() ? "en" : "zh");
+        }
+        aiSplit.revalidate();
+        aiSplit.repaint();
     }
 
     /**
@@ -2190,6 +2259,13 @@ public final class MainPanel extends JPanel {
             outerSplit.setDividerLocation(Math.max(min, Math.min(want, max)));
             outerSplit.setResizeWeight(0.0); // keep the tree width as set when resizing
             outerSplitPending = false;
+        }
+        if (aiSplitPending && aiSplit != null && aiSplit.getWidth() > 0) {
+            // 默认收起：等布局完成再设宽度，之前设会被布局覆盖掉
+            // （outerSplit 那边为同样的事吃过一次亏）。
+            aiSplit.setDividerLocation(AiAssistPanel.COLLAPSED_WIDTH);
+            aiSplit.setResizeWeight(0.0);
+            aiSplitPending = false;
         }
 
     }
