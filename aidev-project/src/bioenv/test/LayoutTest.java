@@ -83,7 +83,11 @@ public final class LayoutTest {
         // against the output column. The second was added deliberately when the
         // output moved from below the preview to a column beside it, so that its
         // width is the user's to set.
-        check("two horizontal splits (tree | rest, and form | output)", h == 2);
+        // 三条水平分隔条：AI 助手 | 其余、命令树 | 其余、表单 | 输出。
+        // 原来是两条 —— AI 那一栏包在最外面之后多了一条，这是**刻意的布局变更**，
+        // 所以改的是"应该有几条"，不是把判断放宽。
+        check("three horizontal splits (assistant | rest, tree | rest, form | output)",
+                h == 3);
         // One vertical split remains: the options against the extras. The preview
         // is a foldable section now rather than a split pane, so that folding it
         // returns its height to the option list instead of merely shrinking it.
