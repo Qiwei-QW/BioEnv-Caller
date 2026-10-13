@@ -787,6 +787,14 @@ public final class Strings {
 
     /** 表单：原始参数标签。 */
     public static final String FORM_RAW_ARGS = "form.rawArgs";
+    /**
+     * 帮助里一个参数都没列时，替代"原始参数"输入框的那段话。
+     *
+     * <p>这类工具（PAML 的 evolver / baseml / codeml）本来就不吃命令行选项：它们的参数
+     * 在<b>控制文件</b>里，或者靠<b>逐条提问</b>。再摆一个空的"原始参数"框，只会让人以为
+     * 自己漏填了什么 —— 所以藏掉它，换成"接下来该干什么"。
+     */
+    public static final String FORM_NO_PARAMS_HINT = "form.noParamsHint";
 
     /** 表单：返回到顶层。 */
     public static final String FORM_BACK_TO_TOP = "form.backToTop";
@@ -1679,6 +1687,20 @@ public final class Strings {
         put(ZH_TEXT, EN_TEXT, FORM_COMMAND_LABEL,
                 "命令（可以修改后再运行）", "Command (you can edit this, then run it)");
         put(ZH_TEXT, EN_TEXT, FORM_COMMAND_PREVIEW, "命令预览", "Command preview");
+        put(ZH_TEXT, EN_TEXT, FORM_NO_PARAMS_HINT,
+                "这个工具的帮助里没有命令行选项，它多半靠<b>交互回答</b>或<b>控制文件</b>工作。"
+                        + "<br>交互式的：点「<b>交互运行</b>」，按它的提问回答。"
+                        + "<br>靠控制文件的（如 PAML 的 <b>MCbase.dat</b>、<b>codeml.ctl</b>）："
+                        + "把文件放进工作目录，再运行。"
+                        + "<br>也可以直接在下面的<b>命令预览</b>里手写完整命令。",
+                "This tool's help lists no command-line options; it most likely works by "
+                        + "<b>answering prompts</b> or through a <b>control file</b>."
+                        + "<br>Interactive: press <b>Run interactively</b> and answer what "
+                        + "it asks."
+                        + "<br>Control file (PAML's <b>MCbase.dat</b>, <b>codeml.ctl</b>): put "
+                        + "the file in the working directory, then run."
+                        + "<br>You can also type the whole command in the <b>command "
+                        + "preview</b> below.");
         put(ZH_TEXT, EN_TEXT, FORM_RAW_ARGS, "原始参数", "Raw arguments");
         put(ZH_TEXT, EN_TEXT, FORM_BACK_TO_TOP, "返回顶层", "Back to top level");
         put(ZH_TEXT, EN_TEXT, FORM_BACK_TO_TOP_TIP, "回到 {0} 的参数。",

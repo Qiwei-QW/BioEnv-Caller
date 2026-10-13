@@ -1364,7 +1364,10 @@ public final class SchemaFormPanel extends JPanel {
                         + tool.envName + I18n.t(Strings.FORM_STATUS_SEP)
                         + I18n.t(Strings.FORM_STATUS_UNREADABLE));
             }
-            add(buildFallbackPanel(), BorderLayout.CENTER);
+            // 只有"帮助里一个参数都没列"那一支才藏掉原始参数框。另一支（帮助<b>有</b>
+            // 结构、只是我们读不出来）必须留着它 —— 那是用户唯一能把参数传下去的地方，
+            // 藏了就真没法用了。
+            add(buildFallbackPanel(unstructured), BorderLayout.CENTER);
             revalidate();
             repaint();
             fireChange();
@@ -1645,10 +1648,22 @@ public final class SchemaFormPanel extends JPanel {
     }
 
     /** Fallback UI when no schema could be parsed. */
-    private JPanel buildFallbackPanel() {
+    private JPanel buildFallbackPanel(boolean noCommandLineOptions) {
         JPanel p = new JPanel(new BorderLayout(4, 4));
-        p.add(new JLabel(I18n.t(Strings.FORM_RAW_ARGS)), BorderLayout.NORTH);
         configureRawArgs();
+        if (noCommandLineOptions) {
+            // 帮助里一个参数都没列：这个工具本来就不吃命令行选项（PAML 那种靠控制文件
+            // 或逐条提问的）。再摆一个空的"原始参数"框，只会让人以为漏填了什么 ——
+            // 换成一句"接下来该干什么"。
+            //
+            // 命令预览仍然可以手写完整命令，所以把参数框藏起来并不等于没了办法。
+            JLabel hint = new JLabel("<html>" + I18n.t(Strings.FORM_NO_PARAMS_HINT)
+                    + "</html>");
+            UiTheme.role(hint, "muted");
+            p.add(hint, BorderLayout.NORTH);
+            return p;
+        }
+        p.add(new JLabel(I18n.t(Strings.FORM_RAW_ARGS)), BorderLayout.NORTH);
         p.add(new JScrollPane(rawArgsArea), BorderLayout.CENTER);
         // 这里<b>不</b>再放一条工作目录行。
         //
