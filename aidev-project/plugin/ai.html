@@ -59,6 +59,16 @@
 </head>
 <body class="theme-classic">
 
+<!--
+  网页运行时探测器。
+
+  这条横幅<b>由脚本自己删掉</b> —— 所以：
+    看到它  = 网页里的 JavaScript 没有运行（面板不可能工作）
+    看不到  = 脚本跑了
+  没有显示器、也没法开控制台时，这是唯一一个不用猜的判断。
+-->
+<div id="boot">正在检查网页运行时……如果这句话一直不消失，说明网页里的 JavaScript 没有运行。</div>
+
 <header>
   <b id="title">AI 助手</b>
   <span id="status">正在检查…</span>
@@ -107,6 +117,26 @@ var abortFn = null;
 var history = [];            // [{role, content}]，只保留问答，不含 system
 
 var el = function (id) { return document.getElementById(id); };
+
+/* 脚本跑到这里就说明 JavaScript 在执行 —— 把探测器横幅撤掉。 */
+(function () {
+  var b = document.getElementById("boot");
+  if (b && b.parentNode) { b.parentNode.removeChild(b); }
+})();
+
+/* 未捕获的错误也要看得见：没有控制台，只能靠页面自己说。 */
+window.onerror = function (msg, src, line, col) {
+  var box = document.getElementById("log");
+  if (box) {
+    var d = document.createElement("div");
+    d.className = "m e";
+    d.textContent = "脚本错误：" + msg + "  @" + line + ":" + col;
+    box.appendChild(d);
+  }
+  var s = document.getElementById("status");
+  if (s) { s.textContent = "脚本错误"; s.className = "bad"; }
+  return false;
+};
 
 /* ---------------- 文案（中英） ---------------- */
 var T = {

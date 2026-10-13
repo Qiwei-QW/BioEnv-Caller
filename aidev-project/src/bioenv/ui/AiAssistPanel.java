@@ -135,7 +135,10 @@ public final class AiAssistPanel extends JPanel {
         }
         AiWebView v;
         try {
-            v = AiWebView.open(html.toURI().toString());
+            // 用 Path.toUri() 而不是 File.toURI()：前者给 file:///D:/...，后者给
+            // file:/D:/...。minisvg（唯一已知能跑的同类插件）用的是前者，这里照抄 ——
+            // 在"为什么我的页面里 JS 不执行"还没定案之前，先和已知能跑的那个保持一致。
+            v = AiWebView.open(html.toPath().toUri().toString());
         } catch (Throwable t) {
             v = null;
         }
