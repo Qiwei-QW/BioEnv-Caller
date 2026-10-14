@@ -1959,7 +1959,7 @@ public final class MainPanel extends JPanel {
      * Panes are given minimum sizes so that dragging cannot collapse one out of
      * existence.
      */
-    private JSplitPane buildCenter() {
+    private javax.swing.JComponent buildCenter() {
         // Tools are grouped by the environment that provides them: that is the
         // structure discovery produces, and it is how a user thinks about
         // their installations (DESIGN.md P9).
@@ -2199,18 +2199,13 @@ public final class MainPanel extends JPanel {
         outerSplitPending = true;
 
         // 最外层再包一层：AI 助手在最左，默认收起。
-        aiAssist = new AiAssistPanel(new Runnable() {
-            @Override
-            public void run() {
-                toggleAiAssist();
-            }
-        });
+        aiAssist = new AiAssistPanel();
         aiAssist.setCollapsed(true);
 
         // 最左那条图标栏常驻 —— 它是入口，不能跟着面板一起收起。
         // 以后加"运行历史""设置"只需再 add 一个图标，布局不用动。
         leftRail = new LeftRail();
-        leftRail.add("ai", I18n.t(Strings.AI_TITLE), LeftRail.chatIcon(),
+        leftRail.add("ai", I18n.t(Strings.AI_TITLE), LeftRail.robotIcon(),
                 new LeftRail.Action() {
                     @Override
                     public void run() {
@@ -2219,19 +2214,20 @@ public final class MainPanel extends JPanel {
                 });
         leftRail.select("ai");
 
+        // 左列宽度是<b>固定</b>的：图标栏，加上展开时的 AI 面板。
+        //
+        // 刻意不用 JSplitPane：侧栏宽度是设计定下来的，不该让用户拖着改 ——
+        // 拖窄了对话没法看，拖宽了又白挤掉命令树。原来那一版是可拖的，这里改成定宽。
         javax.swing.JPanel leftColumn = new javax.swing.JPanel(new java.awt.BorderLayout());
         leftColumn.setName("bioenv.leftColumn");
         leftColumn.add(leftRail, java.awt.BorderLayout.WEST);
         leftColumn.add(aiAssist, java.awt.BorderLayout.CENTER);
 
-        aiSplit = new javax.swing.JSplitPane(
-                javax.swing.JSplitPane.HORIZONTAL_SPLIT, leftColumn, split);
-        // resizeWeight 0：窗口变大时把多出来的宽度给右边内容，而不是给 AI 栏。
-        aiSplit.setResizeWeight(0);
-        aiSplit.setDividerSize(6);
-        aiSplit.setBorder(null);
-        aiSplitPending = true;
-        return aiSplit;
+        javax.swing.JPanel whole = new javax.swing.JPanel(new java.awt.BorderLayout());
+        whole.setName("bioenv.mainArea");
+        whole.add(leftColumn, java.awt.BorderLayout.WEST);
+        whole.add(split, java.awt.BorderLayout.CENTER);
+        return whole;
     }
 
     /**
@@ -2246,23 +2242,20 @@ public final class MainPanel extends JPanel {
 
     /** 展开/收起 AI 助手。 */
     private void toggleAiAssist() {
-        if (aiAssist == null || aiSplit == null) {
+        if (aiAssist == null) {
             return;
         }
         boolean collapsed = !aiAssist.isCollapsed();
+        // 收起是整块隐藏：左列就只剩那条图标栏，宽度由布局自己算出来。
         aiAssist.setCollapsed(collapsed);
-        // 图标栏一直占着，所以分隔条 = 图标栏宽度 + 面板宽度。
-        int width = LeftRail.WIDTH
-                + (collapsed ? AiAssistPanel.COLLAPSED_WIDTH : AiAssistPanel.EXPANDED_WIDTH);
-        aiSplit.setDividerLocation(width);
         if (!collapsed) {
             // 展开时才去创建网页：构造阶段绝不碰网页运行时。
             aiAssist.ensureLoaded();
             aiAssist.pushTheme(UiTheme.current());
             aiAssist.pushLang(bioenv.i18n.Lang.EN == I18n.get() ? "en" : "zh");
         }
-        aiSplit.revalidate();
-        aiSplit.repaint();
+        revalidate();
+        repaint();
     }
 
     /**
@@ -2291,13 +2284,6 @@ public final class MainPanel extends JPanel {
             outerSplit.setDividerLocation(Math.max(min, Math.min(want, max)));
             outerSplit.setResizeWeight(0.0); // keep the tree width as set when resizing
             outerSplitPending = false;
-        }
-        if (aiSplitPending && aiSplit != null && aiSplit.getWidth() > 0) {
-            // 默认收起：等布局完成再设宽度，之前设会被布局覆盖掉
-            // （outerSplit 那边为同样的事吃过一次亏）。
-            aiSplit.setDividerLocation(LeftRail.WIDTH + AiAssistPanel.COLLAPSED_WIDTH);
-            aiSplit.setResizeWeight(0.0);
-            aiSplitPending = false;
         }
 
     }

@@ -143,24 +143,27 @@ public final class LeftRail extends JPanel {
     // 现成的图标
     // ------------------------------------------------------------------
 
-    /** 对话气泡：AI 助手。 */
-    public static Icon chatIcon() {
+    /** 小机器人：AI 助手。 */
+    public static Icon robotIcon() {
         return new Shape() {
             @Override
             public void draw(Graphics2D g, int size, Color color) {
                 g.setColor(color);
-                g.setStroke(new BasicStroke(1.8f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-                int w = size - 6;
-                int h = w - 4;
-                g.drawRoundRect(3, 3, w, h, 6, 6);
-                // 尾巴
-                g.drawLine(6, 3 + h, 9, 3 + h + 4);
-                g.drawLine(9, 3 + h + 4, 13, 3 + h);
-                // 三个点
-                int y = 3 + h / 2;
-                g.fillOval(7, y - 1, 3, 3);
-                g.fillOval(12, y - 1, 3, 3);
-                g.fillOval(17, y - 1, 3, 3);
+                g.setStroke(new BasicStroke(1.7f, BasicStroke.CAP_ROUND,
+                        BasicStroke.JOIN_ROUND));
+                // 天线
+                g.drawLine(12, 2, 12, 5);
+                g.fillOval(10, 0, 4, 4);
+                // 头
+                g.drawRoundRect(4, 6, 16, 13, 5, 5);
+                // 眼睛
+                g.fillOval(8, 10, 3, 3);
+                g.fillOval(14, 10, 3, 3);
+                // 嘴
+                g.drawLine(9, 15, 15, 15);
+                // 两侧的耳朵
+                g.drawLine(4, 11, 2, 11);
+                g.drawLine(20, 11, 22, 11);
             }
         };
     }

@@ -46,9 +46,6 @@ import bioenv.i18n.Strings;
  */
 public final class AiAssistPanel extends JPanel {
 
-    private final Runnable onToggle;
-    private final JLabel title = new JLabel(I18n.t(Strings.AI_TITLE));
-    private final JButton toggle = new JButton("◀");
     private final JPanel body = new JPanel(new BorderLayout());
 
     private AiWebView view;
@@ -60,31 +57,10 @@ public final class AiAssistPanel extends JPanel {
     private String theme = "classic";
     private String lang = "zh";
 
-    public AiAssistPanel(Runnable onToggleCollapse) {
-        this.onToggle = onToggleCollapse;
+    public AiAssistPanel() {
         setLayout(new BorderLayout());
         setMinimumSize(new Dimension(0, 0));
 
-        JPanel head = new JPanel(new BorderLayout(4, 0));
-        head.setBorder(BorderFactory.createEmptyBorder(2, 6, 2, 4));
-        title.setFont(title.getFont().deriveFont(java.awt.Font.BOLD));
-        UiTheme.role(title, "accent");
-        head.add(title, BorderLayout.WEST);
-
-        toggle.setMargin(new java.awt.Insets(0, 6, 0, 6));
-        toggle.setFocusable(false);
-        toggle.setToolTipText(I18n.t(Strings.AI_COLLAPSE));
-        toggle.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                if (AiAssistPanel.this.onToggle != null) {
-                    AiAssistPanel.this.onToggle.run();
-                }
-            }
-        });
-        head.add(toggle, BorderLayout.EAST);
-
-        add(head, BorderLayout.NORTH);
         add(body, BorderLayout.CENTER);
 
         // 先把"还没加载"这一句放上；真正显示时会被替换。
@@ -103,14 +79,17 @@ public final class AiAssistPanel extends JPanel {
     /** 展开时的默认宽度。 */
     public static final int EXPANDED_WIDTH = 360;
 
+    /**
+     * 收起 / 展开。
+     *
+     * <p>收起是<b>整块藏掉</b>，不是"缩窄"：入口已经是最左那条常驻的图标栏，
+     * 这一栏收起来就该什么都不剩。以前只藏正文、留着表头，结果收起后还挂着一行
+     * "AI 助手 ◀" —— 既多余又占宽度。
+     */
     public void setCollapsed(boolean value) {
         this.collapsed = value;
-        toggle.setText(value ? "▶" : "◀");
-        toggle.setToolTipText(I18n.t(value ? Strings.AI_EXPAND : Strings.AI_COLLAPSE));
-        if (body != null) {
-            body.setVisible(!value);
-        }
-        setPreferredSize(new Dimension(value ? COLLAPSED_WIDTH : EXPANDED_WIDTH, 0));
+        setVisible(!value);
+        setPreferredSize(new Dimension(value ? 0 : EXPANDED_WIDTH, 0));
         revalidate();
         repaint();
     }
@@ -186,8 +165,6 @@ public final class AiAssistPanel extends JPanel {
     /** 跟着插件的语言走（zh / en）。 */
     public void pushLang(String code) {
         lang = "en".equalsIgnoreCase(code) ? "en" : "zh";
-        title.setText(I18n.t(Strings.AI_TITLE));
-        toggle.setToolTipText(I18n.t(collapsed ? Strings.AI_EXPAND : Strings.AI_COLLAPSE));
         if (view != null) {
             view.run("window.tbvAi && window.tbvAi.setLang(" + jsString(lang) + ")");
         }
