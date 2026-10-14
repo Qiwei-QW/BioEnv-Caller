@@ -104,12 +104,18 @@ public final class MainLayoutTest {
         // 这一条是**新约定**：最左边那一列现在是 AI 助手（默认收起），
         // 命令树退到它右边。原来这里断言"最左是树"，布局改了，断言也跟着改 ——
         // 但改的是"最左是什么"，不是把数字调松。
-        check("the assistant is on the far left",
-                outer.getLeftComponent() instanceof bioenv.ui.AiAssistPanel);
-        if (outer.getLeftComponent() instanceof bioenv.ui.AiAssistPanel) {
-            check("and it starts collapsed",
-                    ((bioenv.ui.AiAssistPanel) outer.getLeftComponent()).isCollapsed());
-        }
+        // 约定又往前走了一步：最左是**常驻的图标栏**（Activity bar 那种），
+        // AI 面板在它右边、默认收起。图标栏是入口，不能跟着面板一起收。
+        // 注意这一层不再是 AiAssistPanel 本身，而是"图标栏 + 面板"那一列。
+        check("a rail exists", find(p, bioenv.ui.LeftRail.class) != null);
+        check("the rail is on the far left",
+                outer.getLeftComponent() instanceof Container
+                && find((Container) outer.getLeftComponent(),
+                        bioenv.ui.LeftRail.class) != null);
+        bioenv.ui.AiAssistPanel assistant =
+                find((Container) outer.getLeftComponent(), bioenv.ui.AiAssistPanel.class);
+        check("the assistant sits to the right of the rail", assistant != null);
+        check("and it starts collapsed", assistant != null && assistant.isCollapsed());
 
         line("[the tree is the left of the next split in]");
         // 按<b>内容</b>找那一层，不按层数：以后再往外包东西也不会坏。
@@ -388,6 +394,22 @@ public final class MainLayoutTest {
                 JSplitPane found = treeSplit((Container) ch);
                 if (found != null) {
                     return found;
+                }
+            }
+        }
+        return null;
+    }
+
+    /** 在组件树里找第一个某类型的组件。 */
+    private static <T extends Component> T find(Container c, Class<T> type) {
+        for (Component ch : c.getComponents()) {
+            if (type.isInstance(ch)) {
+                return type.cast(ch);
+            }
+            if (ch instanceof Container) {
+                T hit = find((Container) ch, type);
+                if (hit != null) {
+                    return hit;
                 }
             }
         }

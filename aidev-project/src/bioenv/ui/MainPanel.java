@@ -192,6 +192,8 @@ public final class MainPanel extends JPanel {
      * 和跟主题语言。见 {@link AiAssistPanel} / {@link bioenv.ai.AiWebView}。
      */
     private AiAssistPanel aiAssist;
+    /** 最左侧常驻的图标栏（activity bar）。 */
+    private LeftRail leftRail;
     private javax.swing.JSplitPane aiSplit;
     /**
      * 主题或语言一变就把它们推给网页。
@@ -2204,14 +2206,42 @@ public final class MainPanel extends JPanel {
             }
         });
         aiAssist.setCollapsed(true);
+
+        // 最左那条图标栏常驻 —— 它是入口，不能跟着面板一起收起。
+        // 以后加"运行历史""设置"只需再 add 一个图标，布局不用动。
+        leftRail = new LeftRail();
+        leftRail.add("ai", I18n.t(Strings.AI_TITLE), LeftRail.chatIcon(),
+                new LeftRail.Action() {
+                    @Override
+                    public void run() {
+                        toggleAiAssist();
+                    }
+                });
+        leftRail.select("ai");
+
+        javax.swing.JPanel leftColumn = new javax.swing.JPanel(new java.awt.BorderLayout());
+        leftColumn.setName("bioenv.leftColumn");
+        leftColumn.add(leftRail, java.awt.BorderLayout.WEST);
+        leftColumn.add(aiAssist, java.awt.BorderLayout.CENTER);
+
         aiSplit = new javax.swing.JSplitPane(
-                javax.swing.JSplitPane.HORIZONTAL_SPLIT, aiAssist, split);
+                javax.swing.JSplitPane.HORIZONTAL_SPLIT, leftColumn, split);
         // resizeWeight 0：窗口变大时把多出来的宽度给右边内容，而不是给 AI 栏。
         aiSplit.setResizeWeight(0);
         aiSplit.setDividerSize(6);
         aiSplit.setBorder(null);
         aiSplitPending = true;
         return aiSplit;
+    }
+
+    /**
+     * 最左侧那条图标栏。
+     *
+     * <p>公开出来是<b>给布局测试用的</b>：测试要能断言"最左是图标栏、命令树在它右边"，
+     * 而又不该去认内部字段名。
+     */
+    public LeftRail leftRail() {
+        return leftRail;
     }
 
     /** 展开/收起 AI 助手。 */
@@ -2221,7 +2251,9 @@ public final class MainPanel extends JPanel {
         }
         boolean collapsed = !aiAssist.isCollapsed();
         aiAssist.setCollapsed(collapsed);
-        int width = collapsed ? AiAssistPanel.COLLAPSED_WIDTH : AiAssistPanel.EXPANDED_WIDTH;
+        // 图标栏一直占着，所以分隔条 = 图标栏宽度 + 面板宽度。
+        int width = LeftRail.WIDTH
+                + (collapsed ? AiAssistPanel.COLLAPSED_WIDTH : AiAssistPanel.EXPANDED_WIDTH);
         aiSplit.setDividerLocation(width);
         if (!collapsed) {
             // 展开时才去创建网页：构造阶段绝不碰网页运行时。
@@ -2263,7 +2295,7 @@ public final class MainPanel extends JPanel {
         if (aiSplitPending && aiSplit != null && aiSplit.getWidth() > 0) {
             // 默认收起：等布局完成再设宽度，之前设会被布局覆盖掉
             // （outerSplit 那边为同样的事吃过一次亏）。
-            aiSplit.setDividerLocation(AiAssistPanel.COLLAPSED_WIDTH);
+            aiSplit.setDividerLocation(LeftRail.WIDTH + AiAssistPanel.COLLAPSED_WIDTH);
             aiSplit.setResizeWeight(0.0);
             aiSplitPending = false;
         }

@@ -92,8 +92,14 @@ public final class AiAssistPanel extends JPanel {
     }
 
     /** 折叠状态的箭头方向由外部决定（它知道分隔条的位置）。 */
-    /** 收起时只留窄窄一条（标题 + 箭头）。留一条而不是缩到 0：缩到 0 就点不开了。 */
-    public static final int COLLAPSED_WIDTH = 30;
+    /**
+     * 收起时的宽度：<b>0</b>。
+     *
+     * <p>以前这里是 30 —— 因为那时这一栏自己就是入口，缩到 0 就没法点开了。
+     * 现在入口是左边那条常驻的 {@link LeftRail}，所以收起就该真的收干净，
+     * 只在最左留那条图标栏。
+     */
+    public static final int COLLAPSED_WIDTH = 0;
     /** 展开时的默认宽度。 */
     public static final int EXPANDED_WIDTH = 360;
 

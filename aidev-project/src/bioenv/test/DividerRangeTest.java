@@ -106,13 +106,32 @@ public final class DividerRangeTest {
      * <p>跳过左半边是 AI 助手的那一层 —— 它包在最外面，取"第一个水平分隔条"会拿到它，
      * 而它的分隔条宽度是助手的收起宽度（30），不是树的宽度。
      */
+    /**
+     * 左半边是"图标栏 + AI 面板"那一列吗。
+     *
+     * <p>那一层的分隔条宽度是图标栏加面板宽度，<b>不是命令树的宽度</b>，
+     * 所以找树那一层时必须把它跳过。按内容判断，不按层数 —— 以后再往外包东西也不会坏。
+     */
+    private static boolean containsRail(Component c) {
+        if (c instanceof bioenv.ui.LeftRail) {
+            return true;
+        }
+        if (c instanceof Container) {
+            for (Component ch : ((Container) c).getComponents()) {
+                if (containsRail(ch)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     private static JSplitPane findHorizontal(Container c) {
         for (Component child : c.getComponents()) {
             if (child instanceof JSplitPane
                     && ((JSplitPane) child).getOrientation()
                         == JSplitPane.HORIZONTAL_SPLIT
-                    && !(((JSplitPane) child).getLeftComponent()
-                        instanceof bioenv.ui.AiAssistPanel)) {
+                    && !containsRail(((JSplitPane) child).getLeftComponent())) {
                 return (JSplitPane) child;
             }
             if (child instanceof Container) {
