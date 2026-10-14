@@ -7,19 +7,27 @@
   :root{
     --bg:#f7f7f8; --panel:#ffffff; --line:#d8d8dc; --fg:#22242a; --muted:#6b6f76;
     --accent:#1f6feb; --user:#e8f0fe; --ai:#f2f3f5; --err:#b3261e; --ok:#1a7f37; --warn:#9a6700;
+    --code:#eff0f2;
     --mono:Consolas,"Courier New",monospace;
   }
   body.theme-dark{
     --bg:#1e1e22; --panel:#26262b; --line:#3a3a42; --fg:#e6e6ea; --muted:#9aa0a6;
     --accent:#4c8dff; --user:#2a3a55; --ai:#2c2c33; --err:#ff8a80; --ok:#7ee787; --warn:#e3b341;
+    --code:#17171b;
   }
-  body.theme-light{ /* 浅色：比 classic 更白更亮 */ }
   *{box-sizing:border-box}
   html,body{height:100%;margin:0}
   body{
     display:flex;flex-direction:column;background:var(--bg);color:var(--fg);
     font:13px/1.55 "Microsoft YaHei",system-ui,sans-serif;
   }
+
+  /* 网页运行时探测器：脚本一跑就把这条删掉 */
+  #boot{
+    flex:none;padding:6px 10px;font-size:12px;
+    background:#fff8e1;color:#7a5900;border-bottom:1px solid #ffe08a;
+  }
+
   header{
     padding:6px 10px;border-bottom:1px solid var(--line);background:var(--panel);
     display:flex;align-items:center;gap:8px;flex:none;
@@ -27,16 +35,54 @@
   header b{font-size:13px}
   #status{font-size:11px;color:var(--muted);margin-left:auto;text-align:right}
   #status.ok{color:var(--ok)} #status.bad{color:var(--err)} #status.warn{color:var(--warn)}
+
+  #diag{flex:none}
   #log{flex:1;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:8px}
-  .m{max-width:100%;padding:7px 10px;border-radius:8px;white-space:pre-wrap;word-break:break-word}
-  .m.u{background:var(--user);align-self:flex-end}
+
+  .m{max-width:100%;padding:7px 10px;border-radius:8px;overflow-wrap:anywhere}
+  .m.u{background:var(--user);align-self:flex-end;white-space:pre-wrap}
   .m.a{background:var(--ai);align-self:flex-start;border:1px solid var(--line)}
-  .m.e{background:transparent;color:var(--err);border:1px dashed var(--err);font-size:12px}
+  .m.e{background:transparent;color:var(--err);border:1px dashed var(--err);font-size:12px;white-space:pre-wrap}
   .m.s{background:transparent;color:var(--muted);font-size:12px;padding:2px 10px}
-  details.ctx{border:1px solid var(--line);border-radius:6px;background:var(--panel);font-size:12px}
-  details.ctx summary{cursor:pointer;padding:5px 8px;color:var(--muted)}
-  details.ctx pre{margin:0;padding:8px;max-height:200px;overflow:auto;font-family:var(--mono);font-size:11px}
+
+  /* Markdown 渲染出来的东西 */
+  .m.a p{margin:0 0 6px}
+  .m.a p:last-child{margin-bottom:0}
+  .m.a pre{
+    margin:6px 0;padding:8px;overflow-x:auto;border-radius:6px;
+    background:var(--code);border:1px solid var(--line);
+    font-family:var(--mono);font-size:12px;line-height:1.45;white-space:pre;
+  }
+  .m.a code{font-family:var(--mono);font-size:12px;background:var(--code);
+            padding:0 3px;border-radius:3px}
+  .m.a pre code{background:none;padding:0}
+  .m.a ul{margin:4px 0;padding-left:18px}
+
+  /* 诊断卡：折叠成一行，不占地方；它不属于对话，清空会话不会被清掉 */
+  details.diag{
+    border:1px solid var(--line);border-left:3px solid var(--ok);
+    background:var(--panel);font-size:12px;
+  }
+  details.diag.bad{border-left-color:var(--err)}
+  details.diag summary{cursor:pointer;padding:4px 10px;color:var(--muted)}
+  details.diag table{border-collapse:collapse;margin:2px 0 8px 10px}
+  details.diag td{padding:1px 12px 1px 0;vertical-align:top}
+  details.diag td:first-child{color:var(--muted);white-space:nowrap}
+  details.diag code{font-family:var(--mono);font-size:11px}
+
   footer{flex:none;border-top:1px solid var(--line);background:var(--panel);padding:8px}
+  .sess{display:flex;gap:6px;align-items:center;margin-bottom:6px}
+  .sess select{
+    flex:1;min-width:0;padding:3px 6px;border:1px solid var(--line);border-radius:6px;
+    background:var(--bg);color:var(--fg);font-size:12px;
+  }
+  .sess button{padding:3px 8px;font-size:12px}
+
+  details.ctx{border:1px solid var(--line);border-radius:6px;background:var(--bg);font-size:12px;margin-bottom:6px}
+  details.ctx summary{cursor:pointer;padding:5px 8px;color:var(--muted)}
+  details.ctx pre{margin:0;padding:8px;max-height:180px;overflow:auto;
+                  font-family:var(--mono);font-size:11px;white-space:pre-wrap}
+
   .row{display:flex;gap:6px;align-items:flex-end}
   textarea{
     flex:1;resize:none;height:56px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;
@@ -49,12 +95,6 @@
   button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
   button:disabled{opacity:.5;cursor:default}
   .bar{display:flex;justify-content:space-between;align-items:center;margin-top:6px;font-size:11px;color:var(--muted)}
-  .diag{border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:10px 12px;font-size:12px}
-  .diag h3{margin:0 0 6px;font-size:13px}
-  .diag code{font-family:var(--mono);font-size:11px}
-  .diag table{border-collapse:collapse;margin-top:6px}
-  .diag td{padding:2px 10px 2px 0;vertical-align:top}
-  .diag td:first-child{color:var(--muted);white-space:nowrap}
 </style>
 </head>
 <body class="theme-classic">
@@ -74,14 +114,23 @@
   <span id="status">正在检查…</span>
 </header>
 
+<!-- 诊断卡单独放：它不属于对话，清空会话时不该被清掉 -->
+<div id="diag"></div>
+
 <div id="log"></div>
 
 <footer>
+  <div class="sess">
+    <select id="sessSel"></select>
+    <button id="sessNew">新建</button>
+    <button id="sessClear">清空</button>
+    <button id="sessDel">删除</button>
+  </div>
   <details class="ctx" id="ctxBox">
     <summary id="ctxSummary">本次将发送的内容</summary>
     <pre id="ctxPre">（无）</pre>
   </details>
-  <div class="row" style="margin-top:6px">
+  <div class="row">
     <textarea id="ask" placeholder="按 Enter 发送，Shift+Enter 换行"></textarea>
     <button id="send" class="primary">发送</button>
     <button id="stop" disabled>停止</button>
@@ -93,6 +142,21 @@
 </footer>
 
 <script>
+/* ================================================================
+ * BioEnv Caller · AI 助手（网页侧）
+ *
+ * 这个页面跑在 TBtools 注入的网页运行时里，通过 window.tbtools.ai 调用
+ * TBtools 的内置模型。
+ *
+ * ⚠ 这套接口是**实测出来的契约，不是官方文档** —— 用法从第三方插件 minisvg
+ *   的实际用法反推得到。升级 TBtools 之后要重新验证这里。
+ *
+ * 两条实测出来的行为，代码按它们写：
+ *   1. onDelta(s) 给的是**增量**（不是累计全文）—— 所以下面是累加；
+ *      最终以 promise 的返回值覆盖，避免两边不一致。
+ *   2. 桥不存在时 window.tbtools 整个是 undefined —— 必须先探测再用。
+ * ================================================================ */
+
 /* 整个脚本包在 IIFE 里。
  *
  * 不这么做的话，顶层的 var / function 会落到 window 上，撞到 Window 的只读属性就
@@ -109,29 +173,6 @@
  */
 (function () {
 "use strict";
-
-/* ================================================================
- * BioEnv Caller · AI 助手（网页侧）
- *
- * 这个页面跑在 TBtools 注入的网页运行时里，通过 window.tbtools.ai 调用
- * TBtools 的内置模型。
- *
- * ⚠ 这套接口是**实测出来的契约，不是官方文档** —— 用法从第三方插件 minisvg
- *   的实际用法反推得到。升级 TBtools 之后要重新验证这里。
- *
- * 两条实测出来的行为，代码按它们写：
- *   1. onDelta(s) 给的是**增量**（不是累计全文）—— 所以下面是累加；
- *      最终以 promise 的返回值覆盖，避免两边不一致。
- *   2. 桥不存在时 window.tbtools 整个是 undefined —— 必须先探测再用。
- * ================================================================ */
-
-var bridge = null;           // window.tbtools.ai，没有就是 null
-var context = null;          // Java 推过来的上下文
-var busy = false;
-var abortFn = null;
-var turns = [];            // [{role, content}]，只保留问答，不含 system
-
-var el = function (id) { return document.getElementById(id); };
 
 /* 脚本跑到这里就说明 JavaScript 在执行 —— 把探测器横幅撤掉。 */
 (function () {
@@ -159,28 +200,43 @@ var T = {
     title: "AI 助手",
     send: "发送", stop: "停止", ask: "按 Enter 发送，Shift+Enter 换行",
     ctx: "本次将发送的内容", none: "（无）",
-    chk: "正在检查…", noBridge: "桥不可用", ready: "就绪", model: "模型：",
+    chk: "正在检查…", noBridge: "桥不可用", ready: "就绪",
+    newS: "新建", clearS: "清空", delS: "删除",
+    sessNew: "新建会话", sessClear: "清空当前会话", sessDel: "删除这个会话",
+    untitled: "新会话",
+    confirmDel: "删除这个会话？它的对话记录会一起删掉。",
+    storeOff: "（本次运行内有效：网页存储不可用）",
     noBridgeWhy: "当前 TBtools 版本没有提供内置模型接口（需要 TBtools 2.558 或更高）。"
       + "这个面板会一直留着，升级 TBtools 之后它会自动可用。",
     ping: "试一句", pingPh: "确认模型能回话（这一步不消耗上下文）",
     pingOk: "模型回话了：", pingFail: "模型没回话：",
-    empty: "先在左边选一个工具，然后问它「怎么用」或者「这个参数什么意思」。"
+    empty: "选一个工具，然后直接问 —— 它的帮助已经自动带上了。",
+    diagOk: "内置模型接口可用（点开看详情）",
+    diagBad: "内置模型接口不可用（点开看详情）"
   },
   en: {
     title: "AI assistant",
     send: "Send", stop: "Stop", ask: "Enter to send, Shift+Enter for a new line",
     ctx: "What will be sent", none: "(nothing)",
-    chk: "Checking…", noBridge: "No bridge", ready: "Ready", model: "Model: ",
+    chk: "Checking…", noBridge: "No bridge", ready: "Ready",
+    newS: "New", clearS: "Clear", delS: "Delete",
+    sessNew: "New conversation", sessClear: "Clear this conversation",
+    sessDel: "Delete this conversation",
+    untitled: "New conversation",
+    confirmDel: "Delete this conversation? Its messages go with it.",
+    storeOff: "(kept for this run only: web storage is unavailable)",
     noBridgeWhy: "This TBtools build does not expose the built-in model interface "
       + "(TBtools 2.558 or newer is required). The panel stays here and becomes usable "
       + "after you upgrade TBtools.",
     ping: "Say hello", pingPh: "Check the model answers (uses no context)",
     pingOk: "The model answered: ", pingFail: "The model did not answer: ",
-    empty: "Pick a tool on the left, then ask how to use it or what a parameter means."
+    empty: "Pick a tool and just ask - its help is already attached.",
+    diagOk: "Built-in model interface is available (click for details)",
+    diagBad: "Built-in model interface is unavailable (click for details)"
   }
 };
 var lang = "zh";
-function t(k) { return (T[lang] || T.zh)[k]; }
+function t(k) { return (T[lang] || T.zh)[k] || k; }
 
 /* ---------------- 错误分类 ----------------
  * 这几个码来自 minisvg 的实测（tbWhy）。每一码用户该做的事都不同，
@@ -190,7 +246,6 @@ function why(code) {
     denied: "TBtools 拒绝了这次请求。可以点「脱敏后重试」——去掉路径和样本名再发一次。",
     busy: "TBtools 正忙，等一下再试。",
     closed: "到 TBtools 模型的桥已经关闭。",
-
     invalid: "TBtools 读不懂这次请求（内容可能有问题）。",
     too_many: "请求太多或消息条数超限。",
     too_large: "内容太长。试试少带一些上下文。",
@@ -209,20 +264,219 @@ function why(code) {
   return (lang === "en" ? en : zh)[code] || String(code);
 }
 
-/* ---------------- 界面 ---------------- */
-function applyLang() {
-  document.documentElement.lang = lang === "en" ? "en" : "zh";
-  el("title").textContent = t("title");
-  el("send").textContent = busy ? t("stop") : t("send");
-  el("stop").textContent = t("stop");
-  el("ask").placeholder = t("ask");
-  el("ctxSummary").textContent = t("ctx");
+/* ---------------- 状态 ---------------- */
+var bridge = null;           // window.tbtools.ai，没有就是 null
+var context = null;          // Java 推过来的上下文
+var busy = false;
+var abortFn = null;
+
+var sessions = [];           // [{id,title,at,turns:[{role,content}]}]
+var currentId = null;
+var turns = [];              // 当前会话的对话（与 sessions 里那一条是同一个数组）
+
+var el = function (id) { return document.getElementById(id); };
+var storeOk = true;          // file:// 下 localStorage 可能直接抛，那就退化成"这次运行内有效"
+
+/* ================================================================
+ * Markdown 渲染
+ *
+ * 模型回的是 Markdown。以前直接当纯文本塞进 textContent，于是用户看到的是
+ * 一堆光秃秃的 ``` 和 ** —— 那正是"回答有点乱"的来源。
+ *
+ * 安全上只有一条规矩：**先把要显示的文本整个转义，再往上加标签**。
+ * 所以模型无论回什么，都不可能往页面里注入 HTML。
+ * ================================================================ */
+function esc(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function md(src) {
+  var text = String(src == null ? "" : src);
+
+  // 代码块先抽出来，免得里面的 * 和 # 被后面的规则改坏。
+  var blocks = [];
+  function stash(m, code) {
+    blocks.push(code.replace(/\n$/, ""));
+    return "\u0000B" + (blocks.length - 1) + "\u0000";
+  }
+  text = text.replace(/```[^\n]*\n?([\s\S]*?)```/g, stash);
+  text = text.replace(/~~~[^\n]*\n?([\s\S]*?)~~~/g, stash);
+
+  var out = esc(text);
+
+  out = out.replace(/`([^`\n]+)`/g, "<code>$1</code>");
+  out = out.replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>");
+  out = out.replace(/(^|[^*\w])\*([^*\n]+)\*/g, "$1<i>$2</i>");
+  out = out.replace(/^#{1,6}\s+(.+)$/gm, "<b>$1</b>");
+  // 连续的列表项合成一个 <ul>，而不是一行一个项目符号堆着
+  out = out.replace(/(?:^[ \t]*[-*+]\s+.+$(?:\n|$))+/gm, function (chunk) {
+    var items = chunk.replace(/[ \t\n]+$/, "").split("\n").filter(function (x) {
+      return x.trim();
+    }).map(function (x) {
+      return "<li>" + x.replace(/^[ \t]*[-*+]\s+/, "") + "</li>";
+    }).join("");
+    return "<ul>" + items + "</ul>";
+  });
+  out = out.replace(/^[ \t]*(\d+)\.\s+(.+)$/gm, "$1. $2");
+
+  var parts = out.split(/\n{2,}/);
+  var html = "";
+  for (var i = 0; i < parts.length; i++) {
+    var p = parts[i].replace(/^\n+|\n+$/g, "");
+    if (!p) { continue; }
+    if (/^<(ul|pre)/.test(p)) { html += p; } else { html += "<p>" + p.replace(/\n/g, "<br>") + "</p>"; }
+  }
+
+  html = html.replace(/\u0000B(\d+)\u0000/g, function (m, i) {
+    return "<pre><code>" + esc(blocks[+i]) + "</code></pre>";
+  });
+  // 代码块占位符在分段时被当成普通段落包进了 <p>，而 <pre> 不能放在 <p> 里。
+  // 判据必须放在"占位符还原之后"才看得见它 —— 放在前面是查不到的，自检就是这么发现的。
+  html = html.replace(/<p>(<pre>[\s\S]*?<\/pre>)<\/p>/g, "$1");
+  return html;
+}
+
+/* ================================================================
+ * 会话
+ *
+ * 以前只有一条对话，关掉就没了，也不能清空。这里给最小的会话管理：
+ * 新建 / 清空 / 删除 + 一个下拉选择，存在 localStorage 里。
+ *
+ * file:// 页面在 Chromium 里未必给 localStorage（不透明来源会直接抛），
+ * 所以每一次读写都包了 try/catch，拿不到就退化成"这次运行内有效"。
+ * ================================================================ */
+var SKEY = "bioenv.ai.sessions.v1";
+
+function loadStore() {
+  try {
+    var raw = localStorage.getItem(SKEY);
+    sessions = raw ? JSON.parse(raw) : [];
+    if (!(sessions instanceof Array)) { sessions = []; }
+  } catch (e) {
+    sessions = [];
+    storeOk = false;
+  }
+  for (var i = 0; i < sessions.length; i++) {
+    var s = sessions[i];
+    if (!s || typeof s !== "object") { continue; }
+    if (!(s.turns instanceof Array)) { s.turns = []; }
+    if (!s.id) { s.id = String(Date.now()) + "-" + i; }
+    if (typeof s.title !== "string") { s.title = ""; }
+  }
+}
+
+function saveStore() {
+  try {
+    localStorage.setItem(SKEY, JSON.stringify(sessions));
+  } catch (e) {
+    storeOk = false;
+  }
+}
+
+function titleOf(list) {
+  for (var i = 0; i < list.length; i++) {
+    if (list[i].role === "user") {
+      var s = String(list[i].content || "").replace(/\s+/g, " ").trim();
+      return s.length > 28 ? s.slice(0, 28) + "…" : s;
+    }
+  }
+  return "";
+}
+
+function renderSessions() {
+  var sel = el("sessSel");
+  if (!sel) { return; }
+  sel.innerHTML = "";
+  for (var i = 0; i < sessions.length; i++) {
+    var s = sessions[i];
+    var o = document.createElement("option");
+    o.value = s.id;
+    o.textContent = (s.title || t("untitled")) + "  (" + s.turns.length + ")";
+    sel.appendChild(o);
+  }
+  if (currentId) { sel.value = currentId; }
+  sel.title = storeOk ? "" : t("storeOff");
+}
+
+function newSession() {
+  var s = { id: String(Date.now()) + "-" + Math.floor(Math.random() * 1000),
+            title: "", at: Date.now(), turns: [] };
+  sessions.unshift(s);
+  currentId = s.id;
+  turns = s.turns;
+  saveStore();
+  renderSessions();
+  renderLog();
+}
+
+function selectSession(id) {
+  for (var i = 0; i < sessions.length; i++) {
+    if (sessions[i].id === id) {
+      currentId = id;
+      turns = sessions[i].turns;
+      renderSessions();
+      renderLog();
+      return;
+    }
+  }
+}
+
+function findCurrent() {
+  for (var i = 0; i < sessions.length; i++) {
+    if (sessions[i].id === currentId) { return sessions[i]; }
+  }
+  return null;
+}
+
+function clearCurrent() {
+  var s = findCurrent();
+  if (!s) { return; }
+  s.turns.length = 0;
+  s.title = "";
+  turns = s.turns;
+  saveStore();
+  renderSessions();
+  renderLog();
+}
+
+function deleteCurrent() {
+  var s = findCurrent();
+  if (!s) { return; }
+  if (s.turns.length && !window.confirm(t("confirmDel"))) { return; }
+  for (var i = 0; i < sessions.length; i++) {
+    if (sessions[i].id === currentId) { sessions.splice(i, 1); break; }
+  }
+  saveStore();
+  if (sessions.length) { selectSession(sessions[0].id); } else { newSession(); }
+}
+
+function touchTitle() {
+  var s = findCurrent();
+  if (s && !s.title) { s.title = titleOf(s.turns); }
+  saveStore();
+  renderSessions();
+}
+
+/* ================================================================
+ * 对话区
+ * ================================================================ */
+function renderLog() {
+  el("log").innerHTML = "";
+  for (var i = 0; i < turns.length; i++) {
+    var m = turns[i];
+    if (m.role === "user") {
+      bubble("u", m.content);
+    } else {
+      bubble("a", "").innerHTML = md(m.content);
+    }
+  }
+  if (!turns.length) { bubble("s", t("empty")); }
 }
 
 function bubble(kind, text) {
   var d = document.createElement("div");
   d.className = "m " + kind;
-  d.textContent = text;
+  d.textContent = text == null ? "" : text;
   el("log").appendChild(d);
   el("log").scrollTop = el("log").scrollHeight;
   return d;
@@ -234,7 +488,10 @@ function setStatus(text, cls) {
   s.className = cls || "";
 }
 
-/* ---------------- 启动诊断（这一步就是冒烟测试） ---------------- */
+/* ---------------- 启动诊断 ----------------
+ * 这一步就是冒烟测试：桥在不在、有哪些方法。折叠成一行，不占地方；
+ * 展开才看细节。它不放进对话区，所以清空会话不会把它清掉。
+ */
 function boot() {
   bridge = (window.tbtools && window.tbtools.ai) ? window.tbtools.ai : null;
 
@@ -243,36 +500,56 @@ function boot() {
   rows.push(["window.tbtools.ai", bridge ? "在" : "不在"]);
   if (bridge) {
     var keys = [];
-    for (var k in bridge) { keys.push(k); }
-    rows.push(["ai 上的方法", keys.length ? keys.join(", ") : "（枚举不到，可能是原生对象）"]);
+    try {
+      for (var k in bridge) { keys.push(k); }
+    } catch (e) {
+      keys.push("（枚举不到：" + e + "）");
+    }
+    rows.push(["ai 上的方法", keys.length ? keys.join(", ") : "（枚举不到）"]);
   }
   rows.push(["location", location.href]);
 
-  var html = '<div class="diag"><h3>'
-    + (bridge ? "内置模型接口可用" : "内置模型接口不可用")
-    + "</h3><table>";
-  for (var i = 0; i < rows.length; i++) {
-    html += "<tr><td>" + rows[i][0] + "</td><td><code>"
-      + String(rows[i][1]).replace(/</g, "&lt;") + "</code></td></tr>";
-  }
-  html += "</table>";
-  if (!bridge) {
-    html += '<p style="margin:8px 0 0">' + t("noBridgeWhy") + "</p>";
-  }
-  html += "</div>";
+  var details = document.createElement("details");
+  details.className = "diag" + (bridge ? "" : " bad");
+  var sum = document.createElement("summary");
+  sum.textContent = bridge ? t("diagOk") : t("diagBad");
+  details.appendChild(sum);
 
-  var box = document.createElement("div");
-  box.innerHTML = html;
-  el("log").appendChild(box);
+  if (bridge) {
+    var tb = document.createElement("table");
+    for (var i = 0; i < rows.length; i++) {
+      var tr = document.createElement("tr");
+      var c1 = document.createElement("td"); c1.textContent = rows[i][0];
+      var c2 = document.createElement("td");
+      var code = document.createElement("code"); code.textContent = String(rows[i][1]);
+      c2.appendChild(code);
+      tr.appendChild(c1); tr.appendChild(c2);
+      tb.appendChild(tr);
+    }
+    details.appendChild(tb);
+
+    var row = document.createElement("div");
+    row.style.cssText = "margin:0 0 8px 10px;display:flex;gap:8px;align-items:center";
+    var pingBtn = document.createElement("button");
+    pingBtn.id = "ping";
+    pingBtn.textContent = t("ping");
+    var hint = document.createElement("span");
+    hint.style.cssText = "font-size:11px;color:var(--muted)";
+    hint.textContent = t("pingPh");
+    row.appendChild(pingBtn); row.appendChild(hint);
+    details.appendChild(row);
+  } else {
+    var p = document.createElement("p");
+    p.style.cssText = "margin:4px 0 8px 10px";
+    p.textContent = t("noBridgeWhy");
+    details.appendChild(p);
+  }
+
+  el("diag").innerHTML = "";
+  el("diag").appendChild(details);
 
   if (bridge) {
     setStatus(t("ready"), "ok");
-    var b = document.createElement("div");
-    b.className = "row";
-    b.style.marginTop = "8px";
-    b.innerHTML = '<button id="ping">' + t("ping") + "</button>"
-      + '<span style="font-size:11px;color:var(--muted)">' + t("pingPh") + "</span>";
-    box.appendChild(b);
     el("ping").onclick = ping;
     if (typeof bridge.chat !== "function") {
       setStatus("ai.chat 不是函数 —— 接口形状和预期不同", "bad");
@@ -280,37 +557,30 @@ function boot() {
   } else {
     setStatus(t("noBridge"), "bad");
   }
-
-  bubble("s", t("empty"));
-  refreshCtx();
 }
 
 /* ---------------- 冒烟测试：让模型回一句 ---------------- */
 function ping() {
   var btn = el("ping");
+  if (!btn) { return; }
   btn.disabled = true;
+  var was = btn.textContent;
   btn.textContent = t("ping") + " …";
-  var got = null;
+  function done() { btn.disabled = false; btn.textContent = was; }
   try {
     var p = bridge.chat(
       [{ role: "user", content: "只回复两个字：通了" }],
       { onDelta: function () {} }
     );
     Promise.resolve(p).then(function (r) {
-      got = (typeof r === "string") ? r : "(非字符串返回值)";
-      bubble("a", t("pingOk") + got);
+      bubble("a", t("pingOk") + (typeof r === "string" ? r : "(非字符串返回值)"));
       setStatus(t("ready"), "ok");
     }).catch(function (e) {
       bubble("e", t("pingFail") + describe(e));
-      setStatus(t("noBridge"), "bad");
-    }).then(function () {
-      btn.disabled = false;
-      btn.textContent = t("ping");
-    });
+    }).then(done);
   } catch (e) {
     bubble("e", t("pingFail") + describe(e));
-    btn.disabled = false;
-    btn.textContent = t("ping");
+    done();
   }
 }
 
@@ -324,7 +594,6 @@ function describe(e) {
 
 /* ---------------- Java 推过来的接口 ---------------- */
 window.tbvAi = {
-  /** Java 推上下文；参数是 JSON 字符串。 */
   setContext: function (json) {
     try {
       context = (typeof json === "string") ? JSON.parse(json) : json;
@@ -333,18 +602,15 @@ window.tbvAi = {
     }
     refreshCtx();
   },
-  /** 主题：classic / light / dark —— 跟着插件的 UiTheme 走。 */
   setTheme: function (name) {
     var n = String(name || "classic").toLowerCase();
     document.body.className = "theme-" + (n === "dark" ? "dark" : (n === "light" ? "light" : "classic"));
     if (n === "dark") { document.body.classList.add("theme-dark"); }
   },
-  /** 语言：zh / en —— 跟着插件的 I18n 走。 */
   setLang: function (name) {
     lang = (String(name).toLowerCase() === "en") ? "en" : "zh";
     applyLang();
   },
-  /** Java 想主动问一句（预留给以后的"一键解释报错"）。 */
   ask: function (text) {
     el("ask").value = text || "";
     send();
@@ -356,15 +622,18 @@ function ctxText() {
   if (!context) { return ""; }
   var parts = [];
   if (context.tool) { parts.push("[工具] " + context.tool + (context.env ? "  @" + context.env : "")); }
-  if (context.mode) { parts.push("[连接] " + context.mode + (context.workdir ? "  工作目录：" + context.workdir : "")); }
+  if (context.mode) {
+    parts.push("[连接] " + context.mode + (context.workdir ? "  工作目录：" + context.workdir : ""));
+  } else if (context.workdir) {
+    parts.push("[工作目录] " + context.workdir);
+  }
   if (context.command) { parts.push("[当前命令]\n" + context.command); }
   if (context.options && context.options.length) {
     var lines = [];
     for (var i = 0; i < context.options.length; i++) {
       var o = context.options[i];
       lines.push("  " + o.flag + (o.arg ? " " + o.arg : "")
-        + (o.description ? "  — " + o.description : "")
-        + (o.typeReason ? "  [" + o.kind + ": " + o.typeReason + "]" : ""));
+        + (o.description ? "  — " + o.description : ""));
     }
     parts.push("[参数表]\n" + lines.join("\n"));
   }
@@ -372,27 +641,45 @@ function ctxText() {
   if (context.lastRun) {
     parts.push("[上次运行] 退出码 " + context.lastRun.exit + "\n" + (context.lastRun.tail || ""));
   }
-  if (context.docs) { parts.push("[插件用法（相关章节）]\n" + context.docs); }
+  if (context.docs) { parts.push("[插件用法]\n" + context.docs); }
   return parts.join("\n\n");
 }
 
 function refreshCtx() {
+  el("ctxPre").textContent = ctxText() || t("none");
   var txt = ctxText();
-  el("ctxPre").textContent = txt || t("none");
   el("budget").textContent = txt ? (txt.length + " 字符 / 上限约 32000") : "";
+}
+
+function applyLang() {
+  document.documentElement.lang = lang === "en" ? "en" : "zh";
+  el("title").textContent = t("title");
+  el("send").textContent = busy ? t("stop") : t("send");
+  el("stop").textContent = t("stop");
+  el("ask").placeholder = t("ask");
+  el("ctxSummary").textContent = t("ctx");
+  el("sessNew").textContent = t("newS");
+  el("sessClear").textContent = t("clearS");
+  el("sessDel").textContent = t("delS");
+  el("sessNew").title = t("sessNew");
+  el("sessClear").title = t("sessClear");
+  el("sessDel").title = t("sessDel");
+  boot();
+  renderSessions();
+  renderLog();
 }
 
 /* ---------------- 发送 ---------------- */
 function sysPrompt() {
-  var base = lang === "en"
+  return lang === "en"
     ? "You are the assistant built into the TBtools plugin BioEnv Caller. It gives a GUI "
       + "to bioinformatics command-line tools running on Linux (WSL or a remote host over SSH). "
       + "Answer from the context provided; if the context does not contain the answer, say so "
-      + "rather than guessing. Be concise and practical. Never invent parameter names."
+      + "rather than guessing. Never invent parameter names. Put commands in fenced code blocks. "
+      + "Keep answers short and practical."
     : "你是 TBtools 插件 BioEnv Caller 内置的助手。这个插件把 Linux（WSL 或 SSH 远程主机）上的"
       + "生信命令行工具变成图形界面。请只依据给你的上下文回答；上下文里没有的，就说不知道，不要编。"
-      + "回答要简短、可操作。绝对不要编造参数名。";
-  return base;
+      + "绝对不要编造参数名。给出命令时请放进代码块。回答要简短、可操作。";
 }
 
 function send() {
@@ -406,10 +693,15 @@ function send() {
   var ctx = ctxText();
   var full = ctx ? ("以下是当前状态：\n\n" + ctx + "\n\n---\n\n问题：" + q) : q;
 
+  // 空对话时把"选一个工具"那句提示清掉，免得它留在记录里。
+  if (!turns.length) { el("log").innerHTML = ""; }
   bubble("u", q);
 
+  // 发给模型的历史：只带 user/assistant，不带 system（system 单独放最前）。
   var msgs = [{ role: "system", content: sysPrompt() }];
-  for (var i = 0; i < turns.length; i++) { msgs.push(turns[i]); }
+  for (var i = 0; i < turns.length; i++) {
+    if (turns[i].role === "user" || turns[i].role === "assistant") { msgs.push(turns[i]); }
+  }
   msgs.push({ role: "user", content: full });
 
   var box = bubble("a", "");
@@ -438,13 +730,17 @@ function send() {
   abortFn = function () { try { if (p && p.requestId) { bridge.abort(p.requestId); } } catch (e) {} };
 
   Promise.resolve(p).then(function (r) {
-    if (typeof r === "string" && r) { box.textContent = r; }
+    var text = (typeof r === "string" && r) ? r : base;
+    box.innerHTML = md(text);
     turns.push({ role: "user", content: full });
-    turns.push({ role: "assistant", content: box.textContent });
-    if (turns.length > 12) { turns = turns.slice(turns.length - 12); }
+    turns.push({ role: "assistant", content: text });
+    // 历史太长会挤爆请求预算，留最近若干轮就够。
+    if (turns.length > 24) { turns.splice(0, turns.length - 24); }
+    touchTitle();
   }).catch(function (e) {
-    box.className = "m e";
+    // 失败的那一轮不进历史 —— 否则下次会把它当上下文再发一遍。
     var code = (typeof e === "string") ? e : (e && (e.code || e.reason));
+    box.className = "m e";
     box.textContent = describe(e);
     if (code === "denied") { addRetry(q); }
   }).then(finish);
@@ -454,6 +750,7 @@ function send() {
     abortFn = null;
     el("send").textContent = t("send");
     el("stop").disabled = true;
+    el("log").scrollTop = el("log").scrollHeight;
     refreshCtx();
   }
 }
@@ -472,12 +769,12 @@ function addRetry(original) {
   b.onclick = function () {
     var safe = original.replace(/(\/[\w.\-]+){2,}/g, "<路径>")
                         .replace(/[A-Za-z]:\\[^\s"']+/g, "<路径>");
-    // 上下文也脱敏：只留工具名和参数名，不带原文。
+    // 上下文也脱敏：只留工具名和参数，不带帮助原文和工作目录。
     var keep = context;
     context = keep ? {
       tool: keep.tool, env: keep.env, mode: keep.mode,
       options: (keep.options || []).map(function (o) {
-        return { flag: o.flag, arg: o.arg, description: o.description, kind: o.kind };
+        return { flag: o.flag, arg: o.arg, description: o.description };
       })
     } : null;
     refreshCtx();
@@ -496,9 +793,20 @@ el("stop").onclick = stop;
 el("ask").addEventListener("keydown", function (e) {
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
 });
+el("sessNew").onclick = newSession;
+el("sessClear").onclick = clearCurrent;
+el("sessDel").onclick = deleteCurrent;
+el("sessSel").onchange = function () { selectSession(el("sessSel").value); };
 
+/* ---------------- 启动 ---------------- */
+loadStore();
+if (sessions.length) {
+  currentId = sessions[0].id;
+  turns = sessions[0].turns;
+} else {
+  newSession();
+}
 applyLang();
-boot();
 
 })();
 </script>

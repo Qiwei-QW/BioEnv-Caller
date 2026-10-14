@@ -76,6 +76,21 @@ Object.defineProperty(global, "history", {
   enumerable: false,
 });
 
+// localStorage 桩：塞一段带 Markdown 的历史，用来验证
+//   1) 会话能不能恢复  2) Markdown 有没有真的渲染成标签
+var seed = [{
+  id: "s1", title: "测试会话", at: 1,
+  turns: [
+    { role: "user", content: "orthofinder 的 -v 是什么意思" },
+    { role: "assistant", content: "**-v** 是显示版本号。\n\n```bash\northofinder -v\n```\n\n- 第一点\n- 第二点\n" },
+  ],
+}];
+global.localStorage = {
+  getItem: function (k) { return k === "bioenv.ai.sessions.v1" ? JSON.stringify(seed) : null; },
+  setItem: function () {},
+  removeItem: function () {},
+};
+
 global.document = documentStub;
 global.window = windowStub;
 global.location = windowStub.location;
@@ -111,6 +126,33 @@ console.log("  ask 监听了 keydown 吗: " + (called("addEventListener:ask:keyd
 console.log("");
 console.log("=== window.tbvAi 暴露了吗（Java 要靠它推数据）===");
 console.log("  " + (windowStub.tbvAi ? Object.keys(windowStub.tbvAi).join(", ") : "没有！"));
+console.log("");
+console.log("");
+console.log("=== 会话恢复 + Markdown 渲染 ===");
+var log = byId["log"];
+console.log("  log 子节点数（应为 2：一问一答）: " + (log ? log.children.length : 0));
+log.children.forEach(function (c, i) {
+  var html = c.innerHTML || "";
+  console.log("  [" + i + "] class=" + c.className);
+  console.log("      textContent=" + JSON.stringify(String(c.textContent || "").slice(0, 40)));
+  if (html) { console.log("      innerHTML=" + JSON.stringify(html.slice(0, 220))); }
+});
+var ai = log.children[1] || {};
+var html = String(ai.innerHTML || "");
+console.log("  —— 渲染判据 ——");
+console.log("  代码块 → <pre><code> : " + /<pre><code>/.test(html));
+console.log("  粗体   → <b>        : " + /<b>-v<\/b>/.test(html));
+console.log("  列表   → <ul><li>   : " + /<ul><li>/.test(html));
+console.log("  没有裸反引号        : " + (html.indexOf("```") < 0));
+console.log("  没有裸星号          : " + (html.indexOf("**") < 0));
+console.log("  HTML 被转义（注入防护）: " + (html.indexOf("&lt;") >= 0 || html.indexOf("<script") < 0));
+console.log("  <pre> 没被 <p> 包住      : " + (html.indexOf("<p><pre>") < 0));
+console.log("  没有任何裸 <p> 包块元素 : " + !/<p>\s*<(pre|ul|table)/.test(html));
+console.log("");
+console.log("=== 会话下拉 ===");
+var sel = byId["sessSel"];
+console.log("  select 里的项数: " + (sel ? sel.children.length : 0));
+
 console.log("");
 console.log("=== 调用轨迹 ===");
 console.log("  " + calls.join("\n  "));
