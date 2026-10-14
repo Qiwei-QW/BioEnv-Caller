@@ -93,6 +93,21 @@
 </footer>
 
 <script>
+/* 整个脚本包在 IIFE 里。
+ *
+ * 不这么做的话，顶层的 var / function 会落到 window 上，撞到 Window 的只读属性就
+ * 直接抛异常。踩过一次，很贵：
+ *
+ *   TypeError: Cannot set property history of #<Window> which has only a getter
+ *
+ * 那是 "var history = []" 撞上 window.history —— 脚本第一步就死，而 window.onerror
+ * 还没赋值，所以页面上什么都不显示，看起来和"脚本没执行"一模一样。
+ * function stop() 撞 window.stop 同理。
+ *
+ * 包起来之后，顶层声明都变成函数作用域，这类碰撞不可能再发生。
+ * 需要给外面用的东西（window.tbvAi）显式挂上去。
+ */
+(function () {
 "use strict";
 
 /* ================================================================
@@ -114,7 +129,7 @@ var bridge = null;           // window.tbtools.ai，没有就是 null
 var context = null;          // Java 推过来的上下文
 var busy = false;
 var abortFn = null;
-var history = [];            // [{role, content}]，只保留问答，不含 system
+var turns = [];            // [{role, content}]，只保留问答，不含 system
 
 var el = function (id) { return document.getElementById(id); };
 
@@ -394,7 +409,7 @@ function send() {
   bubble("u", q);
 
   var msgs = [{ role: "system", content: sysPrompt() }];
-  for (var i = 0; i < history.length; i++) { msgs.push(history[i]); }
+  for (var i = 0; i < turns.length; i++) { msgs.push(turns[i]); }
   msgs.push({ role: "user", content: full });
 
   var box = bubble("a", "");
@@ -424,9 +439,9 @@ function send() {
 
   Promise.resolve(p).then(function (r) {
     if (typeof r === "string" && r) { box.textContent = r; }
-    history.push({ role: "user", content: full });
-    history.push({ role: "assistant", content: box.textContent });
-    if (history.length > 12) { history = history.slice(history.length - 12); }
+    turns.push({ role: "user", content: full });
+    turns.push({ role: "assistant", content: box.textContent });
+    if (turns.length > 12) { turns = turns.slice(turns.length - 12); }
   }).catch(function (e) {
     box.className = "m e";
     var code = (typeof e === "string") ? e : (e && (e.code || e.reason));
@@ -484,6 +499,8 @@ el("ask").addEventListener("keydown", function (e) {
 
 applyLang();
 boot();
+
+})();
 </script>
 </body>
 </html>
