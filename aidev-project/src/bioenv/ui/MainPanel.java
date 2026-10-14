@@ -3335,6 +3335,35 @@ public final class MainPanel extends JPanel {
     private void updateRunEnabled() {
         runButton.setEnabled(selected != null && runner != null);
         toolAssistantButton.setEnabled(selected != null);
+        // 换工具就把上下文推给 AI 那一栏 —— 用户不该为了问"这个参数什么意思"
+        // 去手工复制帮助文本。这里只推，不碰任何运行状态。
+        pushAiContext();
+    }
+
+    /**
+     * 把当前工具的原始帮助 / 工作目录推给最左侧的 AI 助手。
+     *
+     * <p>帮助文本是这个插件<b>独有</b>的上下文：网页版 AI 拿不到，而
+     * {@code DiscoveryCache} 里现成缓存着。用户以前得手工粘贴，现在换工具就有。
+     *
+     * <p>整个方法吞掉所有异常：AI 那一栏拿不到上下文，<b>不能影响选工具本身</b>。
+     */
+    private void pushAiContext() {
+        if (aiAssist == null || formPanel == null) {
+            return;
+        }
+        try {
+            aiAssist.pushContext(bioenv.ai.AiContext.build(
+                    selected == null ? "" : selected.command,
+                    selected == null ? "" : selected.envName,
+                    formPanel.rawHelpText(),
+                    "",
+                    "",
+                    formPanel.rawWorkdir(),
+                    null));
+        } catch (Throwable ignored) {
+            // 故意吞掉：AI 是附加功能，坏了也只该是它自己不显示。
+        }
     }
 
     /**
