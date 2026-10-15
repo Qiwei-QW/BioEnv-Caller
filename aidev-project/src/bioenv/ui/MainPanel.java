@@ -388,7 +388,14 @@ public final class MainPanel extends JPanel {
      * spare room is better spent on the form. A fraction would also compute a
      * position past what a narrow window allows and be clamped.
      */
-    private static final int LOG_HEIGHT_PX = 190;
+    /**
+     * 输出默认占的高度。
+     *
+     * <p>190 是原来定的；改成 150，把多出来的四十来像素让给上面那张参数卡片 ——
+     * 输出的高度本来就可以拖，而参数列表不能（它靠分隔条分）。
+     * 输出没跑东西时是空的，那四十像素在它那里闲着，在参数区却正好是一行。
+     */
+    private static final int LOG_HEIGHT_PX = 150;
 
     /**
      * Applies initial divider positions once the panel has been laid out.' A component's minimum extent along one axis, or 0 when unset. */
