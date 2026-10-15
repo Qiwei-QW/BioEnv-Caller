@@ -17,7 +17,7 @@ import bioenv.ui.MainPanel;
 
 /**
  * Verifies the panel's arrangement: the toolbar on the left, the form in the
- * middle, and the output as a column on the right.
+ * middle, and the output running across the bottom.
  *
  * <p>Laid out by hand, headless. An earlier version of this class built a real
  * frame and called {@code setVisible(true)}, on the belief that Swing only assigns
@@ -132,29 +132,32 @@ public final class MainLayoutTest {
         }
         line("");
 
-        line("[the output is a column on the right]");
-        // The split whose *right* component is the output panel itself. A looser
-        // search finds the outer split, whose right side merely contains the output,
-        // and then reports the tree's width as if it were the output's.
-        JSplitPane columnSplit = splitWithRightTitle(p, I18n.t(Strings.TITLE_OUTPUT));
-        check("a split holds the output on its right", columnSplit != null);
-        if (columnSplit == null) {
+        line("[the output runs across the bottom]");
+        // 这一块以前是"输出在右边一列", 而且下面还有一条回归断言专门禁止它待在底部。
+        // 现在反过来了 —— 输出在最底部、横向通栏。
+        //
+        // 当时挪到右边的理由写在 LayoutTest 里: 让用户能调输出的宽度。
+        // 换到底部是把"宽度可调"换成"长行看得全": 日志每行都很长, 窄栏里全被截断,
+        // 而不跑东西的时候那一栏又白占宽度。代价是不能再横向拖 —— 高度仍然可以拖。
+        JSplitPane rowSplit = bottomSplit(p, I18n.t(Strings.TITLE_OUTPUT));
+        check("a split holds the output underneath", rowSplit != null);
+        if (rowSplit == null) {
             return;
         }
-        check("that split is horizontal",
-                columnSplit.getOrientation() == JSplitPane.HORIZONTAL_SPLIT);
+        check("that split is vertical",
+                rowSplit.getOrientation() == JSplitPane.VERTICAL_SPLIT);
 
-        Component form = columnSplit.getLeftComponent();
-        Component output = columnSplit.getRightComponent();
-        line("      form   x=" + form.getX() + " width=" + form.getWidth());
-        line("      output x=" + output.getX() + " width=" + output.getWidth());
-        check("the output begins to the right of the form",
-                output.getX() > form.getX());
-        check("the output column has a usable width", output.getWidth() >= 250);
-        check("the form keeps most of the width",
-                form.getWidth() > output.getWidth());
-        check("the output is not stretched across the form",
-                output.getWidth() < 600);
+        Component form = rowSplit.getLeftComponent();
+        Component output = rowSplit.getRightComponent();
+        line("      form   y=" + form.getY() + " height=" + form.getHeight());
+        line("      output y=" + output.getY() + " height=" + output.getHeight());
+        check("the output begins below the form",
+                output.getY() > form.getY());
+        check("the output has a usable height", output.getHeight() >= 100);
+        check("the form keeps most of the height",
+                form.getHeight() > output.getHeight());
+        check("the output spans the same width as the form",
+                Math.abs(form.getWidth() - output.getWidth()) <= 8);
         line("");
 
         line("[the preview is below the form, and always shown]");
@@ -166,11 +169,11 @@ public final class MainLayoutTest {
                 findTitled(p, I18n.t(Strings.TITLE_PREVIEW)));
         line("");
 
-        line("[the output is not below the form]");
-        // A regression guard: the output used to sit under the preview, and the
-        // arrangement being changed back would otherwise pass unnoticed.
-        check("no split has the output underneath",
-                !splitWithBottomTitle(p, I18n.t(Strings.TITLE_OUTPUT)));
+        // 这里原来有一条回归断言: "输出不能在表单下面"。
+        // 它守的是上一次"从底部挪到右边"的决定, 而那个决定这次被反过来了 ——
+        // 所以断言也反过来: 现在守的是"输出必须正好在底部那一条里"。
+        // 留这段注释是为了让后来的人知道这个方向变过两次, 不是随手写的。
+
         line("");
 
         line("The output is a column on the right, and the form keeps the room.");
@@ -361,6 +364,37 @@ public final class MainLayoutTest {
     }
 
     /** True when some vertical split has this title on its bottom component. */
+    /**
+     * 找"下半边是输出"那个垂直分隔条。
+     *
+     * <p>{@link #splitWithBottomTitle} 只能回答"有没有"，而这里要拿到分隔条本身 ——
+     * 要量表单和输出各自的 y 和高度。
+     */
+    private static JSplitPane bottomSplit(Container c, String title) {
+        JSplitPane found = null;
+        for (Component ch : c.getComponents()) {
+            if (ch instanceof JSplitPane) {
+                JSplitPane s = (JSplitPane) ch;
+                if (s.getOrientation() == JSplitPane.VERTICAL_SPLIT) {
+                    Component bottom = s.getRightComponent();
+                    if (bottom instanceof Container
+                            && containsTitle((Container) bottom, title)) {
+                        JSplitPane deeper = bottomSplit((Container) bottom, title);
+                        found = deeper != null ? deeper : s;
+                        continue;
+                    }
+                }
+            }
+            if (ch instanceof Container) {
+                JSplitPane r = bottomSplit((Container) ch, title);
+                if (r != null) {
+                    found = r;
+                }
+            }
+        }
+        return found;
+    }
+
     private static boolean splitWithBottomTitle(Container c, String title) {
         for (Component ch : c.getComponents()) {
             if (ch instanceof JSplitPane) {

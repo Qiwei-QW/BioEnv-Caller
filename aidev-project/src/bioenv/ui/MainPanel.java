@@ -379,7 +379,7 @@ public final class MainPanel extends JPanel {
      * spare room is better spent on the form. A fraction would also compute a
      * position past what a narrow window allows and be clamped.
      */
-    private static final int LOG_WIDTH_PX = 340;
+    private static final int LOG_HEIGHT_PX = 190;
 
     /**
      * Applies initial divider positions once the panel has been laid out.' A component's minimum extent along one axis, or 0 when unset. */
@@ -798,17 +798,17 @@ public final class MainPanel extends JPanel {
      * <p>这里给一个可以反复调用的入口，换风格后重摆一遍。
      */
     private void replaceDividers() {
-        if (logSplitRef != null && logSplitRef.getWidth() > 0) {
-            int available = logSplitRef.getWidth();
+        if (logSplitRef != null && logSplitRef.getHeight() > 0) {
+            int available = logSplitRef.getHeight();
             int max = available - logSplitRef.getDividerSize()
                     - minimumOf(logSplitRef.getLeftComponent(), true);
             int min = minimumOf(logSplitRef.getRightComponent(), true);
             if (max < min) {
                 max = min;
             }
-            int width = Math.max(min, Math.min(LOG_WIDTH_PX, max));
+            int height = Math.max(min, Math.min(LOG_HEIGHT_PX, max));
             logSplitRef.setDividerLocation(Math.max(0,
-                    available - logSplitRef.getDividerSize() - width));
+                    available - logSplitRef.getDividerSize() - height));
         }
         if (outerSplit != null) {
             outerSplitPending = true;      // 交给 doLayout() 重摆
@@ -2101,7 +2101,7 @@ public final class MainPanel extends JPanel {
         // own, which is what survives later layout passes: a divider location set
         // once is recalculated from the components' sizes, whereas the sizes
         // themselves are respected every time.
-        logPanel.setPreferredSize(new Dimension(LOG_WIDTH_PX, 200));
+        logPanel.setPreferredSize(new Dimension(LOG_HEIGHT_PX, 200));
 
         // The form and the preview stack in the middle; the output sits beside them
         // rather than below. Output is long and narrow by nature — a tool's messages
@@ -2128,14 +2128,19 @@ public final class MainPanel extends JPanel {
         mainArea.setPreferredSize(new Dimension(900, 600));
         mainArea.setMinimumSize(new Dimension(320, 200));
 
-        // The output column is given a fixed width when the pane first has a real
-        // one. Setting the divider during construction or in doLayout does not work:
-        // at both points the pane has no width, so its divider bounds are degenerate
+        // 输出在<b>最底部、横向通栏</b>，参数表单在上面独占整宽。
+        //
+        // 原来输出是右侧一栏：日志每行都很长，在窄栏里全被截断，而不跑东西的时候
+        // 它又白占四分之一的宽度。横过来放底部之后，表单拿到整个宽度，输出也能按需拖高。
+        //
+        // The output is given a fixed height once the pane first has a real one.
+        // Setting the divider during construction or in doLayout does not work: at
+        // both points the pane has no height, so its divider bounds are degenerate
         // and the value is thrown away as soon as the pane is laid out for real. A
-        // resize event is the first moment the width is known.
-        JSplitPane logSplit = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT,
+        // resize event is the first moment the height is known.
+        JSplitPane logSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT,
                 mainArea, logPanel);
-        logSplit.setResizeWeight(1.0);   // the form absorbs the extra width
+        logSplit.setResizeWeight(1.0);   // the form absorbs the extra height
         logSplit.setDividerSize(6);
         logSplit.setBorder(null);
         logSplit.setMinimumSize(new Dimension(200, 200));
@@ -2145,24 +2150,25 @@ public final class MainPanel extends JPanel {
 
             @Override
             public void componentResized(java.awt.event.ComponentEvent e) {
-                if (placed || logSplit.getWidth() <= 0) {
+                if (placed || logSplit.getHeight() <= 0) {
                     return;
                 }
-                int available = logSplit.getWidth();
+                int available = logSplit.getHeight();
                 int max = available - logSplit.getDividerSize()
                         - minimumOf(logSplit.getLeftComponent(), true);
                 int min = minimumOf(logSplit.getRightComponent(), true);
                 if (max < min) {
                     max = min;
                 }
-                int width = Math.max(min, Math.min(LOG_WIDTH_PX, max));
+                int height = Math.max(min, Math.min(LOG_HEIGHT_PX, max));
                 logSplit.setDividerLocation(Math.max(0,
-                        available - logSplit.getDividerSize() - width));
+                        available - logSplit.getDividerSize() - height));
                 placed = true;
             }
         });
 
-        // 底部只留 Run / Stop，而且只落在中间列下面 —— 输出列整列贯通到底。
+        // Run / Stop 紧贴在命令预览下面 —— 它们本来就是一件事。
+        // 输出在更下面，横向通栏。
         JPanel actions = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 6, 4));
         stopButton.setEnabled(false);
         UiTheme.primary(runButton);
