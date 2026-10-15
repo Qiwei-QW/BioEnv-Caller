@@ -185,6 +185,13 @@ public final class MainPanel extends JPanel {
     private JPanel commandPanel;
     /** 预览下面那一行（「从表单重建」按钮所在）。平时整行收起，见 updatePreviewHint。 */
     private JPanel previewActions;
+    /**
+     * 预览里"调用"那一段（程序名 + 子命令）的长度。这一段是锁住的。
+     *
+     * <p>它跟着表单走，用户只能在它后面写 —— 所以"预览上写的是哪个工具"永远等于
+     * 左边选中的那个。见 CommandBuilder.invocation。
+     */
+    private int previewPrefixLength;
     // 1 行而不是 3 行：这里永远只显示一条命令，多出来的两行是纯浪费的高度，
     // 而高度正是参数区最缺的东西。
     private final JTextArea commandArea = new JTextArea(1, 40);
@@ -2081,6 +2088,12 @@ public final class MainPanel extends JPanel {
         // Distinguish the plugin's own writes from the user's typing: the former
         // must not count as an edit, or the preview would stop updating the moment
         // it was first filled in.
+        // "调用"那一段锁住：删不掉、也改不了，只能在它后面写。
+        // 这条规则不是为了限制用户，是为了让"预览"永远说得出自己跑的是哪个工具。
+        if (commandArea.getDocument() instanceof javax.swing.text.AbstractDocument) {
+            ((javax.swing.text.AbstractDocument) commandArea.getDocument())
+                    .setDocumentFilter(new PrefixLock());
+        }
         commandArea.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
             @Override
             public void insertUpdate(javax.swing.event.DocumentEvent e) {
@@ -3365,10 +3378,13 @@ public final class MainPanel extends JPanel {
             setPreviewText("");
             return;
         }
-        // Once the user has written the command themselves, it is theirs. Form
-        // changes no longer touch it, because silently replacing a command someone
-        // typed would be worse than showing a stale one.
+        // 用户自己写过之后，参数部分就是他的：表单不再覆盖它，因为悄悄替换掉
+        // 别人手打的内容，比显示一条过时的更糟。
         if (previewEdited) {
+            // 但"调用"那一段除外 —— 它必须跟着表单走。
+            // 锁住它（见 PrefixLock）之后，切换工具时还要把它换掉而保留用户的尾巴，
+            // 否则切完工具预览里会留着一个旧工具名，而 PrefixLock 又不让人改它。
+            syncPrefix();
             return;
         }
         try {
@@ -3388,9 +3404,78 @@ public final class MainPanel extends JPanel {
             shownPreview = shown;
             setPreviewText(shown.text());
             commandArea.setCaretPosition(0);
+            previewPrefixLength = invocationOf().length();
         } catch (Exception e) {
             shownPreview = null;
             setPreviewText(I18n.t(Strings.LOG_CANNOT_BUILD, e.getMessage()));
+        }
+    }
+
+    /** 当前该锁住的那一段。 */
+    private String invocationOf() {
+        if (selected == null || formPanel == null) {
+            return "";
+        }
+        return bioenv.core.CommandBuilder.invocation(selected, formPanel.currentSubPath());
+    }
+
+    /**
+     * 把"调用"那一段换成表单现在算出来的，<b>保留用户写在后面的部分</b>。
+     *
+     * <p>这一步不能省：锁住前缀之后，切换工具时若不移除旧前缀，预览里会一直留着
+     * 上一个工具的名字，而用户又改不掉它 —— 那才是真的死角。
+     */
+    private void syncPrefix() {
+        String want = invocationOf();
+        if (previewPrefixLength > 0 && want.equals(
+                commandArea.getText().length() >= previewPrefixLength
+                        ? commandArea.getText().substring(0, previewPrefixLength) : "")) {
+            return;
+        }
+        String text = commandArea.getText();
+        String tail = text.length() >= previewPrefixLength ? text.substring(previewPrefixLength) : "";
+        setPreviewText(want + tail);
+        previewPrefixLength = want.length();
+    }
+
+    /**
+     * 只放行"调用"那一段之后的编辑。
+     *
+     * <p>删、改、粘贴，只要落点在受保护区里就一律拒绝。这样用户既删不掉工具名，
+     * 也没法把它改成别的 —— 于是预览永远说得出自己跑的是哪个工具。
+     */
+    private final class PrefixLock extends javax.swing.text.DocumentFilter {
+        private boolean blocked(int offset) {
+            return offset < previewPrefixLength;
+        }
+
+        @Override
+        public void insertString(FilterBypass fb, int offset, String str,
+                                 javax.swing.text.AttributeSet a)
+                throws javax.swing.text.BadLocationException {
+            if (blocked(offset)) {
+                return;
+            }
+            fb.insertString(offset, str, a);
+        }
+
+        @Override
+        public void remove(FilterBypass fb, int offset, int length)
+                throws javax.swing.text.BadLocationException {
+            if (blocked(offset)) {
+                return;
+            }
+            fb.remove(offset, length);
+        }
+
+        @Override
+        public void replace(FilterBypass fb, int offset, int length, String str,
+                            javax.swing.text.AttributeSet a)
+                throws javax.swing.text.BadLocationException {
+            if (blocked(offset)) {
+                return;
+            }
+            fb.replace(offset, length, str, a);
         }
     }
 
