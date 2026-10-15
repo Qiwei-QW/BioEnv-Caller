@@ -110,12 +110,11 @@ public final class MainLayoutTest {
         // AI 面板在它右边、默认收起。图标栏是入口，不能跟着面板一起收。
         // 注意这一层不再是 AiAssistPanel 本身，而是"图标栏 + 面板"那一列。
         check("a rail exists", find(p, bioenv.ui.LeftRail.class) != null);
-        bioenv.ui.AiAssistPanel assistant = find(p, bioenv.ui.AiAssistPanel.class);
-        check("the assistant exists", assistant != null);
-        check("and it starts collapsed", assistant != null && assistant.isCollapsed());
-        // 收起就是藏起来 —— 以前只藏正文留着表头，收起后还挂着一行"AI 助手 ◀"。
-        check("collapsed means hidden, not narrower",
-                assistant == null || !assistant.isVisible());
+        // AI 面板<b>不在主界面里</b> —— 它是独立窗口。
+        // 做成固定一列会永久挤掉工具树的宽度，而 AI 是偶尔用一下。
+        // 这条断言就是钉住这一点：谁再把它塞回布局，布局测试立刻报。
+        check("the assistant is not a column in the main layout",
+                find(p, bioenv.ui.AiAssistPanel.class) == null);
 
         line("[the tree is the left of the next split in]");
         // 按<b>内容</b>找那一层，不按层数：以后再往外包东西也不会坏。

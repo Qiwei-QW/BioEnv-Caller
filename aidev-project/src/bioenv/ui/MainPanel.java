@@ -194,7 +194,10 @@ public final class MainPanel extends JPanel {
     private AiAssistPanel aiAssist;
     /** 最左侧常驻的图标栏（activity bar）。 */
     private LeftRail leftRail;
-    private javax.swing.JSplitPane aiSplit;
+    /** AI 助手窗口。只创建一次，之后反复显示/隐藏。 */
+    private javax.swing.JFrame aiWindow;
+    /** 用户调过的窗口位置与大小（本次运行内记住）。 */
+    private java.awt.Rectangle aiBounds;
     /**
      * 主题或语言一变就把它们推给网页。
      *
@@ -365,8 +368,6 @@ public final class MainPanel extends JPanel {
     private JSplitPane logSplitRef;
     private JPanel formAndPreview;
     private boolean outerSplitPending;
-    /** AI 那一层的分隔条也要等布局完成后才能设位置。 */
-    private boolean aiSplitPending;
 
     /**
      * Applies initial divider positions once the panel has been laid out.' Starting width of the tool tree, in pixels. */
@@ -2200,32 +2201,27 @@ public final class MainPanel extends JPanel {
 
         // 最外层再包一层：AI 助手在最左，默认收起。
         aiAssist = new AiAssistPanel();
-        aiAssist.setCollapsed(true);
 
-        // 最左那条图标栏常驻 —— 它是入口，不能跟着面板一起收起。
+        // 最左那条图标栏常驻 —— 它是入口，只占一条窄边（40px）。
         // 以后加"运行历史""设置"只需再 add 一个图标，布局不用动。
         leftRail = new LeftRail();
         leftRail.add("ai", I18n.t(Strings.AI_TITLE), LeftRail.robotIcon(),
                 new LeftRail.Action() {
                     @Override
                     public void run() {
-                        toggleAiAssist();
+                        showAiAssist();
                     }
                 });
         leftRail.select("ai");
 
-        // 左列宽度是<b>固定</b>的：图标栏，加上展开时的 AI 面板。
+        // AI 面板<b>不在这里</b>：它是独立窗口（见 showAiAssist）。
         //
-        // 刻意不用 JSplitPane：侧栏宽度是设计定下来的，不该让用户拖着改 ——
-        // 拖窄了对话没法看，拖宽了又白挤掉命令树。原来那一版是可拖的，这里改成定宽。
-        javax.swing.JPanel leftColumn = new javax.swing.JPanel(new java.awt.BorderLayout());
-        leftColumn.setName("bioenv.leftColumn");
-        leftColumn.add(leftRail, java.awt.BorderLayout.WEST);
-        leftColumn.add(aiAssist, java.awt.BorderLayout.CENTER);
-
+        // 之前做成左侧固定一列，代价是工具树被永久挤窄 —— 而 AI 是"偶尔问一句"，
+        // 不该常驻占地。改成窗口之后，它可以随便拖、随便缩放、能最大化，
+        // 主界面只留下那一条图标栏。
         javax.swing.JPanel whole = new javax.swing.JPanel(new java.awt.BorderLayout());
         whole.setName("bioenv.mainArea");
-        whole.add(leftColumn, java.awt.BorderLayout.WEST);
+        whole.add(leftRail, java.awt.BorderLayout.WEST);
         whole.add(split, java.awt.BorderLayout.CENTER);
         return whole;
     }
@@ -2240,22 +2236,51 @@ public final class MainPanel extends JPanel {
         return leftRail;
     }
 
-    /** 展开/收起 AI 助手。 */
-    private void toggleAiAssist() {
+    /**
+     * 打开 AI 助手窗口。
+     *
+     * <p>做成<b>独立窗口</b>而不是界面里的一列：固定一列会永久挤掉工具树的宽度，
+     * 而 AI 是偶尔用一下。窗口可以随便缩放、移动到第二个屏幕，用完关掉不留痕迹。
+     *
+     * <p>窗口<b>只创建一次</b>：里面是内嵌网页，重建等于重新加载页面、丢掉当前会话。
+     * 再次点击只是把已有窗口提到前面。
+     */
+    private void showAiAssist() {
         if (aiAssist == null) {
             return;
         }
-        boolean collapsed = !aiAssist.isCollapsed();
-        // 收起是整块隐藏：左列就只剩那条图标栏，宽度由布局自己算出来。
-        aiAssist.setCollapsed(collapsed);
-        if (!collapsed) {
-            // 展开时才去创建网页：构造阶段绝不碰网页运行时。
-            aiAssist.ensureLoaded();
-            aiAssist.pushTheme(UiTheme.current());
-            aiAssist.pushLang(bioenv.i18n.Lang.EN == I18n.get() ? "en" : "zh");
+        aiAssist.setVisible(true);
+        // 第一次真要用它的时候才去碰网页运行时 —— 构造阶段绝不碰。
+        aiAssist.ensureLoaded();
+        aiAssist.pushTheme(UiTheme.current());
+        aiAssist.pushLang(bioenv.i18n.Lang.EN == I18n.get() ? "en" : "zh");
+        if (aiWindow == null) {
+            aiWindow = new javax.swing.JFrame(I18n.t(Strings.AI_TITLE));
+            aiWindow.setName("bioenv.aiAssistantWindow");
+            aiWindow.setContentPane(aiAssist);
+            // 窄高比宽扁更合适：对话是竖着长的。
+            aiWindow.setSize(460, 720);
+            aiWindow.setMinimumSize(new java.awt.Dimension(300, 320));
+            if (aiBounds != null) {
+                aiWindow.setBounds(aiBounds);
+            } else {
+                aiWindow.setLocationByPlatform(true);
+            }
+            // 记住用户调过的位置和大小（本次运行内；跨次持久化还没做）。
+            aiWindow.addComponentListener(new java.awt.event.ComponentAdapter() {
+                @Override
+                public void componentResized(java.awt.event.ComponentEvent e) {
+                    aiBounds = aiWindow.getBounds();
+                }
+
+                @Override
+                public void componentMoved(java.awt.event.ComponentEvent e) {
+                    aiBounds = aiWindow.getBounds();
+                }
+            });
         }
-        revalidate();
-        repaint();
+        aiWindow.setVisible(true);
+        aiWindow.toFront();
     }
 
     /**
