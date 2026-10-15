@@ -1962,7 +1962,19 @@ public final class MainPanel extends JPanel {
         langToggle.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
         p.add(langToggle);
 
-        p.add(javax.swing.Box.createVerticalGlue());
+        // ★ BoxLayout 的坑：它按"最大高度"给子组件分配纵向空间，而 JPanel/JLabel
+        // 默认的最大高度是<b>无限</b> —— 于是每个控件都被拉长，中间撑出一大片空白。
+        // 截图里"设置／收起"被拉到半空中、各项之间几百像素的空档，就是这个。
+        //
+        // 把每个子组件的最大高度钉成它的首选高度；不用 VerticalGlue —— 那是"允许
+        // 拉伸"的写法，和这里要的正好相反。
+        for (java.awt.Component c : p.getComponents()) {
+            if (c instanceof javax.swing.JComponent) {
+                javax.swing.JComponent jc = (javax.swing.JComponent) c;
+                java.awt.Dimension pref = jc.getPreferredSize();
+                jc.setMaximumSize(new java.awt.Dimension(Integer.MAX_VALUE, pref.height));
+            }
+        }
         UiTheme.role(p, "surface");
         return p;
     }

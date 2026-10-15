@@ -1355,7 +1355,7 @@ public final class SchemaFormPanel extends JPanel {
             // The trailing marker is part of the status line's own syntax, so it is
             // translated as a fragment alongside the counts below rather than glued
             // here; the command and environment names are data and stay verbatim.
-            schemaStatus.setText(tool.command + " " + subPath
+            schemaStatus.setText(" " + subPath
                     + "  @  " + tool.envName + "   \u2014   "
                     + I18n.t(Strings.FORM_STATUS_LOADING));
             add(new JLabel(I18n.t(Strings.FORM_LOADING)), BorderLayout.CENTER);
@@ -1384,7 +1384,7 @@ public final class SchemaFormPanel extends JPanel {
                     || schema.format.isUnusable();
             if (unstructured) {
                 descArea.setText(I18n.t(Strings.FORM_UNSTRUCTURED));
-                schemaStatus.setText(tool.command + I18n.t(Strings.FORM_STATUS_AT)
+                schemaStatus.setText(I18n.t(Strings.FORM_STATUS_AT)
                         + tool.envName + I18n.t(Strings.FORM_STATUS_SEP)
                         + I18n.t(Strings.FORM_STATUS_NO_OPTIONS));
             } else {
@@ -1392,7 +1392,7 @@ public final class SchemaFormPanel extends JPanel {
                         schema.format == null
                                 ? I18n.t(Strings.FORM_UNKNOWN)
                                 : schema.format.describe()));
-                schemaStatus.setText(tool.command + I18n.t(Strings.FORM_STATUS_AT)
+                schemaStatus.setText(I18n.t(Strings.FORM_STATUS_AT)
                         + tool.envName + I18n.t(Strings.FORM_STATUS_SEP)
                         + I18n.t(Strings.FORM_STATUS_UNREADABLE));
             }
@@ -1409,7 +1409,7 @@ public final class SchemaFormPanel extends JPanel {
         }
 
         descArea.setText(describe(tool, schema));
-        schemaStatus.setText(tool.command + "  @  " + tool.envName
+        schemaStatus.setText("@  " + tool.envName
                 + I18n.t(Strings.FORM_STATUS_SEP)
                 + I18n.t(Strings.FORM_STATUS_OPTIONS,
                         Integer.valueOf(schema.options.size()))
