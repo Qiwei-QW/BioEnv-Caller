@@ -218,6 +218,8 @@ public final class Strings {
     /** 最左侧的 AI 助手栏。 */
     public static final String AI_TITLE = "ai.title";
     public static final String AI_COLLAPSE = "ai.collapse";
+    /** 收起按钮上的短文案（右上角那个）。 */
+    public static final String AI_COLLAPSE_SHORT = "ai.collapseShort";
     public static final String AI_EXPAND = "ai.expand";
     public static final String AI_LOADING = "ai.loading";
     public static final String AI_NO_PAGE = "ai.noPage";
@@ -1165,7 +1167,9 @@ public final class Strings {
                 "Session transcript ({0}):");
         put(ZH_TEXT, EN_TEXT, MENU_RUN_INTERACTIVE, "交互运行", "Run interactively");
         put(ZH_TEXT, EN_TEXT, AI_TITLE, "AI 助手", "AI assistant");
-        put(ZH_TEXT, EN_TEXT, AI_COLLAPSE, "收起 AI 助手", "Collapse the AI assistant");
+        put(ZH_TEXT, EN_TEXT, AI_COLLAPSE, "收起 AI 助手，回到工具树",
+                "Collapse the AI assistant and go back to the tool tree");
+        put(ZH_TEXT, EN_TEXT, AI_COLLAPSE_SHORT, "收起", "Hide");
         put(ZH_TEXT, EN_TEXT, AI_EXPAND, "展开 AI 助手", "Expand the AI assistant");
         put(ZH_TEXT, EN_TEXT, AI_LOADING, "展开后加载。", "Expands to load.");
         put(ZH_TEXT, EN_TEXT, AI_NO_PAGE,

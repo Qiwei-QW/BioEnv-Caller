@@ -125,6 +125,17 @@ public final class LeftRail extends JPanel {
         }
     }
 
+    /** 全部取消选中（AI 收起来之后，图标不该还亮着）。 */
+    public void clearSelection() {
+        group.clearSelection();
+        Component[] kids = top.getComponents();
+        for (int i = 0; i < kids.length; i++) {
+            if (kids[i] instanceof JToggleButton) {
+                ((JToggleButton) kids[i]).repaint();
+            }
+        }
+    }
+
     /** 当前是否有某个 id 处于选中态。 */
     public boolean isSelected(String id) {
         Component[] kids = top.getComponents();

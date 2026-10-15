@@ -110,11 +110,17 @@ public final class MainLayoutTest {
         // AI 面板在它右边、默认收起。图标栏是入口，不能跟着面板一起收。
         // 注意这一层不再是 AiAssistPanel 本身，而是"图标栏 + 面板"那一列。
         check("a rail exists", find(p, bioenv.ui.LeftRail.class) != null);
-        // AI 面板<b>不在主界面里</b> —— 它是独立窗口。
-        // 做成固定一列会永久挤掉工具树的宽度，而 AI 是偶尔用一下。
-        // 这条断言就是钉住这一点：谁再把它塞回布局，布局测试立刻报。
-        check("the assistant is not a column in the main layout",
-                find(p, bioenv.ui.AiAssistPanel.class) == null);
+        // AI 面板<b>和工具树共用同一块地方</b>（两张卡），不是并排的一列，
+        // 也不是独立窗口。这样谁的宽度都不会被对方挤掉。
+        // 这条断言钉住"共用"这件事：谁再把它改成并排，布局测试立刻报。
+        check("the assistant shares the tree's slot",
+                find(p, bioenv.ui.AiAssistPanel.class) != null);
+        // 两者必须是同一个容器的孩子 —— 那才是"共用一块地方"。
+        // 用"AI 的兄弟里有树的滚动面板"来判断，比按类型满树乱找可靠。
+        bioenv.ui.AiAssistPanel ai = find(p, bioenv.ui.AiAssistPanel.class);
+        check("the tree shares the assistant's card host",
+                ai != null && ai.getParent() != null
+                && find((Container) ai.getParent(), javax.swing.JScrollPane.class) != null);
 
         line("[the tree is the left of the next split in]");
         // 按<b>内容</b>找那一层，不按层数：以后再往外包东西也不会坏。
@@ -122,8 +128,7 @@ public final class MainLayoutTest {
         check("the tree split exists", tree != null);
         if (tree != null) {
             check("the toolbar is on the left",
-                    titleOf(tree.getLeftComponent())
-                            .contains(I18n.t(Strings.TITLE_TREE)));
+                    containsTitle(tree.getLeftComponent(), I18n.t(Strings.TITLE_TREE)));
         }
         line("");
 
@@ -384,8 +389,8 @@ public final class MainLayoutTest {
             if (ch instanceof JSplitPane) {
                 JSplitPane s = (JSplitPane) ch;
                 if (s.getOrientation() == JSplitPane.HORIZONTAL_SPLIT
-                        && titleOf(s.getLeftComponent())
-                                .contains(I18n.t(Strings.TITLE_TREE))) {
+                        && containsTitle(s.getLeftComponent(),
+                                I18n.t(Strings.TITLE_TREE))) {
                     return s;
                 }
             }
@@ -397,6 +402,26 @@ public final class MainLayoutTest {
             }
         }
         return null;
+    }
+
+    /**
+     * 这棵子树里有没有带该标题的边框。
+     *
+     * <p>不能只看组件本身：工具树现在被套进"树 / AI"那个卡片容器里了，标题边框
+     * 在<b>容器里面</b>，不在容器上。原来那句只看一眼就直接查不到，测试红了。
+     */
+    private static boolean containsTitle(Component c, String title) {
+        if (titleOf(c).contains(title)) {
+            return true;
+        }
+        if (c instanceof Container) {
+            for (Component ch : ((Container) c).getComponents()) {
+                if (containsTitle(ch, title)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /** 在组件树里找第一个某类型的组件。 */

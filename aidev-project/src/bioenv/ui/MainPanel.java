@@ -194,10 +194,8 @@ public final class MainPanel extends JPanel {
     private AiAssistPanel aiAssist;
     /** 最左侧常驻的图标栏（activity bar）。 */
     private LeftRail leftRail;
-    /** AI 助手窗口。只创建一次，之后反复显示/隐藏。 */
-    private javax.swing.JFrame aiWindow;
-    /** 用户调过的窗口位置与大小（本次运行内记住）。 */
-    private java.awt.Rectangle aiBounds;
+    /** 装"工具树 / AI 助手"两张卡的容器 —— 两者共用同一块地方。 */
+    private javax.swing.JPanel treeHost;
     /**
      * 主题或语言一变就把它们推给网页。
      *
@@ -2201,6 +2199,13 @@ public final class MainPanel extends JPanel {
 
         // 最外层再包一层：AI 助手在最左，默认收起。
         aiAssist = new AiAssistPanel();
+        // 面板右上角那个"收起"按钮：切回工具树。
+        aiAssist.setOnCollapse(new Runnable() {
+            @Override
+            public void run() {
+                hideAiAssist();
+            }
+        });
 
         // 最左那条图标栏常驻 —— 它是入口，只占一条窄边（40px）。
         // 以后加"运行历史""设置"只需再 add 一个图标，布局不用动。
@@ -2212,13 +2217,23 @@ public final class MainPanel extends JPanel {
                         showAiAssist();
                     }
                 });
-        leftRail.select("ai");
 
-        // AI 面板<b>不在这里</b>：它是独立窗口（见 showAiAssist）。
+        // AI 助手<b>盖住工具树</b>那一块，而不是另开一列、也不是另开一个窗口。
         //
-        // 之前做成左侧固定一列，代价是工具树被永久挤窄 —— 而 AI 是"偶尔问一句"，
-        // 不该常驻占地。改成窗口之后，它可以随便拖、随便缩放、能最大化，
-        // 主界面只留下那一条图标栏。
+        // 两者共用同一块地方：点图标切进来，点"收起"切回去。这样
+        //   - 谁的宽度都不会被对方挤掉（固定一列会永久挤窄工具树）；
+        //   - 也不用多管一个窗口（切窗口比切内容笨重，还容易丢焦点）。
+        // 初始显示的是树，所以不开 AI 时主界面和以前完全一样。
+        java.awt.Component treeSide = split.getLeftComponent();
+        treeHost = new javax.swing.JPanel(new java.awt.CardLayout());
+        treeHost.setName("bioenv.treeHost");
+        treeHost.setMinimumSize(treeSide == null
+                ? new Dimension(120, 120) : treeSide.getMinimumSize());
+        treeHost.add(treeSide == null ? new javax.swing.JPanel() : treeSide, "tree");
+        treeHost.add(aiAssist, "ai");
+        split.setLeftComponent(treeHost);
+        ((java.awt.CardLayout) treeHost.getLayout()).show(treeHost, "tree");
+
         javax.swing.JPanel whole = new javax.swing.JPanel(new java.awt.BorderLayout());
         whole.setName("bioenv.mainArea");
         whole.add(leftRail, java.awt.BorderLayout.WEST);
@@ -2237,50 +2252,40 @@ public final class MainPanel extends JPanel {
     }
 
     /**
-     * 打开 AI 助手窗口。
+     * 把工具树那一块切成 AI 助手。
      *
-     * <p>做成<b>独立窗口</b>而不是界面里的一列：固定一列会永久挤掉工具树的宽度，
-     * 而 AI 是偶尔用一下。窗口可以随便缩放、移动到第二个屏幕，用完关掉不留痕迹。
-     *
-     * <p>窗口<b>只创建一次</b>：里面是内嵌网页，重建等于重新加载页面、丢掉当前会话。
-     * 再次点击只是把已有窗口提到前面。
+     * <p>不是另开一列，也不是另开窗口：<b>共用同一块地方</b>。占用是零 ——
+     * 不开 AI 时主界面和以前一模一样，开着的时候也没有谁被挤窄。
      */
     private void showAiAssist() {
-        if (aiAssist == null) {
+        if (aiAssist == null || treeHost == null) {
             return;
         }
-        aiAssist.setVisible(true);
         // 第一次真要用它的时候才去碰网页运行时 —— 构造阶段绝不碰。
         aiAssist.ensureLoaded();
         aiAssist.pushTheme(UiTheme.current());
         aiAssist.pushLang(bioenv.i18n.Lang.EN == I18n.get() ? "en" : "zh");
-        if (aiWindow == null) {
-            aiWindow = new javax.swing.JFrame(I18n.t(Strings.AI_TITLE));
-            aiWindow.setName("bioenv.aiAssistantWindow");
-            aiWindow.setContentPane(aiAssist);
-            // 窄高比宽扁更合适：对话是竖着长的。
-            aiWindow.setSize(460, 720);
-            aiWindow.setMinimumSize(new java.awt.Dimension(300, 320));
-            if (aiBounds != null) {
-                aiWindow.setBounds(aiBounds);
-            } else {
-                aiWindow.setLocationByPlatform(true);
-            }
-            // 记住用户调过的位置和大小（本次运行内；跨次持久化还没做）。
-            aiWindow.addComponentListener(new java.awt.event.ComponentAdapter() {
-                @Override
-                public void componentResized(java.awt.event.ComponentEvent e) {
-                    aiBounds = aiWindow.getBounds();
-                }
+        card().show(treeHost, "ai");
+        leftRail.select("ai");
+        treeHost.revalidate();
+        treeHost.repaint();
+    }
 
-                @Override
-                public void componentMoved(java.awt.event.ComponentEvent e) {
-                    aiBounds = aiWindow.getBounds();
-                }
-            });
+    /** 切回工具树（面板右上角的"收起"按钮接的就是这里）。 */
+    private void hideAiAssist() {
+        if (treeHost == null) {
+            return;
         }
-        aiWindow.setVisible(true);
-        aiWindow.toFront();
+        card().show(treeHost, "tree");
+        // 收起来之后图标不该还亮着 —— 它表示"当前显示的是 AI"。
+        leftRail.clearSelection();
+        treeHost.revalidate();
+        treeHost.repaint();
+    }
+
+    /** 换卡片。 */
+    private java.awt.CardLayout card() {
+        return (java.awt.CardLayout) treeHost.getLayout();
     }
 
     /**
