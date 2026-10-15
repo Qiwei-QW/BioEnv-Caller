@@ -902,6 +902,13 @@ public final class MainPanel extends JPanel {
             if (logTitle != null) {
                 logTitle.setText(I18n.t(Strings.TITLE_OUTPUT));
             }
+            // 状态栏那行常驻提示是按语言取的，所以切语言必须重设一遍。
+            //
+            // 这条是 LanguageSwitchTest 抓出来的：它的文案在字段声明时就定好了，
+            // 而声明只跑一次 —— 切到英文之后那行还留着中文。
+            if (hintLabel != null) {
+                hintLabel.setText(I18n.t(Strings.STATUS_OPTIONS_HINT));
+            }
             treeRoot.setUserObject(I18n.t(Strings.LABEL_TREE_ROOT));
             treeModel.nodeChanged(treeRoot);
             refreshCommandPanelTitle();

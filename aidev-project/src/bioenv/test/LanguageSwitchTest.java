@@ -71,7 +71,8 @@ public final class LanguageSwitchTest {
             check("起点：分区标题是「" + zhTree + "」", zhTree.equals(treeTitle(panel)),
                     "实际「" + treeTitle(panel) + "」");
             String zhOutput = I18n.t(Strings.TITLE_OUTPUT);
-            String zhHint = I18n.t(Strings.HINT_COMMAND_AREA_LONG);
+            // 这句现在在状态栏（原来在命令预览下面）。
+        String zhHint = I18n.t(Strings.STATUS_OPTIONS_HINT);
             check("起点：「输出」标题是「" + zhOutput + "」",
                     zhOutput.equals(logTitleText(panel)),
                     "实际「" + logTitleText(panel) + "」");
@@ -104,9 +105,12 @@ public final class LanguageSwitchTest {
                             + I18n.t(Strings.TITLE_OUTPUT) + "」）",
                     I18n.t(Strings.TITLE_OUTPUT).equals(logTitleText(panel)),
                     "实际「" + logTitleText(panel) + "」");
-            check("切英文后命令预览那句说明也跟着换",
-                    I18n.t(Strings.HINT_COMMAND_AREA_LONG).equals(commandHintText(panel)),
-                    "实际「" + commandHintText(panel) + "」");
+            // 这句原来挂在命令预览下面（commandHint 那个 JLabel）。它已经搬去状态栏，
+            // 所以断言跟着搬 —— 要验证的是"搬过去之后它照样跟着语言走"，而不是
+            // "它必须留在原位"。搬家的意义恰恰在于确认没有搬丢。
+            check("切英文后状态栏那行常驻提示也跟着换",
+                    I18n.t(Strings.STATUS_OPTIONS_HINT).equals(hintText(panel)),
+                    "实际「" + hintText(panel) + "」");
             check("切英文后状态栏不再停在旧语言（期望「"
                             + I18n.t(Strings.STATUS_READY) + "」）",
                     I18n.t(Strings.STATUS_READY).equals(statusText(panel)),
@@ -122,9 +126,9 @@ public final class LanguageSwitchTest {
                     "实际「" + treeTitle(panel) + "」");
             check("切回中文后「输出」标题还原", zhOutput.equals(logTitleText(panel)),
                     "实际「" + logTitleText(panel) + "」");
-            check("切回中文后命令预览那句说明还原",
-                    zhHint.equals(commandHintText(panel)),
-                    "实际「" + commandHintText(panel) + "」");
+            check("切回中文后状态栏那行常驻提示还原",
+                    zhHint.equals(hintText(panel)),
+                    "实际「" + hintText(panel) + "」");
             check("切回中文后状态栏还原",
                     I18n.t(Strings.STATUS_READY).equals(statusText(panel)),
                     "实际「" + statusText(panel) + "」");
@@ -230,8 +234,9 @@ public final class LanguageSwitchTest {
                 .getModel().getRoot());
     }
 
-    private static String commandHintText(MainPanel p) throws Exception {
-        return ((JLabel) field(p, "commandHint")).getText();
+    /** 状态栏左侧那行常驻提示（原来挂在命令预览下面的那句话）。 */
+    private static String hintText(MainPanel p) throws Exception {
+        return ((JLabel) field(p, "hintLabel")).getText();
     }
 
     private static String themeTooltip(MainPanel p) throws Exception {
