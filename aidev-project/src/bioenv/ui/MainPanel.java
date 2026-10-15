@@ -194,8 +194,14 @@ public final class MainPanel extends JPanel {
     private AiAssistPanel aiAssist;
     /** 最左侧常驻的图标栏（activity bar）。 */
     private LeftRail leftRail;
-    /** 装"工具树 / AI 助手"两张卡的容器 —— 两者共用同一块地方。 */
+    /** 装"工具树 / AI 助手 / 设置"三张卡的容器 —— 它们共用同一块地方。 */
     private javax.swing.JPanel treeHost;
+    /**
+     * 当前展开的是哪张卡；{@code null} 表示整列收起。
+     *
+     * <p>它同时决定图标高亮和"再点一次是不是收起"。
+     */
+    private String activePanel;
     /**
      * 主题或语言一变就把它们推给网页。
      *
@@ -1911,18 +1917,7 @@ public final class MainPanel extends JPanel {
         settingsTitle.setFont(settingsTitle.getFont().deriveFont(Font.BOLD));
         UiTheme.role(settingsTitle, "accent");
         head.add(settingsTitle, BorderLayout.WEST);
-        JButton settingsClose = new JButton(I18n.t(Strings.AI_COLLAPSE_SHORT));
-        settingsClose.setName("settings.close");
-        settingsClose.setFocusable(false);
-        settingsClose.setMargin(new Insets(0, 6, 0, 6));
-        settingsClose.setToolTipText(I18n.t(Strings.SETTINGS_CLOSE));
-        settingsClose.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                hideAiAssist();
-            }
-        });
-        head.add(settingsClose, BorderLayout.EAST);
+        // 这里没有"收起"按钮：开关统一在左边那条图标栏上（再点 ⚙ 就收起）。
         p.add(head);
         p.add(javax.swing.Box.createVerticalStrut(12));
 
@@ -2274,31 +2269,37 @@ public final class MainPanel extends JPanel {
 
         // 最外层再包一层：AI 助手在最左，默认收起。
         aiAssist = new AiAssistPanel();
-        // 面板右上角那个"收起"按钮：切回工具树。
-        aiAssist.setOnCollapse(new Runnable() {
-            @Override
-            public void run() {
-                hideAiAssist();
-            }
-        });
 
-        // 最左那条图标栏常驻 —— 它是入口，只占一条窄边（40px）。
-        // 以后加"运行历史""设置"只需再 add 一个图标，布局不用动。
+        // 最左那条图标栏，而且是<b>唯一的开关</b>：
+        //     点一个图标   -> 那一列展开成这张卡
+        //     再点同一个   -> 整列收起
+        //
+        // 面板自己不再有"收起"按钮：同一个动作放在两个地方，用户还得先想清楚点哪个 ——
+        // 而且那个按钮还要占掉一行高度。
         leftRail = new LeftRail();
+        leftRail.add("tree", I18n.t(Strings.TREE_ICON), LeftRail.treeIcon(),
+                new LeftRail.Action() {
+                    @Override
+                    public void run() {
+                        togglePanel("tree");
+                    }
+                });
         leftRail.add("ai", I18n.t(Strings.AI_TITLE), LeftRail.robotIcon(),
                 new LeftRail.Action() {
                     @Override
                     public void run() {
-                        showAiAssist();
+                        togglePanel("ai");
                     }
                 });
         leftRail.add("settings", I18n.t(Strings.SETTINGS_ICON), LeftRail.gearIcon(),
                 new LeftRail.Action() {
                     @Override
                     public void run() {
-                        showSettings();
+                        togglePanel("settings");
                     }
                 });
+        activePanel = "tree";
+        leftRail.select("tree");
 
         // AI 助手<b>盖住工具树</b>那一块，而不是另开一列、也不是另开一个窗口。
         //
@@ -2336,47 +2337,41 @@ public final class MainPanel extends JPanel {
     }
 
     /**
-     * 把工具树那一块切成 AI 助手。
+     * 点图标栏上的某一项。
      *
-     * <p>不是另开一列，也不是另开窗口：<b>共用同一块地方</b>。占用是零 ——
-     * 不开 AI 时主界面和以前一模一样，开着的时候也没有谁被挤窄。
+     * <p>再点同一个就<b>收起整列</b>。开关只有这一处，所以"开"和"关"在同一个位置 ——
+     * 不用先去面板里找一个收起按钮。
      */
-    private void showAiAssist() {
-        if (aiAssist == null || treeHost == null) {
+    private void togglePanel(String id) {
+        if (treeHost == null || outerSplit == null) {
             return;
         }
-        // 第一次真要用它的时候才去碰网页运行时 —— 构造阶段绝不碰。
-        aiAssist.ensureLoaded();
-        aiAssist.pushTheme(UiTheme.current());
-        aiAssist.pushLang(bioenv.i18n.Lang.EN == I18n.get() ? "en" : "zh");
-        card().show(treeHost, "ai");
-        leftRail.select("ai");
+        if (id.equals(activePanel)) {
+            // 同一个图标再点一次：整列收起，图标不再高亮。
+            activePanel = null;
+            leftRail.clearSelection();
+            outerSplit.setDividerLocation(0);
+            outerSplit.revalidate();
+            outerSplit.repaint();
+            return;
+        }
+        activePanel = id;
+        card().show(treeHost, id);
+        leftRail.select(id);
+        outerSplit.setDividerLocation(panelWidth(id));
+        if ("ai".equals(id)) {
+            // 第一次真要用它的时候才去碰网页运行时 —— 构造阶段绝不碰。
+            aiAssist.ensureLoaded();
+            aiAssist.pushTheme(UiTheme.current());
+            aiAssist.pushLang(bioenv.i18n.Lang.EN == I18n.get() ? "en" : "zh");
+        }
         treeHost.revalidate();
         treeHost.repaint();
     }
 
-    /** 把工具树那一块切成设置卡（原来的顶栏）。 */
-    private void showSettings() {
-        if (treeHost == null) {
-            return;
-        }
-        card().show(treeHost, "settings");
-        leftRail.select("settings");
-        refreshConnectionSummary();
-        treeHost.revalidate();
-        treeHost.repaint();
-    }
-
-    /** 切回工具树（面板右上角的"收起"按钮接的就是这里）。 */
-    private void hideAiAssist() {
-        if (treeHost == null) {
-            return;
-        }
-        card().show(treeHost, "tree");
-        // 收起来之后图标不该还亮着 —— 它表示"当前显示的是 AI"。
-        leftRail.clearSelection();
-        treeHost.revalidate();
-        treeHost.repaint();
+    /** 每张卡合适的宽度：对话要宽一些，树和设置 260 够。 */
+    private static int panelWidth(String id) {
+        return "ai".equals(id) ? 340 : TREE_WIDTH_PX;
     }
 
     /** 换卡片。 */
@@ -2399,7 +2394,9 @@ public final class MainPanel extends JPanel {
     @Override
     public void doLayout() {
         super.doLayout();
-        if (outerSplitPending && outerSplit != null && outerSplit.getWidth() > 0) {
+        // 整列收起时（activePanel == null）不能在这里按树宽把它拽回来。
+        if (outerSplitPending && outerSplit != null && outerSplit.getWidth() > 0
+                && activePanel != null) {
             int want = TREE_WIDTH_PX;
             int max = outerSplit.getWidth() - outerSplit.getDividerSize()
                     - minimumOf(outerSplit.getRightComponent(), true);
