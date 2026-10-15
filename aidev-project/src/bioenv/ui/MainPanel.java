@@ -183,7 +183,9 @@ public final class MainPanel extends JPanel {
     /**
      * Applies initial divider positions once the panel has been laid out.' The preview's titled panel, so its title can report which state it is in. */
     private JPanel commandPanel;
-    private final JTextArea commandArea = new JTextArea(3, 40);
+    // 1 行而不是 3 行：这里永远只显示一条命令，多出来的两行是纯浪费的高度，
+    // 而高度正是参数区最缺的东西。
+    private final JTextArea commandArea = new JTextArea(1, 40);
     private final JTextArea logArea = new JTextArea(12, 40);
     /**
      * 最左侧那一栏：AI 助手。默认<b>收起</b>（只留一条窄边），点箭头展开。
@@ -255,8 +257,6 @@ public final class MainPanel extends JPanel {
     private volatile Process interactiveProcess;
     /** "输出"标题：和清空按钮同处一行。 */
     private JLabel logTitle;
-    /** 命令预览下面那句说明（「可以直接在这里输入…」）。 */
-    private JLabel commandHint;
     /**
      * Opens the tool assistant: the tool's help on one tab, the user's own notes
      * on another. Named for what it opens rather than for the first tab, since
@@ -397,11 +397,11 @@ public final class MainPanel extends JPanel {
     /**
      * 输出默认占的高度。
      *
-     * <p>190 是原来定的；改成 150，把多出来的四十来像素让给上面那张参数卡片 ——
+     * <p>190 → 150 → 120：一路把高度让给上面的参数卡片 ——
      * 输出的高度本来就可以拖，而参数列表不能（它靠分隔条分）。
      * 输出没跑东西时是空的，那四十像素在它那里闲着，在参数区却正好是一行。
      */
-    private static final int LOG_HEIGHT_PX = 150;
+    private static final int LOG_HEIGHT_PX = 120;
 
     /**
      * Applies initial divider positions once the panel has been laid out.' A component's minimum extent along one axis, or 0 when unset. */
@@ -862,7 +862,7 @@ public final class MainPanel extends JPanel {
             rebuildPreviewButton.setToolTipText(I18n.t(Strings.HINT_REBUILD_PREVIEW));
             filterField.setToolTipText(I18n.t(Strings.HINT_FILTER_FIELD));
             modeBox.setToolTipText(I18n.t(Strings.HINT_MODE_BOX));
-            commandArea.setToolTipText(I18n.t(Strings.HINT_COMMAND_AREA));
+            commandArea.setToolTipText(I18n.t(Strings.HINT_COMMAND_AREA_LONG));
             // Rebuild the two mode items in the new language. The mode is identified
             // by index (isSshMode() reads it), not by text, so restoring the index
             // keeps the user in the mode they were in despite the new labels.
@@ -901,9 +901,6 @@ public final class MainPanel extends JPanel {
             // 只翻标题。用户明确要的就是这个分界。
             if (logTitle != null) {
                 logTitle.setText(I18n.t(Strings.TITLE_OUTPUT));
-            }
-            if (commandHint != null) {
-                commandHint.setText(I18n.t(Strings.HINT_COMMAND_AREA_LONG));
             }
             treeRoot.setUserObject(I18n.t(Strings.LABEL_TREE_ROOT));
             treeModel.nodeChanged(treeRoot);
@@ -2071,7 +2068,7 @@ public final class MainPanel extends JPanel {
         // Saying what the short names mean matters, because the pane is editable:
         // someone who reads "pep" as a file to be created in the working directory
         // would be surprised by where the argument actually points.
-        commandArea.setToolTipText(I18n.t(Strings.HINT_COMMAND_AREA));
+        commandArea.setToolTipText(I18n.t(Strings.HINT_COMMAND_AREA_LONG));
         // Distinguish the plugin's own writes from the user's typing: the former
         // must not count as an edit, or the preview would stop updating the moment
         // it was first filled in.
@@ -2117,18 +2114,14 @@ public final class MainPanel extends JPanel {
                 rebuildPreviewFromForm();
             }
         });
+        // 这里原来有一整句说明（"如果你熟悉这个工具，可以直接在这里输入…"）。
+        // 它每天只在第一次看时有用，却常占一行高度。现在：关键信息并进状态栏那行
+        // 常驻提示，全文放进预览框的悬停提示（见上面的 setToolTipText）—— 一句没丢。
         JPanel cmdSouth = new JPanel(new java.awt.FlowLayout(
                 java.awt.FlowLayout.LEFT, 6, 2));
-        // 存成字段：这句话原来是个局部变量，于是语言切换够不着它，切完英文界面上
-        // 它还留着中文。凡是构造时按语言取过文字、之后又该跟着换的控件，都得留个引用。
-        commandHint = new JLabel(I18n.t(Strings.HINT_COMMAND_AREA_LONG));
-        JLabel hint = commandHint;
-        UiTheme.role(hint, "muted");
-        hint.setForeground(new Color(0x66, 0x66, 0x66));
-        cmdSouth.add(hint);
         cmdSouth.add(rebuildPreviewButton);
         commandPanel.add(cmdSouth, BorderLayout.SOUTH);
-        commandPanel.setMinimumSize(new Dimension(200, 90));
+        commandPanel.setMinimumSize(new Dimension(200, 56));
 
         JPanel logPanel = new JPanel(new BorderLayout());
         logPanelRef = logPanel;

@@ -1188,9 +1188,12 @@ public final class Strings {
         put(ZH_TEXT, EN_TEXT, SETTINGS_ICON, "设置", "Settings");
         put(ZH_TEXT, EN_TEXT, TREE_ICON, "工具树（再点一次收起）",
                 "Tool tree (click again to collapse)");
+        // 两句话并成一条：一句说参数从哪来，一句说预览能直接改。
+        // 它们原来各占一行界面高度，而状态栏一行就放得下。
         put(ZH_TEXT, EN_TEXT, STATUS_OPTIONS_HINT,
-                "参数读自命令帮助，类型可用右侧下拉框调整",
-                "Options come from the tool's help; types are adjustable");
+                "参数读自命令帮助，类型可调 · 命令预览可直接编辑",
+                "Options come from the tool's help and types are adjustable; "
+                        + "the command preview is editable");
         put(ZH_TEXT, EN_TEXT, AI_EXPAND, "展开 AI 助手", "Expand the AI assistant");
         put(ZH_TEXT, EN_TEXT, AI_LOADING, "展开后加载。", "Expands to load.");
         put(ZH_TEXT, EN_TEXT, AI_NO_PAGE,
