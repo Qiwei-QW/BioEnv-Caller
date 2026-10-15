@@ -271,6 +271,13 @@ public final class MainPanel extends JPanel {
      * Applies initial divider positions once the panel has been laid out.' Puts the command preview back under the form's control. */
     private final JButton rebuildPreviewButton = new JButton(I18n.t(Strings.MENU_REBUILD_PREVIEW));
     private final JLabel statusLabel = new JLabel(I18n.t(Strings.STATUS_READY));
+    /**
+     * 状态栏右侧："当前连的是谁"。
+     *
+     * <p>这件事原来由顶栏那条工具条承担。顶栏去掉之后，总得有个地方回答
+     * "我现在连的是哪台"，否则用户得点开设置才知道。
+     */
+    private final JLabel connLabel = new JLabel();
 
     /**
      * Titled borders that carry display text, kept so a language switch can retitle
@@ -627,7 +634,6 @@ public final class MainPanel extends JPanel {
         setLayout(new BorderLayout(6, 6));
         UiTheme.loadOnce();
         setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
-        add(buildDiscoveryBar(), BorderLayout.NORTH);
         add(buildCenter(), BorderLayout.CENTER);
         add(buildStatusBar(), BorderLayout.SOUTH);
         wireEvents();
@@ -1874,65 +1880,107 @@ public final class MainPanel extends JPanel {
     // Construction
     // ------------------------------------------------------------------
 
-    private JPanel buildDiscoveryBar() {
-        JPanel bar = new JPanel(new GridBagLayout());
-        GridBagConstraints g = new GridBagConstraints();
-        g.insets = new Insets(2, 4, 2, 4);
-        g.anchor = GridBagConstraints.WEST;
+    /**
+     * 设置卡：连接方式 + 界面外观。
+     *
+     * <p>这些原来在最上面一整条工具条里。它们<b>全属于"装好就不再动"的东西</b>，
+     * 却占着最显眼、最值钱的一整条横边；而真正天天在动的（选工具、填参数、跑）
+     * 只能在下面挤着。现在退到左边图标栏的 ⚙ 后面，需要时才点开。
+     *
+     * <p>竖着排而不是横着排：这一列只有两百多像素宽，横排会挤成一团。
+     */
+    private JPanel buildSettingsPanel() {
+        JPanel p = new JPanel();
+        p.setName("bioenv.settingsPanel");
+        p.setLayout(new javax.swing.BoxLayout(p, javax.swing.BoxLayout.Y_AXIS));
+        p.setBorder(BorderFactory.createEmptyBorder(6, 10, 8, 10));
 
-        // Connection mode leads the bar because it decides what the box next to it
-        // contains: WSL distributions, or saved Linux VM profiles.
-        g.gridx = 0; g.gridy = 0;
+        JPanel head = new JPanel(new BorderLayout());
+        head.setOpaque(false);
+        head.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+        JLabel settingsTitle = new JLabel(I18n.t(Strings.SETTINGS_TITLE));
+        settingsTitle.setFont(settingsTitle.getFont().deriveFont(Font.BOLD));
+        UiTheme.role(settingsTitle, "accent");
+        head.add(settingsTitle, BorderLayout.WEST);
+        JButton settingsClose = new JButton(I18n.t(Strings.AI_COLLAPSE_SHORT));
+        settingsClose.setName("settings.close");
+        settingsClose.setFocusable(false);
+        settingsClose.setMargin(new Insets(0, 6, 0, 6));
+        settingsClose.setToolTipText(I18n.t(Strings.SETTINGS_CLOSE));
+        settingsClose.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                hideAiAssist();
+            }
+        });
+        head.add(settingsClose, BorderLayout.EAST);
+        p.add(head);
+        p.add(javax.swing.Box.createVerticalStrut(12));
+
+        // 连接方式：它决定旁边那个框里装的是 WSL 发行版还是保存的虚拟机配置。
         modeLabel = new JLabel(I18n.t(Strings.CONN_MODE_LABEL));
-        bar.add(modeLabel, g);
-        g.gridx = 1;
-        modeBox.setToolTipText(I18n.t(Strings.HINT_MODE_BOX));
-        bar.add(modeBox, g);
-
-        g.gridx = 2;
-        // Kept in a field because its text switches between "WSL distro" and
-        // "Saved profile" as the mode changes.
-        distroLabel = new JLabel(I18n.t(Strings.CONN_LABEL_WSL));
-        bar.add(distroLabel, g);
-        g.gridx = 3;
-        distroBox.setPreferredSize(new Dimension(150, distroBox.getPreferredSize().height));
-        applySourceLabels(false);
-        bar.add(distroBox, g);
-        // 这里原来没有入口，注释写着"窗口会在需要配置时自己弹出来"。那个理由只对
-        // "从没连过"成立：自动弹出由 hasEverConnected() 把关，第一次连上之后就永久
-        // 关闭，而那是打开连接窗的<b>唯一</b>入口。于是用户能连一次，之后既加不了
-        // 第二台、也改不了填错的 IP —— 想改只能去删配置重建。
-        //
-        // 现在入口在 distroBox 里的「＋ 新增配置」那一项（见 newProfileItemText）。
-        // 放在下拉框里而不是旁边加个按钮：用户要"再连一台"时，第一眼看的就是这个框，
-        // 加一台的动作长在那个框里最省事，也不多占一行宽度。
-        g.gridx = 4;
-        bar.add(detectButton, g);
-        g.gridx = 5;
-        // 工具检索搬去了左侧工具树（见 buildCenter）。这里保留一个透明的弹性空列，
-        // 语言按钮仍然被顶在右边缘 —— 撑开的宽度全在这一列左边。
-        JPanel stretch = new JPanel();
-        stretch.setOpaque(false);
-        g.weightx = 1; g.fill = GridBagConstraints.HORIZONTAL;
-        bar.add(stretch, g);
-
-        // Language switch, last column, no weight: it takes its natural width and the
-        // unused space stays with the filler above. anchor=EAST pins it to the right
-        // even if the column is ever given more room than the button needs.
-        g.gridx = 6;
-        g.weightx = 0;
-        g.fill = GridBagConstraints.NONE;
-        g.anchor = GridBagConstraints.EAST;
-        // 风格切换器挨着语言按钮：两者都是"这个面板怎么显示"，放一起顺理成章。
-        bar.add(themeSwitcher, g);
-        g.gridx = 7;
-        bar.add(langToggle, g);
-
-        // 工具条整体跟着主题走；标签用次级灰，别和内容抢。
-        UiTheme.role(bar, "surface");
         UiTheme.role(modeLabel, "muted");
+        modeLabel.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+        p.add(modeLabel);
+        modeBox.setToolTipText(I18n.t(Strings.HINT_MODE_BOX));
+        modeBox.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+        modeBox.setMaximumSize(new Dimension(Integer.MAX_VALUE,
+                modeBox.getPreferredSize().height));
+        p.add(modeBox);
+        p.add(javax.swing.Box.createVerticalStrut(10));
+
+        // 这一项的标题会在"WSL 发行版"和"保存的配置"之间切换，所以留在字段里。
+        distroLabel = new JLabel(I18n.t(Strings.CONN_LABEL_WSL));
         UiTheme.role(distroLabel, "muted");
-        return bar;
+        distroLabel.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+        p.add(distroLabel);
+        applySourceLabels(false);
+        distroBox.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+        distroBox.setMaximumSize(new Dimension(Integer.MAX_VALUE,
+                distroBox.getPreferredSize().height));
+        p.add(distroBox);
+        // 「＋ 新增配置」在下拉框里，不在旁边加按钮 —— 见原来那段注释。
+        p.add(javax.swing.Box.createVerticalStrut(12));
+        detectButton.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+        p.add(detectButton);
+
+        p.add(javax.swing.Box.createVerticalStrut(18));
+        JLabel look = new JLabel(I18n.t(Strings.SETTINGS_LOOK));
+        UiTheme.role(look, "muted");
+        look.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+        p.add(look);
+        themeSwitcher.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+        p.add(themeSwitcher);
+
+        p.add(javax.swing.Box.createVerticalStrut(12));
+        JLabel langLbl = new JLabel(I18n.t(Strings.SETTINGS_LANGUAGE));
+        UiTheme.role(langLbl, "muted");
+        langLbl.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+        p.add(langLbl);
+        langToggle.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+        p.add(langToggle);
+
+        p.add(javax.swing.Box.createVerticalGlue());
+        UiTheme.role(p, "surface");
+        return p;
+    }
+
+    /**
+     * 状态栏右侧显示"当前连的是谁"。
+     *
+     * <p>这件事原来靠顶栏那条工具条承担 —— 把它去掉之后，总得有个地方回答
+     * "我现在连的是哪台"，否则用户得点开设置才知道。一行就够。
+     */
+    private void refreshConnectionSummary() {
+        try {
+            Object m = modeBox.getSelectedItem();
+            Object d = distroBox.getSelectedItem();
+            String mode = m == null ? "" : m.toString();
+            String who = d == null ? "" : d.toString();
+            connLabel.setText(who.isEmpty() ? mode : mode + " · " + who);
+        } catch (Throwable ignored) {
+            // 状态栏少一行字，不该影响别的。
+        }
     }
 
     /**
@@ -2223,6 +2271,13 @@ public final class MainPanel extends JPanel {
                         showAiAssist();
                     }
                 });
+        leftRail.add("settings", I18n.t(Strings.SETTINGS_ICON), LeftRail.gearIcon(),
+                new LeftRail.Action() {
+                    @Override
+                    public void run() {
+                        showSettings();
+                    }
+                });
 
         // AI 助手<b>盖住工具树</b>那一块，而不是另开一列、也不是另开一个窗口。
         //
@@ -2237,6 +2292,8 @@ public final class MainPanel extends JPanel {
                 ? new Dimension(120, 120) : treeSide.getMinimumSize());
         treeHost.add(treeSide == null ? new javax.swing.JPanel() : treeSide, "tree");
         treeHost.add(aiAssist, "ai");
+        // 设置（原来的顶栏）也是这块地方的一张卡 —— 三者共用同一个位置。
+        treeHost.add(buildSettingsPanel(), "settings");
         split.setLeftComponent(treeHost);
         ((java.awt.CardLayout) treeHost.getLayout()).show(treeHost, "tree");
 
@@ -2273,6 +2330,18 @@ public final class MainPanel extends JPanel {
         aiAssist.pushLang(bioenv.i18n.Lang.EN == I18n.get() ? "en" : "zh");
         card().show(treeHost, "ai");
         leftRail.select("ai");
+        treeHost.revalidate();
+        treeHost.repaint();
+    }
+
+    /** 把工具树那一块切成设置卡（原来的顶栏）。 */
+    private void showSettings() {
+        if (treeHost == null) {
+            return;
+        }
+        card().show(treeHost, "settings");
+        leftRail.select("settings");
+        refreshConnectionSummary();
         treeHost.revalidate();
         treeHost.repaint();
     }
@@ -2328,6 +2397,11 @@ public final class MainPanel extends JPanel {
         JPanel p = new JPanel(new BorderLayout());
         statusLabel.setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 4));
         p.add(statusLabel, BorderLayout.CENTER);
+        connLabel.setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 4));
+        connLabel.setName("bioenv.connectionSummary");
+        UiTheme.role(connLabel, "muted");
+        p.add(connLabel, BorderLayout.EAST);
+        refreshConnectionSummary();
         return p;
     }
 
@@ -4204,6 +4278,8 @@ public final class MainPanel extends JPanel {
 
     /** 按当前语言重新渲染状态栏。语言切换时调用。 */
     private void refreshStatusText() {
+        // 连接摘要跟着状态一起刷 —— 它们都在回答"现在是什么情况"。
+        refreshConnectionSummary();
         FileDialogs.onEdt(applyStatus);
     }
 
