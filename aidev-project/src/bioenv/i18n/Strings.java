@@ -215,6 +215,22 @@ public final class Strings {
     public static final String LOG_TERMINAL_NO_TRANSCRIPT = "log.terminalNoTranscript";
     /** 面板内交互运行。 */
     public static final String MENU_RUN_INTERACTIVE = "menu.runInteractive";
+    /** 最左侧的 AI 助手栏。 */
+    public static final String AI_TITLE = "ai.title";
+    public static final String AI_COLLAPSE = "ai.collapse";
+    /** 收起按钮上的短文案（右上角那个）。 */
+    public static final String AI_COLLAPSE_SHORT = "ai.collapseShort";
+    /** 设置卡（原来顶栏那一条）。 */
+    public static final String SETTINGS_TITLE = "settings.title";
+    public static final String SETTINGS_LOOK = "settings.look";
+    public static final String SETTINGS_LANGUAGE = "settings.language";
+    public static final String SETTINGS_CLOSE = "settings.close";
+    public static final String SETTINGS_ICON = "settings.icon";
+    /** 状态栏：参数从哪来、类型能不能改（原来占表头两行的那段话）。 */
+    public static final String STATUS_OPTIONS_HINT = "status.optionsHint";
+    public static final String AI_EXPAND = "ai.expand";
+    public static final String AI_LOADING = "ai.loading";
+    public static final String AI_NO_PAGE = "ai.noPage";
     public static final String INTERACTIVE_PROMPT = "interactive.prompt";
     public static final String INTERACTIVE_TIP = "interactive.tip";
     public static final String LOG_INTERACTIVE_STARTED = "log.interactiveStarted";
@@ -1158,6 +1174,24 @@ public final class Strings {
         put(ZH_TEXT, EN_TEXT, LOG_TERMINAL_TRANSCRIPT, "会话记录（{0}）：",
                 "Session transcript ({0}):");
         put(ZH_TEXT, EN_TEXT, MENU_RUN_INTERACTIVE, "交互运行", "Run interactively");
+        put(ZH_TEXT, EN_TEXT, AI_TITLE, "AI 助手", "AI assistant");
+        put(ZH_TEXT, EN_TEXT, AI_COLLAPSE, "收起 AI 助手，回到工具树",
+                "Collapse the AI assistant and go back to the tool tree");
+        put(ZH_TEXT, EN_TEXT, AI_COLLAPSE_SHORT, "收起", "Hide");
+        put(ZH_TEXT, EN_TEXT, SETTINGS_TITLE, "设置", "Settings");
+        put(ZH_TEXT, EN_TEXT, SETTINGS_LOOK, "界面风格", "Theme");
+        put(ZH_TEXT, EN_TEXT, SETTINGS_LANGUAGE, "语言", "Language");
+        put(ZH_TEXT, EN_TEXT, SETTINGS_CLOSE, "收起设置，回到工具树",
+                "Hide settings and go back to the tool tree");
+        put(ZH_TEXT, EN_TEXT, SETTINGS_ICON, "设置", "Settings");
+        put(ZH_TEXT, EN_TEXT, STATUS_OPTIONS_HINT,
+                "参数读自命令帮助，类型可用右侧下拉框调整",
+                "Options come from the tool's help; types are adjustable");
+        put(ZH_TEXT, EN_TEXT, AI_EXPAND, "展开 AI 助手", "Expand the AI assistant");
+        put(ZH_TEXT, EN_TEXT, AI_LOADING, "展开后加载。", "Expands to load.");
+        put(ZH_TEXT, EN_TEXT, AI_NO_PAGE,
+                "找不到 ai.html。它应该和插件的主 jar 放在同一层。",
+                "ai.html was not found. It belongs beside the plugin's main jar.");
         put(ZH_TEXT, EN_TEXT, INTERACTIVE_PROMPT, "输入：", "Input:");
         put(ZH_TEXT, EN_TEXT, INTERACTIVE_TIP,
                 "工具提问时在这里打字，按回车发送。",
@@ -1255,8 +1289,8 @@ public final class Strings {
         put(ZH_TEXT, EN_TEXT, STATUS_NO_CONNECTION, "连不上目标机器，详见日志中的排查建议。",
                 "Could not connect to the target. See the hints in the log.");
         put(ZH_TEXT, EN_TEXT, STATUS_NO_PROFILE_TO_SCAN,
-                "还没有可用的 SSH 连接，请先在上面选一个，或新建并保存一个。",
-                "No SSH connection is available yet. Pick one above, or create and save one.");
+                "还没有可用的 SSH 连接，请点左侧的齿轮图标选一个，或新建并保存一个。",
+                "No SSH connection is available yet. Open Settings (the gear on the left) to pick one, or create and save one.");
         put(ZH_TEXT, EN_TEXT, STATUS_PROFILE_SELECTED, "已选择 {0}，点「扫描 conda 环境」开始扫描。",
                 "Selected {0}. Click Detect to scan.");
         put(ZH_TEXT, EN_TEXT, STATUS_PROFILE_READ_FAILED, "读取连接配置失败：{0}",
@@ -1285,10 +1319,10 @@ public final class Strings {
                 "No previous results; scanning environments...");
         put(ZH_TEXT, EN_TEXT, STATUS_FIRST_RUN_GUIDE,
                 "首次使用：当前是 WSL 方式，点「扫描 conda 环境」开始；"
-                        + "若要用 SSH 远程，请先在上面把连接方式改成「SSH 远程」。",
+                        + "若要用 SSH 远程，请先点左侧的齿轮图标，把连接方式改成「SSH 远程」。",
                 "First run: you are on WSL - click 'Detect conda environments' to "
                         + "begin. To use an SSH connection instead, switch the connection "
-                        + "mode above first.");
+                        + "mode in Settings (the gear on the left) first.");
         put(ZH_TEXT, EN_TEXT, STATUS_NEEDS_FIRST_SCAN,
                 "{0} 还没有扫描过，点「扫描 conda 环境」开始（扫完会记住，下次自动恢复）。",
                 "{0} has not been scanned yet. Click 'Detect conda environments' "

@@ -618,6 +618,17 @@ pluginName=BioEnv Caller
 # that ships, and the "-merged" suffix only described how it was produced. TBtools
 # shows the plugin name from project.json, so the file name need not disambiguate
 # a build flavour the user never chose.
+# AI assistant: the page and the capability manifest go in the plugin ROOT,
+# beside the main jar -- that is where TBtools looks for tbtools-ai.json, and
+# where the page finds its Java feed (see bioenv.ai.AiWebView).
+$aiRes = Join-Path $Root 'aidev-project\plugin'
+if (Test-Path $aiRes) {
+    Copy-Item (Join-Path $aiRes '*') $stage -Force
+    Write-Host "PASS  ai.html + tbtools-ai.json staged into the plugin root"
+} else {
+    throw "aidev-project\plugin is missing (ai.html / tbtools-ai.json)"
+}
+
 $pluginPath = Join-Path $Root 'BioEnvCaller.plugin'
 if (Test-Path $pluginPath) { Remove-Item -Force $pluginPath }
 Add-Type -AssemblyName System.IO.Compression.FileSystem

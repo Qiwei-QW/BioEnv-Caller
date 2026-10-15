@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>BioEnv Caller · AI 助手</title>
+<style>
+  :root{
+    --bg:#f7f7f8; --panel:#ffffff; --line:#d8d8dc; --fg:#22242a; --muted:#6b6f76;
+    --accent:#1f6feb; --user:#e8f0fe; --ai:#f2f3f5; --err:#b3261e; --ok:#1a7f37; --warn:#9a6700;
+    --code:#eff0f2;
+    --mono:Consolas,"Courier New",monospace;
+  }
+  body.theme-dark{
+    --bg:#1e1e22; --panel:#26262b; --line:#3a3a42; --fg:#e6e6ea; --muted:#9aa0a6;
+    --accent:#4c8dff; --user:#2a3a55; --ai:#2c2c33; --err:#ff8a80; --ok:#7ee787; --warn:#e3b341;
+    --code:#17171b;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{
+    display:flex;flex-direction:column;background:var(--bg);color:var(--fg);
+    font:13px/1.55 "Microsoft YaHei",system-ui,sans-serif;
+  }
+
+  /* 网页运行时探测器：脚本一跑就把这条删掉 */
+  #boot{
+    flex:none;padding:6px 10px;font-size:12px;
+    background:#fff8e1;color:#7a5900;border-bottom:1px solid #ffe08a;
+  }
+
+  header{
+    padding:6px 10px;border-bottom:1px solid var(--line);background:var(--panel);
+    display:flex;align-items:center;gap:8px;flex:none;
+  }
+  header b{font-size:13px}
+  #status{font-size:11px;color:var(--muted);margin-left:8px;text-align:right}
+  #status.ok{color:var(--ok)} #status.bad{color:var(--err)} #status.warn{color:var(--warn)}
+
+  /* 会话下拉放在表头：它是"切换"而不是"操作"，和状态栏放一起更顺 */
+  #sessSel{
+    flex:1;min-width:0;max-width:220px;margin-left:6px;
+    padding:2px 6px;border:1px solid var(--line);border-radius:6px;
+    background:var(--bg);color:var(--fg);font-size:12px;
+  }
+
+  #diag{flex:none}
+  #log{flex:1;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:8px}
+
+  .m{max-width:100%;padding:7px 10px;border-radius:8px;overflow-wrap:anywhere}
+  .m.u{background:var(--user);align-self:flex-end;white-space:pre-wrap}
+  .m.a{background:var(--ai);align-self:flex-start;border:1px solid var(--line)}
+  .m.e{background:transparent;color:var(--err);border:1px dashed var(--err);font-size:12px;white-space:pre-wrap}
+  .m.s{background:transparent;color:var(--muted);font-size:12px;padding:2px 10px}
+
+  /* Markdown 渲染出来的东西 */
+  .m.a p{margin:0 0 6px}
+  .m.a p:last-child{margin-bottom:0}
+  .m.a pre{
+    margin:6px 0;padding:8px;overflow-x:auto;border-radius:6px;
+    background:var(--code);border:1px solid var(--line);
+    font-family:var(--mono);font-size:12px;line-height:1.45;white-space:pre;
+  }
+  .m.a code{font-family:var(--mono);font-size:12px;background:var(--code);
+            padding:0 3px;border-radius:3px}
+  .m.a pre code{background:none;padding:0}
+  .m.a ul{margin:4px 0;padding-left:18px}
+
+  /* 诊断卡：折叠成一行，不占地方；它不属于对话，清空会话不会被清掉 */
+  details.diag{
+    border:1px solid var(--line);border-left:3px solid var(--ok);
+    background:var(--panel);font-size:12px;
+  }
+  details.diag.bad{border-left-color:var(--err)}
+  details.diag summary{cursor:pointer;padding:4px 10px;color:var(--muted)}
+  details.diag table{border-collapse:collapse;margin:2px 0 8px 10px}
+  details.diag td{padding:1px 12px 1px 0;vertical-align:top}
+  details.diag td:first-child{color:var(--muted);white-space:nowrap}
+  details.diag code{font-family:var(--mono);font-size:11px}
+
+  footer{flex:none;border-top:1px solid var(--line);background:var(--panel);padding:8px}
+
+  details.ctx{border:1px solid var(--line);border-radius:6px;background:var(--bg);font-size:12px;margin-bottom:6px}
+  details.ctx summary{cursor:pointer;padding:5px 8px;color:var(--muted)}
+  details.ctx pre{margin:0;padding:8px;max-height:180px;overflow:auto;
+                  font-family:var(--mono);font-size:11px;white-space:pre-wrap}
+
+  .row{display:flex;gap:6px;align-items:flex-end}
+  textarea{
+    flex:1;resize:none;height:56px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;
+    background:var(--bg);color:var(--fg);font:13px/1.5 "Microsoft YaHei",system-ui,sans-serif;
+  }
+  button{
+    padding:6px 12px;border:1px solid var(--line);border-radius:6px;background:var(--bg);
+    color:var(--fg);cursor:pointer;font-size:12px;white-space:nowrap;
+  }
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  /* 图标按钮：方一点，不抢视线 */
+  button.icon{padding:6px 9px;font-size:13px;line-height:1}
+  button:disabled{opacity:.5;cursor:default}
+  .bar{display:flex;justify-content:space-between;align-items:center;margin-top:6px;font-size:11px;color:var(--muted)}
+</style>
+</head>
+<body class="theme-classic">
+
+<!--
+  网页运行时探测器。
+
+  这条横幅<b>由脚本自己删掉</b> —— 所以：
+    看到它  = 网页里的 JavaScript 没有运行（面板不可能工作）
+    看不到  = 脚本跑了
+  没有显示器、也没法开控制台时，这是唯一一个不用猜的判断。
+-->
+<div id="boot">正在检查网页运行时……如果这句话一直不消失，说明网页里的 JavaScript 没有运行。</div>
+
+<header>
+  <b id="title">AI 助手</b>
+  <select id="sessSel" title="会话"></select>
+  <button id="sessDel" class="icon" title="删除这个会话">🗑</button>
+  <span id="status">正在检查…</span>
+</header>
+
+<!-- 诊断卡单独放：它不属于对话，清空会话时不该被清掉 -->
+<div id="diag"></div>
+
+<div id="log"></div>
+
+<footer>
+  <details class="ctx" id="ctxBox">
+    <summary id="ctxSummary">本次将发送的内容</summary>
+    <pre id="ctxPre">（无）</pre>
+  </details>
+  <div class="row">
+    <textarea id="ask" placeholder="按 Enter 发送，Shift+Enter 换行"></textarea>
+    <button id="sessNew" class="icon" title="新建会话">＋</button>
+    <button id="send" class="primary">发送</button>
+    <button id="stop" disabled>停止</button>
+  </div>
+  <div class="bar">
+    <span id="budget"></span>
+    <span id="model"></span>
+  </div>
+</footer>
+
+<script>
+/* ================================================================
+ * BioEnv Caller · AI 助手（网页侧）
+ *
+ * 这个页面跑在 TBtools 注入的网页运行时里，通过 window.tbtools.ai 调用
+ * TBtools 的内置模型。
+ *
+ * ⚠ 这套接口是**实测出来的契约，不是官方文档** —— 用法从第三方插件 minisvg
+ *   的实际用法反推得到。升级 TBtools 之后要重新验证这里。
+ *
+ * 两条实测出来的行为，代码按它们写：
+ *   1. onDelta(s) 给的是**增量**（不是累计全文）—— 所以下面是累加；
+ *      最终以 promise 的返回值覆盖，避免两边不一致。
+ *   2. 桥不存在时 window.tbtools 整个是 undefined —— 必须先探测再用。
+ * ================================================================ */
+
+/* 整个脚本包在 IIFE 里。
+ *
+ * 不这么做的话，顶层的 var / function 会落到 window 上，撞到 Window 的只读属性就
+ * 直接抛异常。踩过一次，很贵：
+ *
+ *   TypeError: Cannot set property history of #<Window> which has only a getter
+ *
+ * 那是 "var history = []" 撞上 window.history —— 脚本第一步就死，而 window.onerror
+ * 还没赋值，所以页面上什么都不显示，看起来和"脚本没执行"一模一样。
+ * function stop() 撞 window.stop 同理。
+ *
+ * 包起来之后，顶层声明都变成函数作用域，这类碰撞不可能再发生。
+ * 需要给外面用的东西（window.tbvAi）显式挂上去。
+ */
+(function () {
+"use strict";
+
+/* 脚本跑到这里就说明 JavaScript 在执行 —— 把探测器横幅撤掉。 */
+(function () {
+  var b = document.getElementById("boot");
+  if (b && b.parentNode) { b.parentNode.removeChild(b); }
+})();
+
+/* 未捕获的错误也要看得见：没有控制台，只能靠页面自己说。 */
+window.onerror = function (msg, src, line, col) {
+  var box = document.getElementById("log");
+  if (box) {
+    var d = document.createElement("div");
+    d.className = "m e";
+    d.textContent = "脚本错误：" + msg + "  @" + line + ":" + col;
+    box.appendChild(d);
+  }
+  var s = document.getElementById("status");
+  if (s) { s.textContent = "脚本错误"; s.className = "bad"; }
+  return false;
+};
+
+/* ---------------- 文案（中英） ---------------- */
+var T = {
+  zh: {
+    title: "AI 助手",
+    send: "发送", stop: "停止", ask: "按 Enter 发送，Shift+Enter 换行",
+    ctx: "本次将发送的内容", none: "（无）",
+    chk: "正在检查…", noBridge: "桥不可用", ready: "就绪",
+    newS: "新建", delS: "删除",
+    sessNew: "新建会话", sessDel: "删除这个会话",
+    untitled: "新会话",
+    confirmDel: "删除这个会话？它的对话记录会一起删掉。",
+    storeOff: "（本次运行内有效：网页存储不可用）",
+    noBridgeWhy: "当前 TBtools 版本没有提供内置模型接口（需要 TBtools 2.558 或更高）。"
+      + "这个面板会一直留着，升级 TBtools 之后它会自动可用。",
+    ping: "试一句", pingPh: "确认模型能回话（这一步不消耗上下文）",
+    pingOk: "模型回话了：", pingFail: "模型没回话：",
+    empty: "选一个工具，然后直接问 —— 它的帮助已经自动带上了。",
+    diagOk: "内置模型接口可用（点开看详情）",
+    diagBad: "内置模型接口不可用（点开看详情）"
+  },
+  en: {
+    title: "AI assistant",
+    send: "Send", stop: "Stop", ask: "Enter to send, Shift+Enter for a new line",
+    ctx: "What will be sent", none: "(nothing)",
+    chk: "Checking…", noBridge: "No bridge", ready: "Ready",
+    newS: "New", delS: "Delete",
+    sessNew: "New conversation", sessDel: "Delete this conversation",
+    untitled: "New conversation",
+    confirmDel: "Delete this conversation? Its messages go with it.",
+    storeOff: "(kept for this run only: web storage is unavailable)",
+    noBridgeWhy: "This TBtools build does not expose the built-in model interface "
+      + "(TBtools 2.558 or newer is required). The panel stays here and becomes usable "
+      + "after you upgrade TBtools.",
+    ping: "Say hello", pingPh: "Check the model answers (uses no context)",
+    pingOk: "The model answered: ", pingFail: "The model did not answer: ",
+    empty: "Pick a tool and just ask - its help is already attached.",
+    diagOk: "Built-in model interface is available (click for details)",
+    diagBad: "Built-in model interface is unavailable (click for details)"
+  }
+};
+var lang = "zh";
+function t(k) { return (T[lang] || T.zh)[k] || k; }
+
+/* ---------------- 错误分类 ----------------
+ * 这几个码来自 minisvg 的实测（tbWhy）。每一码用户该做的事都不同，
+ * 所以不合并成一句"失败"。 */
+function why(code) {
+  var zh = {
+    denied: "TBtools 拒绝了这次请求。可以点「脱敏后重试」——去掉路径和样本名再发一次。",
+    busy: "TBtools 正忙，等一下再试。",
+    closed: "到 TBtools 模型的桥已经关闭。",
+    invalid: "TBtools 读不懂这次请求（内容可能有问题）。",
+    too_many: "请求太多或消息条数超限。",
+    too_large: "内容太长。试试少带一些上下文。",
+    aborted: "已停止。"
+  };
+  var en = {
+    denied: "TBtools declined this request. Try \"Retry without paths\" to send it again "
+      + "with paths and sample names removed.",
+    busy: "TBtools is busy. Try again in a moment.",
+    closed: "The TBtools model bridge is closed.",
+    invalid: "TBtools could not read this request.",
+    too_many: "Too many messages or requests.",
+    too_large: "The content is too long. Send less context.",
+    aborted: "Stopped."
+  };
+  return (lang === "en" ? en : zh)[code] || String(code);
+}
+
+/* ---------------- 状态 ---------------- */
+var bridge = null;           // window.tbtools.ai，没有就是 null
+var context = null;          // Java 推过来的上下文
+var busy = false;
+var abortFn = null;
+
+var sessions = [];           // [{id,title,at,turns:[{role,content}]}]
+var currentId = null;
+var turns = [];              // 当前会话的对话（与 sessions 里那一条是同一个数组）
+
+var el = function (id) { return document.getElementById(id); };
+var storeOk = true;          // file:// 下 localStorage 可能直接抛，那就退化成"这次运行内有效"
+
+/* ================================================================
+ * Markdown 渲染
+ *
+ * 模型回的是 Markdown。以前直接当纯文本塞进 textContent，于是用户看到的是
+ * 一堆光秃秃的 ``` 和 ** —— 那正是"回答有点乱"的来源。
+ *
+ * 安全上只有一条规矩：**先把要显示的文本整个转义，再往上加标签**。
+ * 所以模型无论回什么，都不可能往页面里注入 HTML。
+ * ================================================================ */
+function esc(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function md(src) {
+  var text = String(src == null ? "" : src);
+
+  // 代码块先抽出来，免得里面的 * 和 # 被后面的规则改坏。
+  var blocks = [];
+  function stash(m, code) {
+    blocks.push(code.replace(/\n$/, ""));
+    return "\u0000B" + (blocks.length - 1) + "\u0000";
+  }
+  text = text.replace(/```[^\n]*\n?([\s\S]*?)```/g, stash);
+  text = text.replace(/~~~[^\n]*\n?([\s\S]*?)~~~/g, stash);
+
+  var out = esc(text);
+
+  out = out.replace(/`([^`\n]+)`/g, "<code>$1</code>");
+  out = out.replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>");
+  out = out.replace(/(^|[^*\w])\*([^*\n]+)\*/g, "$1<i>$2</i>");
+  out = out.replace(/^#{1,6}\s+(.+)$/gm, "<b>$1</b>");
+  // 连续的列表项合成一个 <ul>，而不是一行一个项目符号堆着
+  out = out.replace(/(?:^[ \t]*[-*+]\s+.+$(?:\n|$))+/gm, function (chunk) {
+    var items = chunk.replace(/[ \t\n]+$/, "").split("\n").filter(function (x) {
+      return x.trim();
+    }).map(function (x) {
+      return "<li>" + x.replace(/^[ \t]*[-*+]\s+/, "") + "</li>";
+    }).join("");
+    return "<ul>" + items + "</ul>";
+  });
+  out = out.replace(/^[ \t]*(\d+)\.\s+(.+)$/gm, "$1. $2");
+
+  var parts = out.split(/\n{2,}/);
+  var html = "";
+  for (var i = 0; i < parts.length; i++) {
+    var p = parts[i].replace(/^\n+|\n+$/g, "");
+    if (!p) { continue; }
+    if (/^<(ul|pre)/.test(p)) { html += p; } else { html += "<p>" + p.replace(/\n/g, "<br>") + "</p>"; }
+  }
+
+  html = html.replace(/\u0000B(\d+)\u0000/g, function (m, i) {
+    return "<pre><code>" + esc(blocks[+i]) + "</code></pre>";
+  });
+  // 代码块占位符在分段时被当成普通段落包进了 <p>，而 <pre> 不能放在 <p> 里。
+  // 判据必须放在"占位符还原之后"才看得见它 —— 放在前面是查不到的，自检就是这么发现的。
+  html = html.replace(/<p>(<pre>[\s\S]*?<\/pre>)<\/p>/g, "$1");
+  return html;
+}
+
+/* ================================================================
+ * 会话
+ *
+ * 以前只有一条对话，关掉就没了，也不能清空。这里给最小的会话管理：
+ * 新建 / 清空 / 删除 + 一个下拉选择，存在 localStorage 里。
+ *
+ * file:// 页面在 Chromium 里未必给 localStorage（不透明来源会直接抛），
+ * 所以每一次读写都包了 try/catch，拿不到就退化成"这次运行内有效"。
+ * ================================================================ */
+var SKEY = "bioenv.ai.sessions.v1";
+
+function loadStore() {
+  try {
+    var raw = localStorage.getItem(SKEY);
+    sessions = raw ? JSON.parse(raw) : [];
+    if (!(sessions instanceof Array)) { sessions = []; }
+  } catch (e) {
+    sessions = [];
+    storeOk = false;
+  }
+  for (var i = 0; i < sessions.length; i++) {
+    var s = sessions[i];
+    if (!s || typeof s !== "object") { continue; }
+    if (!(s.turns instanceof Array)) { s.turns = []; }
+    if (!s.id) { s.id = String(Date.now()) + "-" + i; }
+    if (typeof s.title !== "string") { s.title = ""; }
+  }
+}
+
+function saveStore() {
+  try {
+    localStorage.setItem(SKEY, JSON.stringify(sessions));
+  } catch (e) {
+    storeOk = false;
+  }
+}
+
+function titleOf(list) {
+  for (var i = 0; i < list.length; i++) {
+    if (list[i].role === "user") {
+      var s = String(list[i].content || "").replace(/\s+/g, " ").trim();
+      return s.length > 28 ? s.slice(0, 28) + "…" : s;
+    }
+  }
+  return "";
+}
+
+function renderSessions() {
+  var sel = el("sessSel");
+  if (!sel) { return; }
+  sel.innerHTML = "";
+  for (var i = 0; i < sessions.length; i++) {
+    var s = sessions[i];
+    var o = document.createElement("option");
+    o.value = s.id;
+    o.textContent = (s.title || t("untitled")) + "  (" + s.turns.length + ")";
+    sel.appendChild(o);
+  }
+  if (currentId) { sel.value = currentId; }
+  sel.title = storeOk ? "" : t("storeOff");
+}
+
+function newSession() {
+  var s = { id: String(Date.now()) + "-" + Math.floor(Math.random() * 1000),
+            title: "", at: Date.now(), turns: [] };
+  sessions.unshift(s);
+  currentId = s.id;
+  turns = s.turns;
+  saveStore();
+  renderSessions();
+  renderLog();
+}
+
+function selectSession(id) {
+  for (var i = 0; i < sessions.length; i++) {
+    if (sessions[i].id === id) {
+      currentId = id;
+      turns = sessions[i].turns;
+      renderSessions();
+      renderLog();
+      return;
+    }
+  }
+}
+
+function findCurrent() {
+  for (var i = 0; i < sessions.length; i++) {
+    if (sessions[i].id === currentId) { return sessions[i]; }
+  }
+  return null;
+}
+
+/**
+ * 删除当前会话。
+ *
+ * <p>原来"清空"和"删除"是两个按钮，但用户想要的结果是同一个：<b>眼前清干净</b>。
+ * 合成一个之后，只剩一条会话时就地清空（总得留着一条，否则下拉是空的），
+ * 还有别的就直接删掉、切到上一条。
+ */
+function deleteCurrent() {
+  var s = findCurrent();
+  if (!s) { return; }
+  if (s.turns.length && !window.confirm(t("confirmDel"))) { return; }
+  if (sessions.length <= 1) {
+    s.turns.length = 0;
+    s.title = "";
+    turns = s.turns;
+    saveStore();
+    renderSessions();
+    renderLog();
+    return;
+  }
+  for (var i = 0; i < sessions.length; i++) {
+    if (sessions[i].id === currentId) { sessions.splice(i, 1); break; }
+  }
+  saveStore();
+  selectSession(sessions[0].id);
+}
+
+function touchTitle() {
+  var s = findCurrent();
+  if (s && !s.title) { s.title = titleOf(s.turns); }
+  saveStore();
+  renderSessions();
+}
+
+/* ================================================================
+ * 对话区
+ * ================================================================ */
+function renderLog() {
+  el("log").innerHTML = "";
+  for (var i = 0; i < turns.length; i++) {
+    var m = turns[i];
+    if (m.role === "user") {
+      bubble("u", m.content);
+    } else {
+      bubble("a", "").innerHTML = md(m.content);
+    }
+  }
+  if (!turns.length) { bubble("s", t("empty")); }
+}
+
+function bubble(kind, text) {
+  var d = document.createElement("div");
+  d.className = "m " + kind;
+  d.textContent = text == null ? "" : text;
+  el("log").appendChild(d);
+  el("log").scrollTop = el("log").scrollHeight;
+  return d;
+}
+
+function setStatus(text, cls) {
+  var s = el("status");
+  s.textContent = text;
+  s.className = cls || "";
+}
+
+/* ---------------- 启动诊断 ----------------
+ * 这一步就是冒烟测试：桥在不在、有哪些方法。折叠成一行，不占地方；
+ * 展开才看细节。它不放进对话区，所以清空会话不会把它清掉。
+ */
+function boot() {
+  bridge = (window.tbtools && window.tbtools.ai) ? window.tbtools.ai : null;
+
+  var rows = [];
+  rows.push(["window.tbtools", window.tbtools ? "在" : "不在"]);
+  rows.push(["window.tbtools.ai", bridge ? "在" : "不在"]);
+  if (bridge) {
+    var keys = [];
+    try {
+      for (var k in bridge) { keys.push(k); }
+    } catch (e) {
+      keys.push("（枚举不到：" + e + "）");
+    }
+    rows.push(["ai 上的方法", keys.length ? keys.join(", ") : "（枚举不到）"]);
+  }
+  rows.push(["location", location.href]);
+
+  var details = document.createElement("details");
+  details.className = "diag" + (bridge ? "" : " bad");
+  var sum = document.createElement("summary");
+  sum.textContent = bridge ? t("diagOk") : t("diagBad");
+  details.appendChild(sum);
+
+  if (bridge) {
+    var tb = document.createElement("table");
+    for (var i = 0; i < rows.length; i++) {
+      var tr = document.createElement("tr");
+      var c1 = document.createElement("td"); c1.textContent = rows[i][0];
+      var c2 = document.createElement("td");
+      var code = document.createElement("code"); code.textContent = String(rows[i][1]);
+      c2.appendChild(code);
+      tr.appendChild(c1); tr.appendChild(c2);
+      tb.appendChild(tr);
+    }
+    details.appendChild(tb);
+
+    var row = document.createElement("div");
+    row.style.cssText = "margin:0 0 8px 10px;display:flex;gap:8px;align-items:center";
+    var pingBtn = document.createElement("button");
+    pingBtn.id = "ping";
+    pingBtn.textContent = t("ping");
+    var hint = document.createElement("span");
+    hint.style.cssText = "font-size:11px;color:var(--muted)";
+    hint.textContent = t("pingPh");
+    row.appendChild(pingBtn); row.appendChild(hint);
+    details.appendChild(row);
+  } else {
+    var p = document.createElement("p");
+    p.style.cssText = "margin:4px 0 8px 10px";
+    p.textContent = t("noBridgeWhy");
+    details.appendChild(p);
+  }
+
+  el("diag").innerHTML = "";
+  el("diag").appendChild(details);
+
+  if (bridge) {
+    setStatus(t("ready"), "ok");
+    el("ping").onclick = ping;
+    if (typeof bridge.chat !== "function") {
+      setStatus("ai.chat 不是函数 —— 接口形状和预期不同", "bad");
+    }
+  } else {
+    setStatus(t("noBridge"), "bad");
+  }
+}
+
+/* ---------------- 冒烟测试：让模型回一句 ---------------- */
+function ping() {
+  var btn = el("ping");
+  if (!btn) { return; }
+  btn.disabled = true;
+  var was = btn.textContent;
+  btn.textContent = t("ping") + " …";
+  function done() { btn.disabled = false; btn.textContent = was; }
+  try {
+    var p = bridge.chat(
+      [{ role: "user", content: "只回复两个字：通了" }],
+      { onDelta: function () {} }
+    );
+    Promise.resolve(p).then(function (r) {
+      bubble("a", t("pingOk") + (typeof r === "string" ? r : "(非字符串返回值)"));
+      setStatus(t("ready"), "ok");
+    }).catch(function (e) {
+      bubble("e", t("pingFail") + describe(e));
+    }).then(done);
+  } catch (e) {
+    bubble("e", t("pingFail") + describe(e));
+    done();
+  }
+}
+
+/** 把 reject 出来的东西变成一句人话。 */
+function describe(e) {
+  if (!e) { return "（没有错误信息）"; }
+  var code = (typeof e === "string") ? e : (e.code || e.reason || e.message || "");
+  if (code && why(code) !== String(code)) { return why(code); }
+  return String(code || e);
+}
+
+/* ---------------- Java 推过来的接口 ---------------- */
+window.tbvAi = {
+  setContext: function (json) {
+    try {
+      context = (typeof json === "string") ? JSON.parse(json) : json;
+    } catch (e) {
+      context = null;
+    }
+    refreshCtx();
+  },
+  setTheme: function (name) {
+    var n = String(name || "classic").toLowerCase();
+    document.body.className = "theme-" + (n === "dark" ? "dark" : (n === "light" ? "light" : "classic"));
+    if (n === "dark") { document.body.classList.add("theme-dark"); }
+  },
+  setLang: function (name) {
+    lang = (String(name).toLowerCase() === "en") ? "en" : "zh";
+    applyLang();
+  },
+  ask: function (text) {
+    el("ask").value = text || "";
+    send();
+  }
+};
+
+/* ---------------- 上下文 ---------------- */
+function ctxText() {
+  if (!context) { return ""; }
+  var parts = [];
+  if (context.tool) { parts.push("[工具] " + context.tool + (context.env ? "  @" + context.env : "")); }
+  if (context.mode) {
+    parts.push("[连接] " + context.mode + (context.workdir ? "  工作目录：" + context.workdir : ""));
+  } else if (context.workdir) {
+    parts.push("[工作目录] " + context.workdir);
+  }
+  if (context.command) { parts.push("[当前命令]\n" + context.command); }
+  if (context.options && context.options.length) {
+    var lines = [];
+    for (var i = 0; i < context.options.length; i++) {
+      var o = context.options[i];
+      lines.push("  " + o.flag + (o.arg ? " " + o.arg : "")
+        + (o.description ? "  — " + o.description : ""));
+    }
+    parts.push("[参数表]\n" + lines.join("\n"));
+  }
+  if (context.help) { parts.push("[帮助原文]\n" + context.help); }
+  if (context.lastRun) {
+    parts.push("[上次运行] 退出码 " + context.lastRun.exit + "\n" + (context.lastRun.tail || ""));
+  }
+  if (context.docs) { parts.push("[插件用法]\n" + context.docs); }
+  return parts.join("\n\n");
+}
+
+function refreshCtx() {
+  el("ctxPre").textContent = ctxText() || t("none");
+  var txt = ctxText();
+  el("budget").textContent = txt ? (txt.length + " 字符 / 上限约 32000") : "";
+}
+
+function applyLang() {
+  document.documentElement.lang = lang === "en" ? "en" : "zh";
+  el("title").textContent = t("title");
+  el("send").textContent = busy ? t("stop") : t("send");
+  el("stop").textContent = t("stop");
+  el("ask").placeholder = t("ask");
+  el("ctxSummary").textContent = t("ctx");
+  el("sessNew").title = t("sessNew");
+  el("sessDel").title = t("sessDel");
+  boot();
+  renderSessions();
+  renderLog();
+}
+
+/* ---------------- 发送 ---------------- */
+function sysPrompt() {
+  return lang === "en"
+    ? "You are the assistant built into the TBtools plugin BioEnv Caller. It gives a GUI "
+      + "to bioinformatics command-line tools running on Linux (WSL or a remote host over SSH). "
+      + "Answer from the context provided; if the context does not contain the answer, say so "
+      + "rather than guessing. Never invent parameter names. Put commands in fenced code blocks. "
+      + "Keep answers short and practical."
+    : "你是 TBtools 插件 BioEnv Caller 内置的助手。这个插件把 Linux（WSL 或 SSH 远程主机）上的"
+      + "生信命令行工具变成图形界面。请只依据给你的上下文回答；上下文里没有的，就说不知道，不要编。"
+      + "绝对不要编造参数名。给出命令时请放进代码块。回答要简短、可操作。";
+}
+
+function send() {
+  if (busy) { stop(); return; }
+  if (!bridge) { return; }
+
+  var q = el("ask").value.trim();
+  if (!q) { return; }
+  el("ask").value = "";
+
+  var ctx = ctxText();
+  var full = ctx ? ("以下是当前状态：\n\n" + ctx + "\n\n---\n\n问题：" + q) : q;
+
+  // 空对话时把"选一个工具"那句提示清掉，免得它留在记录里。
+  if (!turns.length) { el("log").innerHTML = ""; }
+  bubble("u", q);
+
+  // 发给模型的历史：只带 user/assistant，不带 system（system 单独放最前）。
+  var msgs = [{ role: "system", content: sysPrompt() }];
+  for (var i = 0; i < turns.length; i++) {
+    if (turns[i].role === "user" || turns[i].role === "assistant") { msgs.push(turns[i]); }
+  }
+  msgs.push({ role: "user", content: full });
+
+  var box = bubble("a", "");
+  busy = true;
+  el("send").textContent = t("stop");
+  el("stop").disabled = false;
+
+  var base = "";
+  var p;
+  try {
+    p = bridge.chat(msgs, {
+      onDelta: function (s) {
+        // 实测：s 是增量。最终以 promise 的返回值覆盖。
+        base += (s || "");
+        box.textContent = base;
+        el("log").scrollTop = el("log").scrollHeight;
+      }
+    });
+  } catch (e) {
+    box.className = "m e";
+    box.textContent = describe(e);
+    finish();
+    return;
+  }
+
+  abortFn = function () { try { if (p && p.requestId) { bridge.abort(p.requestId); } } catch (e) {} };
+
+  Promise.resolve(p).then(function (r) {
+    var text = (typeof r === "string" && r) ? r : base;
+    box.innerHTML = md(text);
+    turns.push({ role: "user", content: full });
+    turns.push({ role: "assistant", content: text });
+    // 历史太长会挤爆请求预算，留最近若干轮就够。
+    if (turns.length > 24) { turns.splice(0, turns.length - 24); }
+    touchTitle();
+  }).catch(function (e) {
+    // 失败的那一轮不进历史 —— 否则下次会把它当上下文再发一遍。
+    var code = (typeof e === "string") ? e : (e && (e.code || e.reason));
+    box.className = "m e";
+    box.textContent = describe(e);
+    if (code === "denied") { addRetry(q); }
+  }).then(finish);
+
+  function finish() {
+    busy = false;
+    abortFn = null;
+    el("send").textContent = t("send");
+    el("stop").disabled = true;
+    el("log").scrollTop = el("log").scrollHeight;
+    refreshCtx();
+  }
+}
+
+function stop() {
+  if (abortFn) { abortFn(); }
+}
+
+/** denied 之后给一个"脱敏后重试" —— 去掉绝对路径和明显的文件名。 */
+function addRetry(original) {
+  var d = document.createElement("div");
+  d.className = "m";
+  d.style.background = "transparent";
+  var b = document.createElement("button");
+  b.textContent = lang === "en" ? "Retry without paths" : "脱敏后重试";
+  b.onclick = function () {
+    var safe = original.replace(/(\/[\w.\-]+){2,}/g, "<路径>")
+                        .replace(/[A-Za-z]:\\[^\s"']+/g, "<路径>");
+    // 上下文也脱敏：只留工具名和参数，不带帮助原文和工作目录。
+    var keep = context;
+    context = keep ? {
+      tool: keep.tool, env: keep.env, mode: keep.mode,
+      options: (keep.options || []).map(function (o) {
+        return { flag: o.flag, arg: o.arg, description: o.description };
+      })
+    } : null;
+    refreshCtx();
+    el("ask").value = safe;
+    d.remove();
+    send();
+  };
+  d.appendChild(b);
+  el("log").appendChild(d);
+  el("log").scrollTop = el("log").scrollHeight;
+}
+
+/* ---------------- 事件 ---------------- */
+el("send").onclick = send;
+el("stop").onclick = stop;
+el("ask").addEventListener("keydown", function (e) {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
+});
+el("sessNew").onclick = newSession;
+el("sessDel").onclick = deleteCurrent;
+el("sessSel").onchange = function () { selectSession(el("sessSel").value); };
+
+/* ---------------- 启动 ---------------- */
+loadStore();
+if (sessions.length) {
+  currentId = sessions[0].id;
+  turns = sessions[0].turns;
+} else {
+  newSession();
+}
+applyLang();
+
+})();
+</script>
+</body>
+</html>

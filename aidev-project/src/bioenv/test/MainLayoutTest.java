@@ -17,7 +17,7 @@ import bioenv.ui.MainPanel;
 
 /**
  * Verifies the panel's arrangement: the toolbar on the left, the form in the
- * middle, and the output as a column on the right.
+ * middle, and the output running across the bottom.
  *
  * <p>Laid out by hand, headless. An earlier version of this class built a real
  * frame and called {@code setVisible(true)}, on the belief that Swing only assigns
@@ -94,40 +94,70 @@ public final class MainLayoutTest {
         line("=== Arrangement ===");
         line("");
 
-        line("[the top-level split is the toolbar and the rest]");
-        JSplitPane outer = firstSplit(p);
+        line("[the rail is the far-left column, the assistant next to it]");
+        // 左列现在是固定宽度的一列（图标栏 + AI 面板），<b>不再是分隔条</b>：
+        // 侧栏宽度是设计定的，不该可拖。所以这里不能再从"最外层分隔条"去看它。
+        JSplitPane outer = find(p, JSplitPane.class);
         check("a split exists", outer != null);
         if (outer == null) {
             return;
         }
         check("it is horizontal", outer.getOrientation() == JSplitPane.HORIZONTAL_SPLIT);
-        check("the toolbar is on the left",
-                titleOf(outer.getLeftComponent()).contains(I18n.t(Strings.TITLE_TREE)));
+        // 这一条是**新约定**：最左边那一列现在是 AI 助手（默认收起），
+        // 命令树退到它右边。原来这里断言"最左是树"，布局改了，断言也跟着改 ——
+        // 但改的是"最左是什么"，不是把数字调松。
+        // 约定又往前走了一步：最左是**常驻的图标栏**（Activity bar 那种），
+        // AI 面板在它右边、默认收起。图标栏是入口，不能跟着面板一起收。
+        // 注意这一层不再是 AiAssistPanel 本身，而是"图标栏 + 面板"那一列。
+        check("a rail exists", find(p, bioenv.ui.LeftRail.class) != null);
+        // AI 面板<b>和工具树共用同一块地方</b>（两张卡），不是并排的一列，
+        // 也不是独立窗口。这样谁的宽度都不会被对方挤掉。
+        // 这条断言钉住"共用"这件事：谁再把它改成并排，布局测试立刻报。
+        check("the assistant shares the tree's slot",
+                find(p, bioenv.ui.AiAssistPanel.class) != null);
+        // 两者必须是同一个容器的孩子 —— 那才是"共用一块地方"。
+        // 用"AI 的兄弟里有树的滚动面板"来判断，比按类型满树乱找可靠。
+        bioenv.ui.AiAssistPanel ai = find(p, bioenv.ui.AiAssistPanel.class);
+        check("the tree shares the assistant's card host",
+                ai != null && ai.getParent() != null
+                && find((Container) ai.getParent(), javax.swing.JScrollPane.class) != null);
+
+        line("[the tree is the left of the next split in]");
+        // 按<b>内容</b>找那一层，不按层数：以后再往外包东西也不会坏。
+        JSplitPane tree = treeSplit(p);
+        check("the tree split exists", tree != null);
+        if (tree != null) {
+            check("the toolbar is on the left",
+                    containsTitle(tree.getLeftComponent(), I18n.t(Strings.TITLE_TREE)));
+        }
         line("");
 
-        line("[the output is a column on the right]");
-        // The split whose *right* component is the output panel itself. A looser
-        // search finds the outer split, whose right side merely contains the output,
-        // and then reports the tree's width as if it were the output's.
-        JSplitPane columnSplit = splitWithRightTitle(p, I18n.t(Strings.TITLE_OUTPUT));
-        check("a split holds the output on its right", columnSplit != null);
-        if (columnSplit == null) {
+        line("[the output runs across the bottom]");
+        // 这一块以前是"输出在右边一列", 而且下面还有一条回归断言专门禁止它待在底部。
+        // 现在反过来了 —— 输出在最底部、横向通栏。
+        //
+        // 当时挪到右边的理由写在 LayoutTest 里: 让用户能调输出的宽度。
+        // 换到底部是把"宽度可调"换成"长行看得全": 日志每行都很长, 窄栏里全被截断,
+        // 而不跑东西的时候那一栏又白占宽度。代价是不能再横向拖 —— 高度仍然可以拖。
+        JSplitPane rowSplit = bottomSplit(p, I18n.t(Strings.TITLE_OUTPUT));
+        check("a split holds the output underneath", rowSplit != null);
+        if (rowSplit == null) {
             return;
         }
-        check("that split is horizontal",
-                columnSplit.getOrientation() == JSplitPane.HORIZONTAL_SPLIT);
+        check("that split is vertical",
+                rowSplit.getOrientation() == JSplitPane.VERTICAL_SPLIT);
 
-        Component form = columnSplit.getLeftComponent();
-        Component output = columnSplit.getRightComponent();
-        line("      form   x=" + form.getX() + " width=" + form.getWidth());
-        line("      output x=" + output.getX() + " width=" + output.getWidth());
-        check("the output begins to the right of the form",
-                output.getX() > form.getX());
-        check("the output column has a usable width", output.getWidth() >= 250);
-        check("the form keeps most of the width",
-                form.getWidth() > output.getWidth());
-        check("the output is not stretched across the form",
-                output.getWidth() < 600);
+        Component form = rowSplit.getLeftComponent();
+        Component output = rowSplit.getRightComponent();
+        line("      form   y=" + form.getY() + " height=" + form.getHeight());
+        line("      output y=" + output.getY() + " height=" + output.getHeight());
+        check("the output begins below the form",
+                output.getY() > form.getY());
+        check("the output has a usable height", output.getHeight() >= 100);
+        check("the form keeps most of the height",
+                form.getHeight() > output.getHeight());
+        check("the output spans the same width as the form",
+                Math.abs(form.getWidth() - output.getWidth()) <= 8);
         line("");
 
         line("[the preview is below the form, and always shown]");
@@ -139,11 +169,11 @@ public final class MainLayoutTest {
                 findTitled(p, I18n.t(Strings.TITLE_PREVIEW)));
         line("");
 
-        line("[the output is not below the form]");
-        // A regression guard: the output used to sit under the preview, and the
-        // arrangement being changed back would otherwise pass unnoticed.
-        check("no split has the output underneath",
-                !splitWithBottomTitle(p, I18n.t(Strings.TITLE_OUTPUT)));
+        // 这里原来有一条回归断言: "输出不能在表单下面"。
+        // 它守的是上一次"从底部挪到右边"的决定, 而那个决定这次被反过来了 ——
+        // 所以断言也反过来: 现在守的是"输出必须正好在底部那一条里"。
+        // 留这段注释是为了让后来的人知道这个方向变过两次, 不是随手写的。
+
         line("");
 
         line("The output is a column on the right, and the form keeps the room.");
@@ -334,6 +364,37 @@ public final class MainLayoutTest {
     }
 
     /** True when some vertical split has this title on its bottom component. */
+    /**
+     * 找"下半边是输出"那个垂直分隔条。
+     *
+     * <p>{@link #splitWithBottomTitle} 只能回答"有没有"，而这里要拿到分隔条本身 ——
+     * 要量表单和输出各自的 y 和高度。
+     */
+    private static JSplitPane bottomSplit(Container c, String title) {
+        JSplitPane found = null;
+        for (Component ch : c.getComponents()) {
+            if (ch instanceof JSplitPane) {
+                JSplitPane s = (JSplitPane) ch;
+                if (s.getOrientation() == JSplitPane.VERTICAL_SPLIT) {
+                    Component bottom = s.getRightComponent();
+                    if (bottom instanceof Container
+                            && containsTitle((Container) bottom, title)) {
+                        JSplitPane deeper = bottomSplit((Container) bottom, title);
+                        found = deeper != null ? deeper : s;
+                        continue;
+                    }
+                }
+            }
+            if (ch instanceof Container) {
+                JSplitPane r = bottomSplit((Container) ch, title);
+                if (r != null) {
+                    found = r;
+                }
+            }
+        }
+        return found;
+    }
+
     private static boolean splitWithBottomTitle(Container c, String title) {
         for (Component ch : c.getComponents()) {
             if (ch instanceof JSplitPane) {
@@ -350,6 +411,67 @@ public final class MainLayoutTest {
             }
         }
         return false;
+    }
+
+    /**
+     * 找"左半边是命令树"那个水平分隔条。
+     *
+     * <p>按内容找，不按顺序：AI 助手那一层现在包在最外面，取"第一个分隔条"会拿到它。
+     */
+    private static JSplitPane treeSplit(Container c) {
+        for (Component ch : c.getComponents()) {
+            if (ch instanceof JSplitPane) {
+                JSplitPane s = (JSplitPane) ch;
+                if (s.getOrientation() == JSplitPane.HORIZONTAL_SPLIT
+                        && containsTitle(s.getLeftComponent(),
+                                I18n.t(Strings.TITLE_TREE))) {
+                    return s;
+                }
+            }
+            if (ch instanceof Container) {
+                JSplitPane found = treeSplit((Container) ch);
+                if (found != null) {
+                    return found;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 这棵子树里有没有带该标题的边框。
+     *
+     * <p>不能只看组件本身：工具树现在被套进"树 / AI"那个卡片容器里了，标题边框
+     * 在<b>容器里面</b>，不在容器上。原来那句只看一眼就直接查不到，测试红了。
+     */
+    private static boolean containsTitle(Component c, String title) {
+        if (titleOf(c).contains(title)) {
+            return true;
+        }
+        if (c instanceof Container) {
+            for (Component ch : ((Container) c).getComponents()) {
+                if (containsTitle(ch, title)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /** 在组件树里找第一个某类型的组件。 */
+    private static <T extends Component> T find(Container c, Class<T> type) {
+        for (Component ch : c.getComponents()) {
+            if (type.isInstance(ch)) {
+                return type.cast(ch);
+            }
+            if (ch instanceof Container) {
+                T hit = find((Container) ch, type);
+                if (hit != null) {
+                    return hit;
+                }
+            }
+        }
+        return null;
     }
 
     private static JSplitPane firstSplit(Container c) {

@@ -185,6 +185,38 @@ public final class MainPanel extends JPanel {
     private JPanel commandPanel;
     private final JTextArea commandArea = new JTextArea(3, 40);
     private final JTextArea logArea = new JTextArea(12, 40);
+    /**
+     * 最左侧那一栏：AI 助手。默认<b>收起</b>（只留一条窄边），点箭头展开。
+     *
+     * <p>它是网页（TBtools 的内置模型只以 JS 桥给插件页面），Java 侧只负责推上下文
+     * 和跟主题语言。见 {@link AiAssistPanel} / {@link bioenv.ai.AiWebView}。
+     */
+    private AiAssistPanel aiAssist;
+    /** 最左侧常驻的图标栏（activity bar）。 */
+    private LeftRail leftRail;
+    /** 装"工具树 / AI 助手"两张卡的容器 —— 两者共用同一块地方。 */
+    private javax.swing.JPanel treeHost;
+    /**
+     * 主题或语言一变就把它们推给网页。
+     *
+     * <p>做成独立监听器而不是改现有的 {@code themeRefresh}/{@code languageRefresh}：
+     * 那两条路径被很多测试盯着，能不动就不动。
+     */
+    private final Runnable aiSync = new Runnable() {
+        @Override
+        public void run() {
+            if (aiAssist == null) {
+                return;
+            }
+            try {
+                aiAssist.pushTheme(UiTheme.current());
+                aiAssist.pushLang(bioenv.i18n.Lang.EN == I18n.get() ? "en" : "zh");
+            } catch (Throwable ignored) {
+                // AI 那一栏出问题不能影响主题或语言的切换。
+            }
+        }
+    };
+
     private final JButton runButton = new JButton(I18n.t(Strings.MENU_RUN));
     private final JButton stopButton = new JButton(I18n.t(Strings.MENU_STOP));
     /**
@@ -239,6 +271,15 @@ public final class MainPanel extends JPanel {
      * Applies initial divider positions once the panel has been laid out.' Puts the command preview back under the form's control. */
     private final JButton rebuildPreviewButton = new JButton(I18n.t(Strings.MENU_REBUILD_PREVIEW));
     private final JLabel statusLabel = new JLabel(I18n.t(Strings.STATUS_READY));
+    /**
+     * 状态栏右侧："当前连的是谁"。
+     *
+     * <p>这件事原来由顶栏那条工具条承担。顶栏去掉之后，总得有个地方回答
+     * "我现在连的是哪台"，否则用户得点开设置才知道。
+     */
+    private final JLabel connLabel = new JLabel();
+    /** 状态栏左侧的常驻提示（原来占表头两行的那段说明）。 */
+    private final JLabel hintLabel = new JLabel(I18n.t(Strings.STATUS_OPTIONS_HINT));
 
     /**
      * Titled borders that carry display text, kept so a language switch can retitle
@@ -347,7 +388,7 @@ public final class MainPanel extends JPanel {
      * spare room is better spent on the form. A fraction would also compute a
      * position past what a narrow window allows and be clamped.
      */
-    private static final int LOG_WIDTH_PX = 340;
+    private static final int LOG_HEIGHT_PX = 190;
 
     /**
      * Applies initial divider positions once the panel has been laid out.' A component's minimum extent along one axis, or 0 when unset. */
@@ -595,7 +636,6 @@ public final class MainPanel extends JPanel {
         setLayout(new BorderLayout(6, 6));
         UiTheme.loadOnce();
         setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
-        add(buildDiscoveryBar(), BorderLayout.NORTH);
         add(buildCenter(), BorderLayout.CENTER);
         add(buildStatusBar(), BorderLayout.SOUTH);
         wireEvents();
@@ -613,9 +653,12 @@ public final class MainPanel extends JPanel {
         // last, so every component it touches already exists; the callback runs on
         // the EDT (I18n dispatches there), so plain setText is correct.
         I18n.addListener(languageRefresh);
+        // AI 侧栏也要跟着语言走（它是个网页，得由 Java 推过去）。
+        I18n.addListener(aiSync);
         // 界面风格：先把上次的选择读进来（默认经典），再按它刷一遍；之后每次切换都走
         // 同一个 applyTheme()，所以两条路径不会长歪。
         UiTheme.addListener(themeRefresh);
+        UiTheme.addListener(aiSync);
         applyTheme();
         updateRunEnabled();
         // Put the panel back into the mode the user last used, BEFORE restoring
@@ -763,17 +806,17 @@ public final class MainPanel extends JPanel {
      * <p>这里给一个可以反复调用的入口，换风格后重摆一遍。
      */
     private void replaceDividers() {
-        if (logSplitRef != null && logSplitRef.getWidth() > 0) {
-            int available = logSplitRef.getWidth();
+        if (logSplitRef != null && logSplitRef.getHeight() > 0) {
+            int available = logSplitRef.getHeight();
             int max = available - logSplitRef.getDividerSize()
                     - minimumOf(logSplitRef.getLeftComponent(), true);
             int min = minimumOf(logSplitRef.getRightComponent(), true);
             if (max < min) {
                 max = min;
             }
-            int width = Math.max(min, Math.min(LOG_WIDTH_PX, max));
+            int height = Math.max(min, Math.min(LOG_HEIGHT_PX, max));
             logSplitRef.setDividerLocation(Math.max(0,
-                    available - logSplitRef.getDividerSize() - width));
+                    available - logSplitRef.getDividerSize() - height));
         }
         if (outerSplit != null) {
             outerSplitPending = true;      // 交给 doLayout() 重摆
@@ -1839,65 +1882,119 @@ public final class MainPanel extends JPanel {
     // Construction
     // ------------------------------------------------------------------
 
-    private JPanel buildDiscoveryBar() {
-        JPanel bar = new JPanel(new GridBagLayout());
-        GridBagConstraints g = new GridBagConstraints();
-        g.insets = new Insets(2, 4, 2, 4);
-        g.anchor = GridBagConstraints.WEST;
+    /**
+     * 设置卡：连接方式 + 界面外观。
+     *
+     * <p>这些原来在最上面一整条工具条里。它们<b>全属于"装好就不再动"的东西</b>，
+     * 却占着最显眼、最值钱的一整条横边；而真正天天在动的（选工具、填参数、跑）
+     * 只能在下面挤着。现在退到左边图标栏的 ⚙ 后面，需要时才点开。
+     *
+     * <p>竖着排而不是横着排：这一列只有两百多像素宽，横排会挤成一团。
+     */
+    private JPanel buildSettingsPanel() {
+        JPanel p = new JPanel();
+        p.setName("bioenv.settingsPanel");
+        p.setLayout(new javax.swing.BoxLayout(p, javax.swing.BoxLayout.Y_AXIS));
+        p.setBorder(BorderFactory.createEmptyBorder(6, 10, 8, 10));
 
-        // Connection mode leads the bar because it decides what the box next to it
-        // contains: WSL distributions, or saved Linux VM profiles.
-        g.gridx = 0; g.gridy = 0;
+        JPanel head = new JPanel(new BorderLayout());
+        head.setOpaque(false);
+        head.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+        JLabel settingsTitle = new JLabel(I18n.t(Strings.SETTINGS_TITLE));
+        settingsTitle.setFont(settingsTitle.getFont().deriveFont(Font.BOLD));
+        UiTheme.role(settingsTitle, "accent");
+        head.add(settingsTitle, BorderLayout.WEST);
+        JButton settingsClose = new JButton(I18n.t(Strings.AI_COLLAPSE_SHORT));
+        settingsClose.setName("settings.close");
+        settingsClose.setFocusable(false);
+        settingsClose.setMargin(new Insets(0, 6, 0, 6));
+        settingsClose.setToolTipText(I18n.t(Strings.SETTINGS_CLOSE));
+        settingsClose.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                hideAiAssist();
+            }
+        });
+        head.add(settingsClose, BorderLayout.EAST);
+        p.add(head);
+        p.add(javax.swing.Box.createVerticalStrut(12));
+
+        // 连接方式：它决定旁边那个框里装的是 WSL 发行版还是保存的虚拟机配置。
         modeLabel = new JLabel(I18n.t(Strings.CONN_MODE_LABEL));
-        bar.add(modeLabel, g);
-        g.gridx = 1;
-        modeBox.setToolTipText(I18n.t(Strings.HINT_MODE_BOX));
-        bar.add(modeBox, g);
-
-        g.gridx = 2;
-        // Kept in a field because its text switches between "WSL distro" and
-        // "Saved profile" as the mode changes.
-        distroLabel = new JLabel(I18n.t(Strings.CONN_LABEL_WSL));
-        bar.add(distroLabel, g);
-        g.gridx = 3;
-        distroBox.setPreferredSize(new Dimension(150, distroBox.getPreferredSize().height));
-        applySourceLabels(false);
-        bar.add(distroBox, g);
-        // 这里原来没有入口，注释写着"窗口会在需要配置时自己弹出来"。那个理由只对
-        // "从没连过"成立：自动弹出由 hasEverConnected() 把关，第一次连上之后就永久
-        // 关闭，而那是打开连接窗的<b>唯一</b>入口。于是用户能连一次，之后既加不了
-        // 第二台、也改不了填错的 IP —— 想改只能去删配置重建。
-        //
-        // 现在入口在 distroBox 里的「＋ 新增配置」那一项（见 newProfileItemText）。
-        // 放在下拉框里而不是旁边加个按钮：用户要"再连一台"时，第一眼看的就是这个框，
-        // 加一台的动作长在那个框里最省事，也不多占一行宽度。
-        g.gridx = 4;
-        bar.add(detectButton, g);
-        g.gridx = 5;
-        // 工具检索搬去了左侧工具树（见 buildCenter）。这里保留一个透明的弹性空列，
-        // 语言按钮仍然被顶在右边缘 —— 撑开的宽度全在这一列左边。
-        JPanel stretch = new JPanel();
-        stretch.setOpaque(false);
-        g.weightx = 1; g.fill = GridBagConstraints.HORIZONTAL;
-        bar.add(stretch, g);
-
-        // Language switch, last column, no weight: it takes its natural width and the
-        // unused space stays with the filler above. anchor=EAST pins it to the right
-        // even if the column is ever given more room than the button needs.
-        g.gridx = 6;
-        g.weightx = 0;
-        g.fill = GridBagConstraints.NONE;
-        g.anchor = GridBagConstraints.EAST;
-        // 风格切换器挨着语言按钮：两者都是"这个面板怎么显示"，放一起顺理成章。
-        bar.add(themeSwitcher, g);
-        g.gridx = 7;
-        bar.add(langToggle, g);
-
-        // 工具条整体跟着主题走；标签用次级灰，别和内容抢。
-        UiTheme.role(bar, "surface");
         UiTheme.role(modeLabel, "muted");
+        modeLabel.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+        p.add(modeLabel);
+        modeBox.setToolTipText(I18n.t(Strings.HINT_MODE_BOX));
+        modeBox.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+        modeBox.setMaximumSize(new Dimension(Integer.MAX_VALUE,
+                modeBox.getPreferredSize().height));
+        p.add(modeBox);
+        p.add(javax.swing.Box.createVerticalStrut(10));
+
+        // 这一项的标题会在"WSL 发行版"和"保存的配置"之间切换，所以留在字段里。
+        distroLabel = new JLabel(I18n.t(Strings.CONN_LABEL_WSL));
         UiTheme.role(distroLabel, "muted");
-        return bar;
+        distroLabel.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+        p.add(distroLabel);
+        applySourceLabels(false);
+        distroBox.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+        distroBox.setMaximumSize(new Dimension(Integer.MAX_VALUE,
+                distroBox.getPreferredSize().height));
+        p.add(distroBox);
+        // 「＋ 新增配置」在下拉框里，不在旁边加按钮 —— 见原来那段注释。
+        p.add(javax.swing.Box.createVerticalStrut(12));
+        detectButton.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+        p.add(detectButton);
+
+        p.add(javax.swing.Box.createVerticalStrut(18));
+        JLabel look = new JLabel(I18n.t(Strings.SETTINGS_LOOK));
+        UiTheme.role(look, "muted");
+        look.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+        p.add(look);
+        themeSwitcher.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+        p.add(themeSwitcher);
+
+        p.add(javax.swing.Box.createVerticalStrut(12));
+        JLabel langLbl = new JLabel(I18n.t(Strings.SETTINGS_LANGUAGE));
+        UiTheme.role(langLbl, "muted");
+        langLbl.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+        p.add(langLbl);
+        langToggle.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+        p.add(langToggle);
+
+        // ★ BoxLayout 的坑：它按"最大高度"给子组件分配纵向空间，而 JPanel/JLabel
+        // 默认的最大高度是<b>无限</b> —— 于是每个控件都被拉长，中间撑出一大片空白。
+        // 截图里"设置／收起"被拉到半空中、各项之间几百像素的空档，就是这个。
+        //
+        // 把每个子组件的最大高度钉成它的首选高度；不用 VerticalGlue —— 那是"允许
+        // 拉伸"的写法，和这里要的正好相反。
+        for (java.awt.Component c : p.getComponents()) {
+            if (c instanceof javax.swing.JComponent) {
+                javax.swing.JComponent jc = (javax.swing.JComponent) c;
+                java.awt.Dimension pref = jc.getPreferredSize();
+                jc.setMaximumSize(new java.awt.Dimension(Integer.MAX_VALUE, pref.height));
+            }
+        }
+        UiTheme.role(p, "surface");
+        return p;
+    }
+
+    /**
+     * 状态栏右侧显示"当前连的是谁"。
+     *
+     * <p>这件事原来靠顶栏那条工具条承担 —— 把它去掉之后，总得有个地方回答
+     * "我现在连的是哪台"，否则用户得点开设置才知道。一行就够。
+     */
+    private void refreshConnectionSummary() {
+        try {
+            Object m = modeBox.getSelectedItem();
+            Object d = distroBox.getSelectedItem();
+            String mode = m == null ? "" : m.toString();
+            String who = d == null ? "" : d.toString();
+            connLabel.setText(who.isEmpty() ? mode : mode + " · " + who);
+        } catch (Throwable ignored) {
+            // 状态栏少一行字，不该影响别的。
+        }
     }
 
     /**
@@ -1923,7 +2020,7 @@ public final class MainPanel extends JPanel {
      * Panes are given minimum sizes so that dragging cannot collapse one out of
      * existence.
      */
-    private JSplitPane buildCenter() {
+    private javax.swing.JComponent buildCenter() {
         // Tools are grouped by the environment that provides them: that is the
         // structure discovery produces, and it is how a user thinks about
         // their installations (DESIGN.md P9).
@@ -2066,7 +2163,7 @@ public final class MainPanel extends JPanel {
         // own, which is what survives later layout passes: a divider location set
         // once is recalculated from the components' sizes, whereas the sizes
         // themselves are respected every time.
-        logPanel.setPreferredSize(new Dimension(LOG_WIDTH_PX, 200));
+        logPanel.setPreferredSize(new Dimension(LOG_HEIGHT_PX, 200));
 
         // The form and the preview stack in the middle; the output sits beside them
         // rather than below. Output is long and narrow by nature — a tool's messages
@@ -2093,14 +2190,19 @@ public final class MainPanel extends JPanel {
         mainArea.setPreferredSize(new Dimension(900, 600));
         mainArea.setMinimumSize(new Dimension(320, 200));
 
-        // The output column is given a fixed width when the pane first has a real
-        // one. Setting the divider during construction or in doLayout does not work:
-        // at both points the pane has no width, so its divider bounds are degenerate
+        // 输出在<b>最底部、横向通栏</b>，参数表单在上面独占整宽。
+        //
+        // 原来输出是右侧一栏：日志每行都很长，在窄栏里全被截断，而不跑东西的时候
+        // 它又白占四分之一的宽度。横过来放底部之后，表单拿到整个宽度，输出也能按需拖高。
+        //
+        // The output is given a fixed height once the pane first has a real one.
+        // Setting the divider during construction or in doLayout does not work: at
+        // both points the pane has no height, so its divider bounds are degenerate
         // and the value is thrown away as soon as the pane is laid out for real. A
-        // resize event is the first moment the width is known.
-        JSplitPane logSplit = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT,
+        // resize event is the first moment the height is known.
+        JSplitPane logSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT,
                 mainArea, logPanel);
-        logSplit.setResizeWeight(1.0);   // the form absorbs the extra width
+        logSplit.setResizeWeight(1.0);   // the form absorbs the extra height
         logSplit.setDividerSize(6);
         logSplit.setBorder(null);
         logSplit.setMinimumSize(new Dimension(200, 200));
@@ -2110,24 +2212,25 @@ public final class MainPanel extends JPanel {
 
             @Override
             public void componentResized(java.awt.event.ComponentEvent e) {
-                if (placed || logSplit.getWidth() <= 0) {
+                if (placed || logSplit.getHeight() <= 0) {
                     return;
                 }
-                int available = logSplit.getWidth();
+                int available = logSplit.getHeight();
                 int max = available - logSplit.getDividerSize()
                         - minimumOf(logSplit.getLeftComponent(), true);
                 int min = minimumOf(logSplit.getRightComponent(), true);
                 if (max < min) {
                     max = min;
                 }
-                int width = Math.max(min, Math.min(LOG_WIDTH_PX, max));
+                int height = Math.max(min, Math.min(LOG_HEIGHT_PX, max));
                 logSplit.setDividerLocation(Math.max(0,
-                        available - logSplit.getDividerSize() - width));
+                        available - logSplit.getDividerSize() - height));
                 placed = true;
             }
         });
 
-        // 底部只留 Run / Stop，而且只落在中间列下面 —— 输出列整列贯通到底。
+        // Run / Stop 紧贴在命令预览下面 —— 它们本来就是一件事。
+        // 输出在更下面，横向通栏。
         JPanel actions = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 6, 4));
         stopButton.setEnabled(false);
         UiTheme.primary(runButton);
@@ -2161,7 +2264,117 @@ public final class MainPanel extends JPanel {
         // a real size; setting them now would be overwritten by layout.
         outerSplit = split;
         outerSplitPending = true;
-        return split;
+
+        // 最外层再包一层：AI 助手在最左，默认收起。
+        aiAssist = new AiAssistPanel();
+        // 面板右上角那个"收起"按钮：切回工具树。
+        aiAssist.setOnCollapse(new Runnable() {
+            @Override
+            public void run() {
+                hideAiAssist();
+            }
+        });
+
+        // 最左那条图标栏常驻 —— 它是入口，只占一条窄边（40px）。
+        // 以后加"运行历史""设置"只需再 add 一个图标，布局不用动。
+        leftRail = new LeftRail();
+        leftRail.add("ai", I18n.t(Strings.AI_TITLE), LeftRail.robotIcon(),
+                new LeftRail.Action() {
+                    @Override
+                    public void run() {
+                        showAiAssist();
+                    }
+                });
+        leftRail.add("settings", I18n.t(Strings.SETTINGS_ICON), LeftRail.gearIcon(),
+                new LeftRail.Action() {
+                    @Override
+                    public void run() {
+                        showSettings();
+                    }
+                });
+
+        // AI 助手<b>盖住工具树</b>那一块，而不是另开一列、也不是另开一个窗口。
+        //
+        // 两者共用同一块地方：点图标切进来，点"收起"切回去。这样
+        //   - 谁的宽度都不会被对方挤掉（固定一列会永久挤窄工具树）；
+        //   - 也不用多管一个窗口（切窗口比切内容笨重，还容易丢焦点）。
+        // 初始显示的是树，所以不开 AI 时主界面和以前完全一样。
+        java.awt.Component treeSide = split.getLeftComponent();
+        treeHost = new javax.swing.JPanel(new java.awt.CardLayout());
+        treeHost.setName("bioenv.treeHost");
+        treeHost.setMinimumSize(treeSide == null
+                ? new Dimension(120, 120) : treeSide.getMinimumSize());
+        treeHost.add(treeSide == null ? new javax.swing.JPanel() : treeSide, "tree");
+        treeHost.add(aiAssist, "ai");
+        // 设置（原来的顶栏）也是这块地方的一张卡 —— 三者共用同一个位置。
+        treeHost.add(buildSettingsPanel(), "settings");
+        split.setLeftComponent(treeHost);
+        ((java.awt.CardLayout) treeHost.getLayout()).show(treeHost, "tree");
+
+        javax.swing.JPanel whole = new javax.swing.JPanel(new java.awt.BorderLayout());
+        whole.setName("bioenv.mainArea");
+        whole.add(leftRail, java.awt.BorderLayout.WEST);
+        whole.add(split, java.awt.BorderLayout.CENTER);
+        return whole;
+    }
+
+    /**
+     * 最左侧那条图标栏。
+     *
+     * <p>公开出来是<b>给布局测试用的</b>：测试要能断言"最左是图标栏、命令树在它右边"，
+     * 而又不该去认内部字段名。
+     */
+    public LeftRail leftRail() {
+        return leftRail;
+    }
+
+    /**
+     * 把工具树那一块切成 AI 助手。
+     *
+     * <p>不是另开一列，也不是另开窗口：<b>共用同一块地方</b>。占用是零 ——
+     * 不开 AI 时主界面和以前一模一样，开着的时候也没有谁被挤窄。
+     */
+    private void showAiAssist() {
+        if (aiAssist == null || treeHost == null) {
+            return;
+        }
+        // 第一次真要用它的时候才去碰网页运行时 —— 构造阶段绝不碰。
+        aiAssist.ensureLoaded();
+        aiAssist.pushTheme(UiTheme.current());
+        aiAssist.pushLang(bioenv.i18n.Lang.EN == I18n.get() ? "en" : "zh");
+        card().show(treeHost, "ai");
+        leftRail.select("ai");
+        treeHost.revalidate();
+        treeHost.repaint();
+    }
+
+    /** 把工具树那一块切成设置卡（原来的顶栏）。 */
+    private void showSettings() {
+        if (treeHost == null) {
+            return;
+        }
+        card().show(treeHost, "settings");
+        leftRail.select("settings");
+        refreshConnectionSummary();
+        treeHost.revalidate();
+        treeHost.repaint();
+    }
+
+    /** 切回工具树（面板右上角的"收起"按钮接的就是这里）。 */
+    private void hideAiAssist() {
+        if (treeHost == null) {
+            return;
+        }
+        card().show(treeHost, "tree");
+        // 收起来之后图标不该还亮着 —— 它表示"当前显示的是 AI"。
+        leftRail.clearSelection();
+        treeHost.revalidate();
+        treeHost.repaint();
+    }
+
+    /** 换卡片。 */
+    private java.awt.CardLayout card() {
+        return (java.awt.CardLayout) treeHost.getLayout();
     }
 
     /**
@@ -2198,6 +2411,17 @@ public final class MainPanel extends JPanel {
         JPanel p = new JPanel(new BorderLayout());
         statusLabel.setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 4));
         p.add(statusLabel, BorderLayout.CENTER);
+        // 中间这条是从表头搬过来的：它每天只在第一次看时有用，却常占两行高度。
+        // 放在状态栏既不占参数区的地方，又还在眼前。
+        hintLabel.setBorder(BorderFactory.createEmptyBorder(2, 8, 2, 8));
+        hintLabel.setName("bioenv.optionsHint");
+        UiTheme.role(hintLabel, "muted");
+        p.add(hintLabel, BorderLayout.WEST);
+        connLabel.setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 4));
+        connLabel.setName("bioenv.connectionSummary");
+        UiTheme.role(connLabel, "muted");
+        p.add(connLabel, BorderLayout.EAST);
+        refreshConnectionSummary();
         return p;
     }
 
@@ -3259,6 +3483,35 @@ public final class MainPanel extends JPanel {
     private void updateRunEnabled() {
         runButton.setEnabled(selected != null && runner != null);
         toolAssistantButton.setEnabled(selected != null);
+        // 换工具就把上下文推给 AI 那一栏 —— 用户不该为了问"这个参数什么意思"
+        // 去手工复制帮助文本。这里只推，不碰任何运行状态。
+        pushAiContext();
+    }
+
+    /**
+     * 把当前工具的原始帮助 / 工作目录推给最左侧的 AI 助手。
+     *
+     * <p>帮助文本是这个插件<b>独有</b>的上下文：网页版 AI 拿不到，而
+     * {@code DiscoveryCache} 里现成缓存着。用户以前得手工粘贴，现在换工具就有。
+     *
+     * <p>整个方法吞掉所有异常：AI 那一栏拿不到上下文，<b>不能影响选工具本身</b>。
+     */
+    private void pushAiContext() {
+        if (aiAssist == null || formPanel == null) {
+            return;
+        }
+        try {
+            aiAssist.pushContext(bioenv.ai.AiContext.build(
+                    selected == null ? "" : selected.command,
+                    selected == null ? "" : selected.envName,
+                    formPanel.rawHelpText(),
+                    "",
+                    "",
+                    formPanel.rawWorkdir(),
+                    null));
+        } catch (Throwable ignored) {
+            // 故意吞掉：AI 是附加功能，坏了也只该是它自己不显示。
+        }
     }
 
     /**
@@ -4045,6 +4298,8 @@ public final class MainPanel extends JPanel {
 
     /** 按当前语言重新渲染状态栏。语言切换时调用。 */
     private void refreshStatusText() {
+        // 连接摘要跟着状态一起刷 —— 它们都在回答"现在是什么情况"。
+        refreshConnectionSummary();
         FileDialogs.onEdt(applyStatus);
     }
 

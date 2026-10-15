@@ -83,11 +83,15 @@ public final class LayoutTest {
         // against the output column. The second was added deliberately when the
         // output moved from below the preview to a column beside it, so that its
         // width is the user's to set.
-        check("two horizontal splits (tree | rest, and form | output)", h == 2);
+        // 只剩一条水平分隔条：命令树 | 其余。
+        // 表单 / 输出那一层现在是<b>垂直</b>的（上表单、下输出通栏），不再算水平。
+        check("one horizontal split (tree | rest)", h == 1);
+
         // One vertical split remains: the options against the extras. The preview
         // is a foldable section now rather than a split pane, so that folding it
         // returns its height to the option list instead of merely shrinking it.
-        check("one vertical split remains (options | extras)", v == 1);
+        // 垂直的现在有两条：表单 | 输出（输出在最底部通栏），以及 options | extras。
+        check("two vertical splits (form | output, and options | extras)", v == 2);
         line("");
 
         line("[initial proportions were applied]");

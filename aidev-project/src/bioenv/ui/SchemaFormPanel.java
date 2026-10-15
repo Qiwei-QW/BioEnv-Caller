@@ -929,18 +929,21 @@ public final class SchemaFormPanel extends JPanel {
      * <p>构造和每次 rebuild 都走同一条路径，这样两条分支不会长歪。
      */
     private JPanel buildHead() {
-        JPanel titleRow = new JPanel(new BorderLayout(8, 0));
-        titleRow.add(headerLabel, BorderLayout.CENTER);
-        titleRow.add(headerActions, BorderLayout.EAST);
+        // 工具名和"@ 环境 · N 个参数"并在同一行：它们讲的是同一件事，
+        // 分成两行只是白占一行高度 —— 而那一行该留给参数表单。
+        JPanel nameRow = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 8, 0));
+        nameRow.setOpaque(false);
+        nameRow.add(headerLabel);
+        nameRow.add(schemaStatus);
 
-        // 状态行紧跟工具名：它是这一屏最该先看到的一行。
-        JPanel mid = new JPanel(new BorderLayout(4, 2));
-        mid.add(schemaStatus, BorderLayout.NORTH);
-        mid.add(descArea, BorderLayout.CENTER);
+        JPanel titleRow = new JPanel(new BorderLayout(8, 0));
+        titleRow.add(nameRow, BorderLayout.CENTER);
+        titleRow.add(headerActions, BorderLayout.EAST);
 
         JPanel head = new JPanel(new BorderLayout(4, 2));
         head.add(titleRow, BorderLayout.NORTH);
-        head.add(mid, BorderLayout.CENTER);
+        // descArea 只在真有上下文时才出现，空的时候连高度一起收掉。
+        head.add(descArea, BorderLayout.CENTER);
         // 工作目录：标签一行，输入框一行（见 buildWorkdirRow）。
         head.add(buildWorkdirRow(), BorderLayout.SOUTH);
         return head;
@@ -1073,6 +1076,35 @@ public final class SchemaFormPanel extends JPanel {
         descArea.setWrapStyleWord(true);
         descArea.setOpaque(false);
         descArea.setBorder(null);
+        // 说明区没内容时连高度一起收掉。
+        //
+        // 那段套话（"下面的参数是从命令自己的帮助输出里读出来的…"）已经搬到状态栏；
+        // 留在 descArea 里的都是有具体上下文的提示（读不出参数、子命令、还没读等）。
+        // 挂在文档上而不是逐个改 setText 调用点：5 处，漏一处就多占两行空白。
+        descArea.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            private void sync() {
+                boolean has = descArea.getText() != null && descArea.getText().trim().length() > 0;
+                if (descArea.isVisible() != has) {
+                    descArea.setVisible(has);
+                    descArea.revalidate();
+                }
+            }
+
+            @Override
+            public void insertUpdate(javax.swing.event.DocumentEvent e) {
+                sync();
+            }
+
+            @Override
+            public void removeUpdate(javax.swing.event.DocumentEvent e) {
+                sync();
+            }
+
+            @Override
+            public void changedUpdate(javax.swing.event.DocumentEvent e) {
+                sync();
+            }
+        });
 
         JPanel head = buildHead();
         add(head, BorderLayout.NORTH);
@@ -1323,7 +1355,7 @@ public final class SchemaFormPanel extends JPanel {
             // The trailing marker is part of the status line's own syntax, so it is
             // translated as a fragment alongside the counts below rather than glued
             // here; the command and environment names are data and stay verbatim.
-            schemaStatus.setText(tool.command + " " + subPath
+            schemaStatus.setText(" " + subPath
                     + "  @  " + tool.envName + "   \u2014   "
                     + I18n.t(Strings.FORM_STATUS_LOADING));
             add(new JLabel(I18n.t(Strings.FORM_LOADING)), BorderLayout.CENTER);
@@ -1352,7 +1384,7 @@ public final class SchemaFormPanel extends JPanel {
                     || schema.format.isUnusable();
             if (unstructured) {
                 descArea.setText(I18n.t(Strings.FORM_UNSTRUCTURED));
-                schemaStatus.setText(tool.command + I18n.t(Strings.FORM_STATUS_AT)
+                schemaStatus.setText(I18n.t(Strings.FORM_STATUS_AT)
                         + tool.envName + I18n.t(Strings.FORM_STATUS_SEP)
                         + I18n.t(Strings.FORM_STATUS_NO_OPTIONS));
             } else {
@@ -1360,7 +1392,7 @@ public final class SchemaFormPanel extends JPanel {
                         schema.format == null
                                 ? I18n.t(Strings.FORM_UNKNOWN)
                                 : schema.format.describe()));
-                schemaStatus.setText(tool.command + I18n.t(Strings.FORM_STATUS_AT)
+                schemaStatus.setText(I18n.t(Strings.FORM_STATUS_AT)
                         + tool.envName + I18n.t(Strings.FORM_STATUS_SEP)
                         + I18n.t(Strings.FORM_STATUS_UNREADABLE));
             }
@@ -1377,7 +1409,7 @@ public final class SchemaFormPanel extends JPanel {
         }
 
         descArea.setText(describe(tool, schema));
-        schemaStatus.setText(tool.command + "  @  " + tool.envName
+        schemaStatus.setText("@  " + tool.envName
                 + I18n.t(Strings.FORM_STATUS_SEP)
                 + I18n.t(Strings.FORM_STATUS_OPTIONS,
                         Integer.valueOf(schema.options.size()))
@@ -1523,7 +1555,9 @@ public final class SchemaFormPanel extends JPanel {
         if (s.subcommands.size() >= 2 && s.subcommands.size() >= s.options.size()) {
             return I18n.t(Strings.FORM_DESC_SUBCOMMANDS);
         }
-        return I18n.t(Strings.FORM_DESC_OPTIONS);
+        // 通用情况不给话：这段已经搬到状态栏，留在这里就是白占两行高度。
+        // 上面几个分支（子命令等）是有上下文的，仍然留在表头。
+        return "";
     }
 
     /**
