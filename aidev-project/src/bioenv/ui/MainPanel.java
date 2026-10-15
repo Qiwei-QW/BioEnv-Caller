@@ -278,6 +278,8 @@ public final class MainPanel extends JPanel {
      * "我现在连的是哪台"，否则用户得点开设置才知道。
      */
     private final JLabel connLabel = new JLabel();
+    /** 状态栏左侧的常驻提示（原来占表头两行的那段说明）。 */
+    private final JLabel hintLabel = new JLabel(I18n.t(Strings.STATUS_OPTIONS_HINT));
 
     /**
      * Titled borders that carry display text, kept so a language switch can retitle
@@ -2397,6 +2399,12 @@ public final class MainPanel extends JPanel {
         JPanel p = new JPanel(new BorderLayout());
         statusLabel.setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 4));
         p.add(statusLabel, BorderLayout.CENTER);
+        // 中间这条是从表头搬过来的：它每天只在第一次看时有用，却常占两行高度。
+        // 放在状态栏既不占参数区的地方，又还在眼前。
+        hintLabel.setBorder(BorderFactory.createEmptyBorder(2, 8, 2, 8));
+        hintLabel.setName("bioenv.optionsHint");
+        UiTheme.role(hintLabel, "muted");
+        p.add(hintLabel, BorderLayout.WEST);
         connLabel.setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 4));
         connLabel.setName("bioenv.connectionSummary");
         UiTheme.role(connLabel, "muted");

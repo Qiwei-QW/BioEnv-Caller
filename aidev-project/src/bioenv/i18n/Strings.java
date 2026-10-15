@@ -226,6 +226,8 @@ public final class Strings {
     public static final String SETTINGS_LANGUAGE = "settings.language";
     public static final String SETTINGS_CLOSE = "settings.close";
     public static final String SETTINGS_ICON = "settings.icon";
+    /** 状态栏：参数从哪来、类型能不能改（原来占表头两行的那段话）。 */
+    public static final String STATUS_OPTIONS_HINT = "status.optionsHint";
     public static final String AI_EXPAND = "ai.expand";
     public static final String AI_LOADING = "ai.loading";
     public static final String AI_NO_PAGE = "ai.noPage";
@@ -1182,6 +1184,9 @@ public final class Strings {
         put(ZH_TEXT, EN_TEXT, SETTINGS_CLOSE, "收起设置，回到工具树",
                 "Hide settings and go back to the tool tree");
         put(ZH_TEXT, EN_TEXT, SETTINGS_ICON, "设置", "Settings");
+        put(ZH_TEXT, EN_TEXT, STATUS_OPTIONS_HINT,
+                "参数读自命令帮助，类型可用右侧下拉框调整",
+                "Options come from the tool's help; types are adjustable");
         put(ZH_TEXT, EN_TEXT, AI_EXPAND, "展开 AI 助手", "Expand the AI assistant");
         put(ZH_TEXT, EN_TEXT, AI_LOADING, "展开后加载。", "Expands to load.");
         put(ZH_TEXT, EN_TEXT, AI_NO_PAGE,
