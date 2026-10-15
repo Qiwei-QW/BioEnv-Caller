@@ -183,6 +183,8 @@ public final class MainPanel extends JPanel {
     /**
      * Applies initial divider positions once the panel has been laid out.' The preview's titled panel, so its title can report which state it is in. */
     private JPanel commandPanel;
+    /** 预览下面那一行（「从表单重建」按钮所在）。平时整行收起，见 updatePreviewHint。 */
+    private JPanel previewActions;
     // 1 行而不是 3 行：这里永远只显示一条命令，多出来的两行是纯浪费的高度，
     // 而高度正是参数区最缺的东西。
     private final JTextArea commandArea = new JTextArea(1, 40);
@@ -2127,6 +2129,7 @@ public final class MainPanel extends JPanel {
         JPanel cmdSouth = new JPanel(new java.awt.FlowLayout(
                 java.awt.FlowLayout.LEFT, 6, 2));
         cmdSouth.add(rebuildPreviewButton);
+        previewActions = cmdSouth;
         commandPanel.add(cmdSouth, BorderLayout.SOUTH);
         commandPanel.setMinimumSize(new Dimension(200, 56));
 
@@ -3443,7 +3446,19 @@ public final class MainPanel extends JPanel {
         }
         refreshCommandPanelTitle();
         if (rebuildPreviewButton != null) {
-            rebuildPreviewButton.setEnabled(previewEdited && selected != null);
+            boolean usable = previewEdited && selected != null;
+            rebuildPreviewButton.setEnabled(usable);
+            // 只有真能点的时候才把这一行露出来。
+            //
+            // 平时（预览跟着表单走）它是灰的：一个点了没反应的按钮常驻在那儿，
+            // 既是视觉噪音，又白占一行高度。
+            //
+            // 它不能删 —— 见 rebuildPreviewFromForm 的注释：预览一旦被手工改过就
+            // 停止跟随表单，而这是唯一的回头路。所以：需要时出现，不需要时连那一行
+            // 一起收掉。出现的那一刻，标题也已经变成「命令预览（已手工编辑）」了。
+            if (previewActions != null) {
+                previewActions.setVisible(usable);
+            }
         }
     }
 
