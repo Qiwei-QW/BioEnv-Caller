@@ -3445,8 +3445,19 @@ public final class MainPanel extends JPanel {
      * 也没法把它改成别的 —— 于是预览永远说得出自己跑的是哪个工具。
      */
     private final class PrefixLock extends javax.swing.text.DocumentFilter {
+        /**
+         * 该不该拦下这次编辑。
+         *
+         * <p>★ {@code previewWriting} 那一半是必须的，而且很容易漏 —— 漏了就是一个
+         * 严重的 bug：{@code JTextArea.setText()} 内部是<b>先 remove(0, 全长) 再
+         * insertString(0, …)</b>，起点正好是 0。只要前缀长度记下来了，插件自己刷新
+         * 预览的写入也会被这个过滤器当成"改受保护区"拦掉 ——
+         * 于是<b>表单里填了参数，预览再也不会更新</b>。
+         *
+         * <p>过滤器是用来区分"用户改"和"插件写"的，不是用来拦一切写入的。
+         */
         private boolean blocked(int offset) {
-            return offset < previewPrefixLength;
+            return !previewWriting && offset < previewPrefixLength;
         }
 
         @Override
