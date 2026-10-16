@@ -114,6 +114,15 @@ public final class AiWebView {
             // 第二个参数 false = 隐藏导航栏：这一栏是插件的一部分，不是浏览器。
             JPanel p = (JPanel) c.getConstructor(String.class, boolean.class)
                     .newInstance(fileUrl, Boolean.FALSE);
+            // ★ 建完立刻给首选尺寸，而且是在它进入任何窗口之前。
+            //
+            // 顺序不是随便的。minisvg（唯一已知能跑通的同类插件）的字节码就是这个
+            // 顺序：new WebGuiJPanel(...) → setPreferredSize(...) → 挂上去。
+            //
+            // 网页视图内部那个真正的浏览器组件，尺寸是在创建时就定下绘制表面的；
+            // 等它挂进窗口之后再改，它不认。这正是我们量到的那个怪现象的来源 ——
+            // 无论外面怎么设，它永远报告同一个尺寸（1050x832）。
+            p.setPreferredSize(new java.awt.Dimension(320, 480));
             Object b = findBrowser(
                     Class.forName(BROWSER_CLASS, false, p.getClass().getClassLoader()), p);
             v = new AiWebView(p, b);
