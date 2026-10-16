@@ -67,6 +67,11 @@ public final class AiAssistPanel extends JPanel {
         // "收起"只是在同一个位置重复第二遍同样的动作，还白占一行对话的高度。
         showMessage(I18n.t(Strings.AI_LOADING));
 
+        // 临时诊断行：定位"网页显示不出来"用，定位完删掉。
+        diag.setFont(new java.awt.Font(java.awt.Font.MONOSPACED, java.awt.Font.PLAIN, 11));
+        diag.setForeground(new java.awt.Color(0x99, 0x33, 0x33));
+        add(diag, BorderLayout.SOUTH);
+
         // ★ 等这一栏真正显示在屏幕上之后再建网页。
         //
         // 这是从 minisvg 的字节码里学来的：它建完 WebGuiJPanel 之后挂了一个
@@ -90,6 +95,9 @@ public final class AiAssistPanel extends JPanel {
                     public void run() {
                         ensureLoaded();
                         onShown();
+                        refreshDiag();
+                        diagTimer.setRepeats(false);
+                        diagTimer.restart();
                         // 这一栏以后每次被改尺寸，也要跟着摆 —— 内层的浏览器组件
                         // 不会自己响应外层布局（见 AiWebView.resizeTo）。
                         addComponentListener(new java.awt.event.ComponentAdapter() {
@@ -98,6 +106,7 @@ public final class AiAssistPanel extends JPanel {
                                 if (view != null) {
                                     view.resizeTo(getWidth(), getHeight());
                                 }
+                                refreshDiag();
                             }
                         });
                     }
@@ -143,6 +152,22 @@ public final class AiAssistPanel extends JPanel {
      * <p>刻意不在构造器里做：网页运行时一旦缺失或出问题，构造函数抛异常会让<b>整个插件
      * 加载失败</b>，而这里失败最多是"AI 这一栏显示一句解释"。
      */
+    /** 临时诊断行，见构造函数。 */
+    private final JLabel diag = new JLabel(" ");
+    private final javax.swing.Timer diagTimer = new javax.swing.Timer(1200, new java.awt.event.ActionListener() {
+        @Override
+        public void actionPerformed(java.awt.event.ActionEvent e) {
+            refreshDiag();
+        }
+    });
+
+    /** 刷新诊断行。 */
+    private void refreshDiag() {
+        String d = view != null ? view.describe() : "view=null";
+        diag.setText("  " + d + "  self=" + getWidth() + "x" + getHeight()
+                + "  body=" + body.getWidth() + "x" + body.getHeight());
+    }
+
     public void ensureLoaded() {
         if (loaded) {
             return;
@@ -176,6 +201,11 @@ public final class AiAssistPanel extends JPanel {
         body.add(view.panel(), BorderLayout.CENTER);
         body.revalidate();
         body.repaint();
+
+        // 布局跑完之后再看一次，那时尺寸才算数。
+        refreshDiag();
+        diagTimer.setRepeats(false);
+        diagTimer.restart();
 
         // 补推：主题、语言、以及期间攒下来的上下文。
         pushTheme(theme);

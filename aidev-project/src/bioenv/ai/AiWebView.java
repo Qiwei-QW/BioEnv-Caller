@@ -314,6 +314,26 @@ public final class AiWebView {
         }
     }
 
+    /**
+     * 临时诊断：这一栏走了哪条路、视图现在多大、在不在屏幕上。
+     *
+     * <p>追"网页显示不出来"追了五轮，每轮都只能靠猜 —— 所以先把状态摆到界面上，
+     * 让一张截图说清楚。定位之后删掉。
+     */
+    public String describe() {
+        JComponent c = view != null ? view : panel;
+        if (c == null) {
+            return "view=null";
+        }
+        java.awt.Container par = c.getParent();
+        return "own=" + (view != null)
+                + "  cls=" + c.getClass().getSimpleName()
+                + "  size=" + c.getWidth() + "x" + c.getHeight()
+                + "  shown=" + c.isShowing() + "/" + c.isVisible() + "/" + c.isDisplayable()
+                + "  parent=" + (par == null ? "null" : par.getClass().getSimpleName())
+                + "  psize=" + (par == null ? "-" : par.getWidth() + "x" + par.getHeight());
+    }
+
     // ------------------------------------------------------------------
 
     /** {@code Optional} 取值；不是 Optional 就原样返回。 */
