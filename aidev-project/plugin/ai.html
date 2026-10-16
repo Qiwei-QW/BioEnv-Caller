@@ -118,6 +118,10 @@
 #atts .att b{cursor:pointer;font-weight:400;opacity:.6;padding:0 2px}
 #atts .att b:hover{opacity:1}
 #explain{display:none;width:100%;margin:0 0 6px;font-size:12px;text-align:left}
+/* 输入框高一些。原来一行高，+ 和 ▶ 挤在里面，字还没打几个就到边了。 */
+#askWrap #ask{min-height:66px;line-height:1.5;resize:none}
+#askWrap #pick{left:9px;bottom:9px;width:30px;height:30px}
+#askWrap #go{right:9px;bottom:9px;width:44px;height:30px}
 </style>
 </head>
 <body class="theme-classic">
@@ -154,7 +158,7 @@
   <button id="explain"></button>
   <div class="row">
     <div id="askWrap">
-    <textarea id="ask" placeholder="按 Enter 发送，Shift+Enter 换行"></textarea>
+    <textarea id="ask" rows="3" placeholder="按 Enter 发送，Shift+Enter 换行"></textarea>
     <!-- 一个按钮，两种状态：不忙是发送（▶），忙了是停止（■）。
          本来就是同一件事的两面，分成两个按钮只会让人犹豫按哪个。 -->
     <button id="pick" class="icon" title="添加文件或图片">＋</button>
@@ -233,6 +237,8 @@ var T = {
   explain: "上次运行失败了 · 让 AI 看看",
   explainQ: "刚才这一步运行失败了。请看看下面的输出，告诉我最可能的原因，以及我该改哪个参数或哪一步。",
   untitled: "新会话", bigFile: "文件太大，没有加进来：",
+  bigImg: "图片太大，没有加进来（上限 4 MB，这张 ",
+  cutNote: "（只取了开头一部分，全文 ",
   imgNoStream: "（图片请求不带历史，也不流式返回）",
     untitled: "新会话",
     confirmDel: "删除这个会话？它的对话记录会一起删掉。",
@@ -256,6 +262,8 @@ var T = {
   explain: "The last run failed - let the AI look",
   explainQ: "That last run failed. Look at the output below and tell me the most likely cause, and which option or step I should change.",
   untitled: "New conversation", bigFile: "File too large, not attached: ",
+  bigImg: "Image too large, not attached (4 MB limit; this one is ",
+  cutNote: "(only the beginning is included; the whole file is ",
   imgNoStream: "(image requests carry no history and do not stream)",
     untitled: "New conversation",
     confirmDel: "Delete this conversation? Its messages go with it.",
@@ -540,14 +548,22 @@ function renderAtts() {
   }
 }
 
+/** 人看得懂的大小。 */
+function mb(n) { return (Math.round(n / 1048576 * 10) / 10) + " MB"; }
+
 function addFiles(list) {
   for (var i = 0; i < list.length; i++) {
     (function (f) {
       var img = /^image\//.test(f.type);
-      if (f.size > 4 * 1024 * 1024) {
-        setStatus(t("bigFile") + f.name, "bad");
+      // 只有图片设上限。桥的错误码里有 too_large，说明它那边有上限；
+      // 4 MB 是保守划的一条线。撞上了把实际大小也说出来，别让人去猜。
+      if (img && f.size > 4 * 1024 * 1024) {
+        setStatus(t("bigImg") + mb(f.size) + "）", "bad");
         return;
       }
+      // 文本文件不按大小挡。它真正的限制是 32000 字符的预算，
+      // 而那是发送时才知道的 —— 拦在这里只会把能用的情况也挡掉。
+      // 照读，拼进问题时截断，并写明只取了开头。
       var r = new FileReader();
       r.onload = function () {
         atts.push({ kind: img ? "img" : "txt", name: f.name,
@@ -763,7 +779,13 @@ function send() {
     names.push(atts[i].name);
     if (atts[i].kind === "img" && !img) { img = atts[i]; }
     else if (atts[i].kind === "txt") {
-      full += "\n\n[附件 " + atts[i].name + "]\n" + String(atts[i].data).slice(0, 8000);
+      var whole = String(atts[i].data);
+      var part = whole.slice(0, 8000);
+      // 截断了必须写出来。不说的话，模型会拿半截文件当完整的来回答，
+      // 而用户看不出来它只看了一半。
+      full += "\n\n[附件 " + atts[i].name + "]\n" + part
+            + (whole.length > part.length
+               ? "\n" + t("cutNote") + whole.length + " 字符）" : "");
     }
   }
   atts.length = 0;
