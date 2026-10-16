@@ -61,6 +61,19 @@ public final class AiAssistPanel extends JPanel {
         setLayout(new BorderLayout());
         setMinimumSize(new Dimension(0, 0));
 
+        // ★ 这一行是整个面板能不能显示的分水岭。
+        //
+        // body 是装内容的地方：网页视图进它的 CENTER，提示文字进它的 NORTH。
+        // 它以前从来没有被加进来过 —— 于是它没有父容器、尺寸恒为 0x0、
+        // isDisplayable 为 false，里面放什么都画不出来。
+        //
+        // 后果是这一栏从第一版起就一个字都没显示过，连"加载中…"都没有。
+        // 那本身就是线索：从不显示任何 Swing 内容，而不只是网页画不出来 ——
+        // 我却一直以为是网页视图的问题，查了六轮。
+        //
+        // 诊断行给出的铁证：self=260x735 而 body=0x0。
+        add(body, BorderLayout.CENTER);
+
         // 这里刻意没有任何标题栏或收起按钮。
         //
         // 开关统一在左边那条图标栏上：点 🤖 展开、再点一次收起。面板自己再放一个
