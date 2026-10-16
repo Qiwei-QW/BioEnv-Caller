@@ -7,6 +7,7 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 
+import javax.swing.JComponent;
 import javax.swing.JPanel;
 
 /**
@@ -50,8 +51,13 @@ public final class AiWebView {
     /** 网页运行时里代表一个浏览器的接口；不在编译期 classpath 上，只能反射。 */
     private static final String BROWSER_CLASS =
             "com.teamdev.jxbrowser.browser.Browser";
+    /** 真正要挂进布局的那个 Swing 组件；我们直接建它，不经过 WebGuiJPanel。 */
+    private static final String VIEW_CLASS =
+            "com.teamdev.jxbrowser.view.swing.BrowserView";
 
     private final JPanel panel;
+    /** 我们自己建的那个 Swing 组件，用来按目标尺寸摆它。 */
+    private JComponent view;
     private Object browser;
     private Object frame;
     private String problem = "";
@@ -107,28 +113,83 @@ public final class AiWebView {
      * @return 视图；失败返回 null（调用方显示降级文案）
      */
     public static AiWebView open(String fileUrl) {
-        AiWebView v = null;
+        // ★ 先试"自己建视图"这条路。
+        //
+        // 为什么不继续用 WebGuiJPanel：它的设计假定是"我就是插件面板本身" ——
+        // TBtools 把它直接放进标签容器，之后调 pack() 问它的首选尺寸。svguest
+        // （唯一已知能跑通的同类插件）正是那么用的，它的 generatePanel() 直接
+        // return new WebGuiJPanel(...)。
+        //
+        // 我们把它塞进 JSplitPane 左侧、再套 CardLayout、再套两层 JPanel —— 四个
+        // 父容器都在改它的尺寸。实测它内部的浏览器组件因此固定在一个自己定的
+        // 尺寸上（1050x832），外面怎么设都不认，屏幕上就是一片空白。
+        //
+        // svguest 的技能文档自己写明了这条出路：用 WebGuiJPanel.getEngine() 拿到
+        // 那个共享引擎，然后自己 newBrowser() + BrowserView.newInstance(browser)。
+        // 尺寸从此由我们直接给 BrowserView，不再经过那四层假定。
+        AiWebView mine = buildOwnView(fileUrl);
+        if (mine != null) {
+            return mine;
+        }
+        // 自己建失败（引擎形状变了、BrowserView 类不在等）就退回原来的封装 ——
+        // 那条路虽然显示不出来，但页面是活的，Java 侧推数据照样能用。
+        return buildViaHostPanel(fileUrl);
+    }
+
+    /**
+     * 自己建 {@code Browser} + {@code BrowserView}，挂在一个朴素的面板里。
+     *
+     * <p>失败一律返回 {@code null}，由 {@link #open} 退回封装那条路。
+     */
+    private static AiWebView buildOwnView(String fileUrl) {
         try {
-            Class<?> c = Class.forName(WEB_PANEL_CLASS, true,
-                    AiWebView.class.getClassLoader());
-            // 第二个参数 false = 隐藏导航栏：这一栏是插件的一部分，不是浏览器。
+            ClassLoader cl = AiWebView.class.getClassLoader();
+            Class<?> panelClass = Class.forName(WEB_PANEL_CLASS, true, cl);
+            Class<?> browserClass = Class.forName(BROWSER_CLASS, false, cl);
+            Class<?> viewClass = Class.forName(VIEW_CLASS, false, cl);
+
+            // 引擎是 TBtools 的共享单例，授权由它注入；我们自己再设一遍是防御性的，
+            // 因为"注入"发生在哪个环节（静态块还是构造函数）没有文档保证。
+            license();
+            Object engine = panelClass.getMethod("getEngine").invoke(null);
+            if (engine == null) {
+                return null;
+            }
+
+            Object browser = call(engine, "newBrowser");
+            if (browser == null) {
+                return null;
+            }
+            Method newInstance = viewClass.getMethod("newInstance", browserClass);
+            JComponent view = (JComponent) newInstance.invoke(null, browser);
+
+            JPanel host = new JPanel(new java.awt.BorderLayout());
+            host.setMinimumSize(new java.awt.Dimension(0, 0));
+            host.add(view, java.awt.BorderLayout.CENTER);
+
+            Object nav = call(browser, "navigation");
+            call(nav, "loadUrl", fileUrl);
+
+            AiWebView v = new AiWebView(host, browser);
+            v.view = view;
+            return v;
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    /** 自己建失败时的退路：用 TBtools 现成的网页面板。 */
+    private static AiWebView buildViaHostPanel(String fileUrl) {
+        AiWebView v;
+        try {
+            Class<?> c = Class.forName(WEB_PANEL_CLASS, true, AiWebView.class.getClassLoader());
             JPanel p = (JPanel) c.getConstructor(String.class, boolean.class)
                     .newInstance(fileUrl, Boolean.FALSE);
-            // ★ 建完立刻给首选尺寸，而且是在它进入任何窗口之前。
-            //
-            // 顺序不是随便的。minisvg（唯一已知能跑通的同类插件）的字节码就是这个
-            // 顺序：new WebGuiJPanel(...) → setPreferredSize(...) → 挂上去。
-            //
-            // 网页视图内部那个真正的浏览器组件，尺寸是在创建时就定下绘制表面的；
-            // 等它挂进窗口之后再改，它不认。这正是我们量到的那个怪现象的来源 ——
-            // 无论外面怎么设，它永远报告同一个尺寸（1050x832）。
             p.setPreferredSize(new java.awt.Dimension(320, 480));
             Object b = findBrowser(
                     Class.forName(BROWSER_CLASS, false, p.getClass().getClassLoader()), p);
             v = new AiWebView(p, b);
             if (b == null) {
-                // 网页面板建起来了但没找到 Browser 对象：JxBrowser 的版本形状可能变了。
-                // 这不算致命 —— 页面还是能显示，只是 Java 推不进去数据。
                 v.problem = "没能在网页面板里找到 Browser 对象（JxBrowser 版本可能变了）";
             }
         } catch (Throwable t) {
@@ -140,6 +201,48 @@ public final class AiWebView {
             return stub;
         }
         return v;
+    }
+
+    /** 防御性地把 JxBrowser 授权设上；拿不到就算了，TBtools 自己多半已经设过。 */
+    private static void license() {
+        try {
+            if (System.getProperty("jxbrowser.license.key") != null) {
+                return;
+            }
+            ClassLoader cl = AiWebView.class.getClassLoader();
+            Class<?> hub = Class.forName("toolsKit.LicenseHub$GetLicense", false, cl);
+            Object key = hub.getMethod("getJxBroswerLicense").invoke(null);
+            if (key != null) {
+                System.setProperty("jxbrowser.license.key", String.valueOf(key));
+            }
+        } catch (Throwable t) {
+            // 拿不到就不设；引擎创建会告诉我们行不行。
+        }
+    }
+
+    /**
+     * 按名字调一个公开方法。
+     *
+     * <p>JxBrowser 的公开 API 多在接口上，实现类可能是包私有的，所以沿类层次
+     * 逐级 {@code getMethod}（它会一并找到接口继承来的公开方法）。
+     */
+    private static Object call(Object target, String name, Object... args) throws Exception {
+        Class<?>[] types = new Class<?>[args.length];
+        for (int i = 0; i < args.length; i++) {
+            types[i] = args[i] == null ? Object.class : args[i].getClass();
+        }
+        Method m = null;
+        for (Class<?> k = target.getClass(); m == null && k != null; k = k.getSuperclass()) {
+            try {
+                m = k.getMethod(name, types);
+            } catch (NoSuchMethodException e) {
+                // 继续往上找。
+            }
+        }
+        if (m == null) {
+            throw new NoSuchMethodException(target.getClass().getName() + "." + name);
+        }
+        return m.invoke(target, args);
     }
 
     /**
@@ -183,10 +286,21 @@ public final class AiWebView {
      * 否则等于把尺寸设成了一个当时还不对的值。
      */
     public void resizeTo(int w, int h) {
-        if (panel == null || w <= 0 || h <= 0) {
+        if (w <= 0 || h <= 0) {
             return;
         }
-        applySize(panel, w, h);
+        if (view != null) {
+            // 自己建的视图：直接告诉它多大，这一条就够。
+            view.setPreferredSize(new java.awt.Dimension(w, h));
+            view.setSize(w, h);
+            view.revalidate();
+            view.repaint();
+            return;
+        }
+        if (panel != null) {
+            // 退回封装那条路：里面那个组件不服从布局，只能整棵子树逐个设。
+            applySize(panel, w, h);
+        }
     }
 
     private static void applySize(java.awt.Component c, int w, int h) {
