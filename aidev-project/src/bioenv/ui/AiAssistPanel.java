@@ -164,8 +164,10 @@ public final class AiAssistPanel extends JPanel {
     /** 刷新诊断行。 */
     private void refreshDiag() {
         String d = view != null ? view.describe() : "view=null";
-        diag.setText("  " + d + "  self=" + getWidth() + "x" + getHeight()
-                + "  body=" + body.getWidth() + "x" + body.getHeight());
+        // 用 <html> 让它换行：一长行会被面板宽度截掉，上一版就截在
+        // "size=260x73…" 那里，后面的 shown / parent 全没看到。
+        diag.setText("<html>" + d + "<br>self=" + getWidth() + "x" + getHeight()
+                + "  body=" + body.getWidth() + "x" + body.getHeight() + "</html>");
     }
 
     public void ensureLoaded() {

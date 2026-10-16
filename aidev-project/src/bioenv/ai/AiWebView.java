@@ -127,12 +127,18 @@ public final class AiWebView {
         // svguest 的技能文档自己写明了这条出路：用 WebGuiJPanel.getEngine() 拿到
         // 那个共享引擎，然后自己 newBrowser() + BrowserView.newInstance(browser)。
         // 尺寸从此由我们直接给 BrowserView，不再经过那四层假定。
-        AiWebView mine = buildOwnView(fileUrl);
-        if (mine != null) {
-            return mine;
-        }
-        // 自己建失败（引擎形状变了、BrowserView 类不在等）就退回原来的封装 ——
-        // 那条路虽然显示不出来，但页面是活的，Java 侧推数据照样能用。
+        // ★ 结论：自己建 BrowserView 这条路走不通，已经实测排除。
+        //
+        // 技能文档写明 WebGuiJPanel 用的是共享静态引擎，且是 OFF_SCREEN 渲染模式。
+        // 那个模式的意思是"网页渲染到一张离屏位图上"，它不往 BrowserView 里画 ——
+        // BrowserView 在这个引擎上永远出不来东西。WebGuiJPanel 之所以能显示，
+        // 正是因为它自己去取那张位图来画，这是它作为一个自定义类存在的理由。
+        //
+        // 实测印证：自己建的 BrowserView 报 own=true、cls=BrowserView、size=260x73x
+        // —— 类、尺寸、可见性都对，屏幕上一片空白。
+        //
+        // 所以退回 WebGuiJPanel。诊断行留着，它会告诉我们在这个四层嵌套里
+        // WebGuiJPanel 到底有没有尺寸、在不在屏幕上。
         return buildViaHostPanel(fileUrl);
     }
 
@@ -140,6 +146,14 @@ public final class AiWebView {
      * 自己建 {@code Browser} + {@code BrowserView}，挂在一个朴素的面板里。
      *
      * <p>失败一律返回 {@code null}，由 {@link #open} 退回封装那条路。
+     */
+    /**
+     * 自己建 {@code Browser} + {@code BrowserView}。
+     *
+     * <p><b>实测排除，不再调用。</b>引擎是 OFF_SCREEN 模式，那个模式下网页渲染到
+     * 离屏位图，{@code BrowserView} 拿不到画面 —— 建出来的视图类对、尺寸对、
+     * 可见性也对，就是不显示。留着这段是因为它能说明当时试过什么，以及为什么
+     * 不能那么做。
      */
     private static AiWebView buildOwnView(String fileUrl) {
         try {
