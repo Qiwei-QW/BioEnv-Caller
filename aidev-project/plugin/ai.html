@@ -839,8 +839,22 @@ function send() {
         //
         // 两种都接：若 s 以 base 开头且更长，它就是全文，直接接收；
         // 否则当增量拼上。这样不用去赌桥的行为。
-        if (s.length > base.length && s.indexOf(base) === 0) {
+        // ★ 这里必须是 >= ，不能是 >。
+        //
+        // 实测（从页面里直接调 chat，把每次的 s 记下来）：
+        //   len / prevLen / startsWithPrev
+        //    21 /      21 / True        ← 同一份全文又发了一遍
+        //    32 /      32 / True
+        //    47 /      47 / True
+        // 一条回复 898 次回调，前 30 条里就有 3 次这种“没长”的。
+        //
+        // 而 > 会把它们归到 else 里去做 base += s ——
+        // 于是每发生一次，已经显示的内容就被重反一遍，越滚越长。
+        // 结束时用最终文本重绘，所以看不出来 —— 故障自己把自己藏了。
+        if (s.length >= base.length && s.indexOf(base) === 0) {
           base = s;
+        } else if (s.length < base.length && base.indexOf(s) === 0) {
+          // 又收到一条更短的，是旧状态，忽略。
         } else {
           base += s;
         }
