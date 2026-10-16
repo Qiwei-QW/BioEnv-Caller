@@ -831,8 +831,19 @@ function send() {
     } else {
     p = bridge.chat(msgs, {
       onDelta: function (s) {
-        // 实测：s 是增量。最终以 promise 的返回值覆盖。
-        base += (s || "");
+        s = s || "";
+        // s 到底是“增量”还是“到目前为止的全文” —— 两种都见过。
+        //
+        // 这里原来是 base += s，并注明“实测 s 是增量”。但实际跑起来
+        // 会整段重复、越滚越长 —— 那正是“s 是全文”时 base += s 的样子。
+        //
+        // 两种都接：若 s 以 base 开头且更长，它就是全文，直接接收；
+        // 否则当增量拼上。这样不用去赌桥的行为。
+        if (s.length > base.length && s.indexOf(base) === 0) {
+          base = s;
+        } else {
+          base += s;
+        }
         box.textContent = base;
         el("log").scrollTop = el("log").scrollHeight;
       }
