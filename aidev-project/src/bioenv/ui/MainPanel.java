@@ -2124,7 +2124,6 @@ public final class MainPanel extends JPanel {
         commandPanel.setBorder(commandBorder);
         JScrollPane commandScroll = new JScrollPane(commandArea);
         UiTheme.role(commandScroll, "terminal");
-        commandPanel.add(commandScroll, BorderLayout.CENTER);
 
         // The button sits inside the preview's own panel so the action is next to
         // the thing it acts on.
@@ -2136,15 +2135,22 @@ public final class MainPanel extends JPanel {
                 rebuildPreviewFromForm();
             }
         });
-        // 这里原来有一整句说明（"如果你熟悉这个工具，可以直接在这里输入…"）。
-        // 它每天只在第一次看时有用，却常占一行高度。现在：关键信息并进状态栏那行
-        // 常驻提示，全文放进预览框的悬停提示（见上面的 setToolTipText）—— 一句没丢。
-        JPanel cmdSouth = new JPanel(new java.awt.FlowLayout(
-                java.awt.FlowLayout.LEFT, 6, 2));
-        cmdSouth.add(rebuildPreviewButton);
-        previewActions = cmdSouth;
-        commandPanel.add(cmdSouth, BorderLayout.SOUTH);
-        commandPanel.setMinimumSize(new Dimension(200, 56));
+        // 「重置命令」放在命令行<b>右端</b>，和它管的那一行输入同处一个面板。
+        //
+        // 它干的事就是"把这个框里的内容重置掉"，贴着框最直接；而且这样
+        // <b>省掉输入框下面的一整行</b> —— 那一行只放一个按钮，高度全浪费了。
+        //
+        // 这一块同时是显隐开关：平时（预览跟着表单走）整块藏起来，见 updatePreviewHint。
+        previewActions = new JPanel(new java.awt.BorderLayout());
+        previewActions.setOpaque(false);
+        previewActions.add(rebuildPreviewButton, BorderLayout.CENTER);
+
+        JPanel cmdRow = new JPanel(new java.awt.BorderLayout(6, 0));
+        cmdRow.setOpaque(false);
+        cmdRow.add(commandScroll, BorderLayout.CENTER);
+        cmdRow.add(previewActions, BorderLayout.EAST);
+        commandPanel.add(cmdRow, BorderLayout.CENTER);
+        commandPanel.setMinimumSize(new Dimension(200, 46));
 
         JPanel logPanel = new JPanel(new BorderLayout());
         logPanelRef = logPanel;
