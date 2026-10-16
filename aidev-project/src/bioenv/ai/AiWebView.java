@@ -55,6 +55,15 @@ public final class AiWebView {
     private static final String VIEW_CLASS =
             "com.teamdev.jxbrowser.view.swing.BrowserView";
 
+    /**
+     * 上一次建出来的那一份。
+     *
+     * <p>TBtools 会多次构造 {@code MainPanel}（换标签、重载插件都会），每次都会建一个
+     * 网页视图。旧的那些不关就会一直留着 —— 实测同时挂了三个页面。
+     * 同一时刻只有一块 AI 面板是有意义的，所以新的建起来时把旧的关掉。
+     */
+    private static AiWebView previous;
+
     private final JPanel panel;
     /** 我们自己建的那个 Swing 组件，用来按目标尺寸摆它。 */
     private JComponent view;
@@ -186,6 +195,7 @@ public final class AiWebView {
 
             AiWebView v = new AiWebView(host, browser);
             v.view = view;
+            handOver(v);
             return v;
         } catch (Throwable t) {
             return null;
@@ -203,6 +213,7 @@ public final class AiWebView {
             Object b = findBrowser(
                     Class.forName(BROWSER_CLASS, false, p.getClass().getClassLoader()), p);
             v = new AiWebView(p, b);
+            handOver(v);
             if (b == null) {
                 v.problem = "没能在网页面板里找到 Browser 对象（JxBrowser 版本可能变了）";
             }
@@ -215,6 +226,32 @@ public final class AiWebView {
             return stub;
         }
         return v;
+    }
+
+    /** 新的这一份接手：把上一次那个浏览器关掉。 */
+    private static synchronized void handOver(AiWebView fresh) {
+        AiWebView old = previous;
+        previous = fresh;
+        if (old != null && old != fresh) {
+            old.close();
+        }
+    }
+
+    /**
+     * 关掉这个视图背后的浏览器。
+     *
+     * <p>失败就算了：关不掉最多是留着资源，不该因此影响界面。
+     */
+    public void close() {
+        try {
+            if (browser != null) {
+                call(browser, "close");
+            }
+        } catch (Throwable t) {
+            // 关不掉不是致命问题。
+        }
+        browser = null;
+        frame = null;
     }
 
     /** 防御性地把 JxBrowser 授权设上；拿不到就算了，TBtools 自己多半已经设过。 */
@@ -326,26 +363,6 @@ public final class AiWebView {
                 applySize(kids[i], w, h);
             }
         }
-    }
-
-    /**
-     * 临时诊断：这一栏走了哪条路、视图现在多大、在不在屏幕上。
-     *
-     * <p>追"网页显示不出来"追了五轮，每轮都只能靠猜 —— 所以先把状态摆到界面上，
-     * 让一张截图说清楚。定位之后删掉。
-     */
-    public String describe() {
-        JComponent c = view != null ? view : panel;
-        if (c == null) {
-            return "view=null";
-        }
-        java.awt.Container par = c.getParent();
-        return "own=" + (view != null)
-                + "  cls=" + c.getClass().getSimpleName()
-                + "  size=" + c.getWidth() + "x" + c.getHeight()
-                + "  shown=" + c.isShowing() + "/" + c.isVisible() + "/" + c.isDisplayable()
-                + "  parent=" + (par == null ? "null" : par.getClass().getSimpleName())
-                + "  psize=" + (par == null ? "-" : par.getWidth() + "x" + par.getHeight());
     }
 
     // ------------------------------------------------------------------
