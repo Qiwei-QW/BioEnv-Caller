@@ -841,14 +841,14 @@ public final class SchemaFormPanel extends JPanel {
      * 旁边却空着三分之一。
      *
      * <p>现在给参数列表 80%。附加参数并没有被折叠或藏起来（它有存在的理由：
-     * 帮助里没描述的参数只能写在那儿），只是不再喧宾夺主。想要更多照样拖分隔条。
+     * 帮助里没描述的参数只能写在那儿），只是不再喧宾夺主。分隔条已拿掉，位置固定。
      *
      * <p>提成常量而不是留四处字面量：这个数在四个地方各写了一遍，改一次要改四处，
      * 漏一处就会出现"拖动时一边、重摆时另一边"的错位。
      */
     private static final double FORM_SPLIT_RATIO = 0.80;
 
-    /** Divides the option list from the extra-arguments box; resizable. */
+    /** Divides the option list from the extra-arguments box; not resizable, the divider is 0 wide. */
     private JSplitPane formSplit;
 
     /**
@@ -1508,7 +1508,12 @@ public final class SchemaFormPanel extends JPanel {
         if (formSplit == null) {
             formSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, optionHost, extras);
             formSplit.setResizeWeight(FORM_SPLIT_RATIO);
-            formSplit.setDividerSize(6);
+            // 0 = 没有拖动条，位置就钉在上面那个比例上。
+        //
+        // 原来这里是 6：一条能抓的分隔条。问题是它只会被往一个方向拉 ——
+        // 往下拉就是压缩附加参数，而附加参数已经贴在下沿，拉下去只是把它挤扁。
+        // 用户要的是"默认就在最下面，而且拉不动"，那就把能抓的东西去掉。
+        formSplit.setDividerSize(0);
             formSplit.setBorder(null);
             // 分隔位置要等分栏自己有尺寸之后再摆，而且布局分几步走（先 0、再 509、最后
             // 535），早摆一次就会停在中间态上。所以每次高度变化都重摆，直到高度稳住。

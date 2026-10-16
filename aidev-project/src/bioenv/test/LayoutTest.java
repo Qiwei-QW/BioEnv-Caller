@@ -108,11 +108,32 @@ public final class LayoutTest {
         }
         line("");
 
-        line("[divider size makes it grabbable]");
+        // 分隔条现在分两种，这个分界是用户定的。
+        //
+        // 这条原先要求每一条都至少 4px，也就是"都必须抓得住"。用户实测后要的是相反的：
+        // 参数区内部那条（参数列表 vs 附加参数）不该能抓 —— 它只会被往下拉，而往下拉
+        // 就是把附加参数挤扁，没有第二种用法。所以它宽度是 0，位置钉在 FORM_SPLIT_RATIO。
+        // 其余分隔条照旧，它们确实需要用户调。
+        //
+        // 认出它靠 resizeWeight：FORM_SPLIT_RATIO 这个数就是分隔位置与 resizeWeight
+        // 共用的，别的分栏没有它。
+        line("[one divider is pinned, the rest are grabbable]");
+        int pinned = 0;
+        int grabbable = 0;
         for (JSplitPane sp : splits) {
-            check("divider is at least 4px (" + sp.getDividerSize() + ")",
-                    sp.getDividerSize() >= 4);
+            boolean extras = Math.abs(sp.getResizeWeight() - 0.80) < 1e-9;
+            if (extras) {
+                pinned++;
+                check("the extras divider cannot be grabbed (" + sp.getDividerSize() + ")",
+                        sp.getDividerSize() == 0);
+            } else {
+                grabbable++;
+                check("divider is at least 4px (" + sp.getDividerSize() + ")",
+                        sp.getDividerSize() >= 4);
+            }
         }
+        check("exactly one divider is pinned (" + pinned + ")", pinned == 1);
+        check("the other two are grabbable (" + grabbable + ")", grabbable == 2);
         line("");
 
         line("[panes declare minimum sizes]");
