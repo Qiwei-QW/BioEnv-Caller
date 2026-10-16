@@ -90,6 +90,16 @@ public final class AiAssistPanel extends JPanel {
                     public void run() {
                         ensureLoaded();
                         onShown();
+                        // 这一栏以后每次被改尺寸，也要跟着摆 —— 内层的浏览器组件
+                        // 不会自己响应外层布局（见 AiWebView.resizeTo）。
+                        addComponentListener(new java.awt.event.ComponentAdapter() {
+                            @Override
+                            public void componentResized(java.awt.event.ComponentEvent e) {
+                                if (view != null) {
+                                    view.resizeTo(getWidth(), getHeight());
+                                }
+                            }
+                        });
                     }
                 });
             }
@@ -211,6 +221,9 @@ public final class AiAssistPanel extends JPanel {
      * <p>所以这里显式把它的边界摆成父容器现在的大小，再让它自己重排一次。
      */
     public void onShown() {
+        if (view != null) {
+            view.resizeTo(getWidth(), getHeight());
+        }
         if (view != null && view.panel() != null) {
             java.awt.Container parent = view.panel().getParent();
             if (parent != null && parent.getWidth() > 0 && parent.getHeight() > 0) {

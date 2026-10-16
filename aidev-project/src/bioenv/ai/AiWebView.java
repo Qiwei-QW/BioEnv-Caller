@@ -163,6 +163,34 @@ public final class AiWebView {
         }
     }
 
+    /**
+     * 把网页视图按给定尺寸摆一遍，<b>连同它内部的子组件</b>。
+     *
+     * <p>为什么要自己走一遍：外面那个 {@code WebGuiJPanel} 服从布局，但它内部真正的
+     * 浏览器组件不服从 —— 实测它死死固定在一个自己定的尺寸上（1050×832），
+     * 容器多宽它都不变，屏幕上就是一片空白，父容器的 revalidate/repaint 也无效。
+     *
+     * <p>所以这里显式地把整棵子树都设成目标尺寸。只在容器真的显示出来之后调用，
+     * 否则等于把尺寸设成了一个当时还不对的值。
+     */
+    public void resizeTo(int w, int h) {
+        if (panel == null || w <= 0 || h <= 0) {
+            return;
+        }
+        applySize(panel, w, h);
+    }
+
+    private static void applySize(java.awt.Component c, int w, int h) {
+        c.setSize(w, h);
+        c.setPreferredSize(new java.awt.Dimension(w, h));
+        if (c instanceof java.awt.Container) {
+            java.awt.Component[] kids = ((java.awt.Container) c).getComponents();
+            for (int i = 0; i < kids.length; i++) {
+                applySize(kids[i], w, h);
+            }
+        }
+    }
+
     // ------------------------------------------------------------------
 
     /** {@code Optional} 取值；不是 Optional 就原样返回。 */
