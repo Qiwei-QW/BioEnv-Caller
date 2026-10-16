@@ -119,9 +119,9 @@
 #atts .att b:hover{opacity:1}
 #explain{display:none;width:100%;margin:0 0 6px;font-size:12px;text-align:left}
 /* 输入框高一些。原来一行高，+ 和 ▶ 挤在里面，字还没打几个就到边了。 */
-#askWrap #ask{min-height:66px;line-height:1.5;resize:none}
-#askWrap #pick{left:9px;bottom:9px;width:30px;height:30px}
-#askWrap #go{right:9px;bottom:9px;width:44px;height:30px}
+#askWrap #ask{min-height:104px;line-height:1.55;resize:none;padding-top:9px;padding-bottom:38px}
+#askWrap #pick{left:9px;bottom:9px;width:32px;height:32px}
+#askWrap #go{right:9px;bottom:9px;width:46px;height:32px}
 </style>
 </head>
 <body class="theme-classic">
@@ -158,7 +158,7 @@
   <button id="explain"></button>
   <div class="row">
     <div id="askWrap">
-    <textarea id="ask" rows="3" placeholder="按 Enter 发送，Shift+Enter 换行"></textarea>
+    <textarea id="ask" rows="4" placeholder="按 Enter 发送，Shift+Enter 换行"></textarea>
     <!-- 一个按钮，两种状态：不忙是发送（▶），忙了是停止（■）。
          本来就是同一件事的两面，分成两个按钮只会让人犹豫按哪个。 -->
     <button id="pick" class="icon" title="添加文件或图片">＋</button>
