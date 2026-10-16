@@ -1713,9 +1713,16 @@ public final class SchemaFormPanel extends JPanel {
             return p;
         }
         p.add(new JLabel(I18n.t(Strings.FORM_RAW_ARGS)), BorderLayout.NORTH);
-        // NORTH 而不是 CENTER：按首选的两行高摆，不跟着容器长。见 rawArgsScroll。
+        // SOUTH 而不是 CENTER，也不是 NORTH。
+        //
+        // 用 CENTER 它会跟着容器一起长高，占的是上面参数表的地方；
+        // 用 NORTH 高度是钉住了，但多出来的空白留在它下面 ——
+        // 于是它离下面的命令预览隔着一片空，看着像两块东西。
+        //
+        // 用 SOUTH：空白留在它上方，它紧贴命令预览。这两样本来就是一件事的两半
+        // （写进附加参数的会直接接在预览那条命令后面），挨着放才对。
         JPanel argsHolder = new JPanel(new BorderLayout());
-        argsHolder.add(rawArgsScroll(), BorderLayout.NORTH);
+        argsHolder.add(rawArgsScroll(), BorderLayout.SOUTH);
         p.add(argsHolder, BorderLayout.CENTER);
         // 这里<b>不</b>再放一条工作目录行。
         //
@@ -3005,9 +3012,9 @@ public final class SchemaFormPanel extends JPanel {
         extraArgsLabel = new JLabel(I18n.t(Strings.FORM_EXTRA_ARGS));
         extraArgsLabel.setToolTipText(I18n.t(Strings.FORM_EXTRA_ARGS_TIP));
         p.add(extraArgsLabel, BorderLayout.NORTH);
-        // NORTH 而不是 CENTER：同上，两行就够。
+        // SOUTH：同上 —— 空白留上方，它紧贴下面的命令预览。
         JPanel argsHolder = new JPanel(new BorderLayout());
-        argsHolder.add(rawArgsScroll(), BorderLayout.NORTH);
+        argsHolder.add(rawArgsScroll(), BorderLayout.SOUTH);
         p.add(argsHolder, BorderLayout.CENTER);
         return p;
     }
@@ -3019,8 +3026,8 @@ public final class SchemaFormPanel extends JPanel {
      * 附加参数是"偶尔补一句"的地方，不是主输入区 —— 它多占的高度是从上面那张
      * 参数表身上拿的，而那张表才是天天用的。
      *
-     * <p>所以钉子钉在这里：按文本区自己的两行定出首选高度，摆的时候用 NORTH，
-     * 下面留白，不再往上长。
+     * <p>所以钉子钉在这里：按文本区自己的两行定出首选高度，摆的时候用 SOUTH ——
+     * 高度不再变，而且多出来的空白留在它上方，它紧贴下面的命令预览。
      */
     private JScrollPane rawArgsScroll() {
         configureRawArgs();
