@@ -72,7 +72,7 @@ public final class Strings {
     /** 主按钮：扫描 conda 环境。 */
     public static final String MENU_DETECT = "menu.detect";
 
-    /** 主按钮：从表单重建命令预览。 */
+    /** 主按钮：重置命令预览（丢掉手工改动，回到表单拼的）。 */
     public static final String MENU_REBUILD_PREVIEW = "menu.rebuildPreview";
 
     /** 状态栏：就绪。 */
@@ -226,6 +226,8 @@ public final class Strings {
     public static final String SETTINGS_LANGUAGE = "settings.language";
     public static final String SETTINGS_CLOSE = "settings.close";
     public static final String SETTINGS_ICON = "settings.icon";
+    /** 图标栏上的"工具树"。 */
+    public static final String TREE_ICON = "tree.icon";
     /** 状态栏：参数从哪来、类型能不能改（原来占表头两行的那段话）。 */
     public static final String STATUS_OPTIONS_HINT = "status.optionsHint";
     public static final String AI_EXPAND = "ai.expand";
@@ -321,7 +323,7 @@ public final class Strings {
     /** 提示：预览框被手工编辑后的说明。 */
     public static final String HINT_PREVIEW_EDITED = "hint.previewEdited";
 
-    /** 提示：命令预览已从表单重建。 */
+    /** 提示：命令预览已重置。 */
     public static final String STATUS_PREVIEW_REBUILT = "status.previewRebuilt";
 
     /** 提示：来源下拉框的说明（WSL 方式）。 */
@@ -1056,7 +1058,7 @@ public final class Strings {
 
     static {
         put(ZH_TEXT, EN_TEXT, MENU_DETECT, "扫描 conda 环境", "Detect conda environments");
-        put(ZH_TEXT, EN_TEXT, MENU_REBUILD_PREVIEW, "从表单重建", "Rebuild from form");
+        put(ZH_TEXT, EN_TEXT, MENU_REBUILD_PREVIEW, "重置命令", "Reset command");
 
         put(ZH_TEXT, EN_TEXT, STATUS_READY, "就绪。点击「扫描 conda 环境」。",
                 "Ready. Click 'Detect conda environments'.");
@@ -1184,9 +1186,14 @@ public final class Strings {
         put(ZH_TEXT, EN_TEXT, SETTINGS_CLOSE, "收起设置，回到工具树",
                 "Hide settings and go back to the tool tree");
         put(ZH_TEXT, EN_TEXT, SETTINGS_ICON, "设置", "Settings");
+        put(ZH_TEXT, EN_TEXT, TREE_ICON, "工具树（再点一次收起）",
+                "Tool tree (click again to collapse)");
+        // 两句话并成一条：一句说参数从哪来，一句说预览能直接改。
+        // 它们原来各占一行界面高度，而状态栏一行就放得下。
         put(ZH_TEXT, EN_TEXT, STATUS_OPTIONS_HINT,
-                "参数读自命令帮助，类型可用右侧下拉框调整",
-                "Options come from the tool's help; types are adjustable");
+                "参数读自命令帮助，类型可调 · 命令预览可直接编辑",
+                "Options come from the tool's help and types are adjustable; "
+                        + "the command preview is editable");
         put(ZH_TEXT, EN_TEXT, AI_EXPAND, "展开 AI 助手", "Expand the AI assistant");
         put(ZH_TEXT, EN_TEXT, AI_LOADING, "展开后加载。", "Expands to load.");
         put(ZH_TEXT, EN_TEXT, AI_NO_PAGE,
@@ -1223,8 +1230,8 @@ public final class Strings {
         put(ZH_TEXT, EN_TEXT, MENU_CLEAR_LOG, "清空", "Clear");
         put(ZH_TEXT, EN_TEXT, MENU_EDIT_PARAMS, "编辑参数…", "Edit parameters...");
         put(ZH_TEXT, EN_TEXT, HINT_REBUILD_PREVIEW,
-                "用表单当前描述的命令替换上面的文字。",
-                "Replace the text above with the command the form currently describes.");
+                "丢掉手工改动，用表单当前描述的命令重写预览。",
+                "Drop the manual edits and rewrite the preview from the form.");
 
         // --- MainPanel：发现栏与面板标题 ---
         put(ZH_TEXT, EN_TEXT, CONN_MODE_LABEL, "连接方式", "Connection");
@@ -1236,11 +1243,12 @@ public final class Strings {
         put(ZH_TEXT, EN_TEXT, LABEL_TREE_ROOT, "conda 环境", "Conda environments");
         put(ZH_TEXT, EN_TEXT, TITLE_TREE, "命令（按环境分组）", "Commands, by environment");
         put(ZH_TEXT, EN_TEXT, TITLE_OUTPUT, "输出", "Output");
-        put(ZH_TEXT, EN_TEXT, TITLE_PREVIEW, "命令预览（这是将要运行的内容）",
-                "Command preview (this is what you asked to run)");
+        // 标题里不再挂常驻说明：那句"这是将要运行的内容"每天只看一次，
+        // 却一直占着标题。要说的信息，预览框本身就在那儿摆着。
+        put(ZH_TEXT, EN_TEXT, TITLE_PREVIEW, "命令预览", "Command preview");
         put(ZH_TEXT, EN_TEXT, TITLE_PREVIEW_EDITED,
-                "命令预览（已手工编辑——表单不再改动它）",
-                "Command preview (edited by hand - the form no longer changes it)");
+                "命令预览（已手工编辑）",
+                "Command preview (edited by hand)");
         put(ZH_TEXT, EN_TEXT, HINT_COMMAND_AREA,
                 "长路径显示为末级名称，实际执行的是完整路径。",
                 "Long paths are shown as their last name. The full path is what runs.");
@@ -1249,10 +1257,10 @@ public final class Strings {
                 "You can type here directly if you know the tool. "
                         + "Long paths are shown as their last name; the full path runs.");
         put(ZH_TEXT, EN_TEXT, HINT_PREVIEW_EDITED,
-                "命令预览已被手工编辑，不再跟随表单；点「从表单重建」可以交还给表单。",
+                "命令预览已被手工编辑，不再跟随表单；点「重置命令」可以交还给表单。",
                 "Command preview edited by hand. It will no longer follow the form; "
-                        + "press 'Rebuild from form' to hand it back.");
-        put(ZH_TEXT, EN_TEXT, STATUS_PREVIEW_REBUILT, "命令预览已从表单重建。",
+                        + "press 'Reset command' to hand it back.");
+        put(ZH_TEXT, EN_TEXT, STATUS_PREVIEW_REBUILT, "命令预览已重置。",
                 "Command preview rebuilt from the form.");
         put(ZH_TEXT, EN_TEXT, HINT_DISTRO_BOX, "要使用的 WSL 发行版。",
                 "The WSL distribution to use.");

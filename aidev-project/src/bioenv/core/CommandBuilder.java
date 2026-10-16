@@ -605,6 +605,23 @@ public final class CommandBuilder {
     }
 
     /**
+     * 只要"调用"那一段：程序名加子命令，不含任何参数。
+     *
+     * <p>预览里这一段是<b>锁住的</b>：它跟着表单走，用户改不动。于是"预览上写的是哪个
+     * 工具"永远等于左边选中的那个 —— 不会出现"看着是 A、实际跑 B"。
+     * 用户能在它后面随便写参数、管道、别的什么。
+     *
+     * <p>复用 {@link #assemble}：拼接顺序（程序名、子命令、参数、自由文本）只写一份，
+     * 这里传空参数就是"只有调用"。
+     */
+    public static String invocation(Tool tool, String subPath) {
+        if (tool == null) {
+            return "";
+        }
+        return assemble(tool.command, subPath, java.util.Collections.<String>emptyList(), "");
+    }
+
+    /**
      * Joins a program, an optional subcommand, arguments and raw text into the
      * one line the preview shows.
      *

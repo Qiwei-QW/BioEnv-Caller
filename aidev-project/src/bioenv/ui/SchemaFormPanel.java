@@ -833,6 +833,21 @@ public final class SchemaFormPanel extends JPanel {
     /** Set when the next rebuild should start at the top, as for a new tool. */
     private boolean resetScroll;
 
+    /**
+     * 参数列表 vs 附加参数 的高度比例（分隔条位置与 resizeWeight 共用）。
+     *
+     * <p>原来硬钉 0.62 —— 也就是<b>附加参数占 38% 的表单高度</b>。可它只是一个
+     * 自由输入框，很少用；而参数列表几乎每次都要看，21 个参数时天天在滚动，
+     * 旁边却空着三分之一。
+     *
+     * <p>现在给参数列表 80%。附加参数并没有被折叠或藏起来（它有存在的理由：
+     * 帮助里没描述的参数只能写在那儿），只是不再喧宾夺主。想要更多照样拖分隔条。
+     *
+     * <p>提成常量而不是留四处字面量：这个数在四个地方各写了一遍，改一次要改四处，
+     * 漏一处就会出现"拖动时一边、重摆时另一边"的错位。
+     */
+    private static final double FORM_SPLIT_RATIO = 0.80;
+
     /** Divides the option list from the extra-arguments box; resizable. */
     private JSplitPane formSplit;
 
@@ -996,9 +1011,9 @@ public final class SchemaFormPanel extends JPanel {
     public void doLayout() {
         super.doLayout();
         if (formSplitPending && formSplit != null && formSplit.getHeight() > 0) {
-            // 硬钉 0.62：这样无论"直接开这套风格"还是"从别的风格切过来"，
+            // 硬钉这个比例（见 FORM_SPLIT_RATIO）：这样无论"直接开这套风格"还是"从别的风格切过来"，
             // 走的都是同一条路径，位置自然一致。
-            formSplit.setDividerLocation(0.62);
+            formSplit.setDividerLocation(FORM_SPLIT_RATIO);
         // 上面那次调用多半是空操作：分栏这时候还没有尺寸。挂个监听，等它自己的尺寸
         // 定下来再摆。
         //
@@ -1019,7 +1034,7 @@ public final class SchemaFormPanel extends JPanel {
                     return;
                 }
                 lastH = pend.getHeight();
-                pend.setDividerLocation(0.62);
+                pend.setDividerLocation(FORM_SPLIT_RATIO);
             }
         });
             formSplitPending = false;
@@ -1055,7 +1070,7 @@ public final class SchemaFormPanel extends JPanel {
         UiTheme.applyRoles(this);
         UiTheme.buttons(this);
         UiTheme.decorate(this);
-        // 参数区内部那条上下分隔只在 rebuild() 里设过一次 0.62；换风格会重建分隔条，
+        // 参数区内部那条上下分隔只在 rebuild() 里设过一次 FORM_SPLIT_RATIO；换风格会重建分隔条，
         // 位置被重算，不重设的话切回来时下面的内容会整体挪几个像素。
         // setDividerLocation(double) 在分栏还没有尺寸时会被丢掉，而换风格发生在布局
         // 之前。invokeLater 也不够：那一轮 EDT 事件里尺寸可能仍然没定下来。挂个标志，
@@ -1492,7 +1507,7 @@ public final class SchemaFormPanel extends JPanel {
         // parameter.
         if (formSplit == null) {
             formSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, optionHost, extras);
-            formSplit.setResizeWeight(0.62);
+            formSplit.setResizeWeight(FORM_SPLIT_RATIO);
             formSplit.setDividerSize(6);
             formSplit.setBorder(null);
             // 分隔位置要等分栏自己有尺寸之后再摆，而且布局分几步走（先 0、再 509、最后
@@ -1518,7 +1533,7 @@ public final class SchemaFormPanel extends JPanel {
                         return;
                     }
                     lastH = pend.getHeight();
-                    pend.setDividerLocation(0.62);
+                    pend.setDividerLocation(FORM_SPLIT_RATIO);
                 }
             });
         } else {

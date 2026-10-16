@@ -183,7 +183,18 @@ public final class MainPanel extends JPanel {
     /**
      * Applies initial divider positions once the panel has been laid out.' The preview's titled panel, so its title can report which state it is in. */
     private JPanel commandPanel;
-    private final JTextArea commandArea = new JTextArea(3, 40);
+    /** 预览下面那一行（「从表单重建」按钮所在）。平时整行收起，见 updatePreviewHint。 */
+    private JPanel previewActions;
+    /**
+     * 预览里"调用"那一段（程序名 + 子命令）的长度。这一段是锁住的。
+     *
+     * <p>它跟着表单走，用户只能在它后面写 —— 所以"预览上写的是哪个工具"永远等于
+     * 左边选中的那个。见 CommandBuilder.invocation。
+     */
+    private int previewPrefixLength;
+    // 1 行而不是 3 行：这里永远只显示一条命令，多出来的两行是纯浪费的高度，
+    // 而高度正是参数区最缺的东西。
+    private final JTextArea commandArea = new JTextArea(1, 40);
     private final JTextArea logArea = new JTextArea(12, 40);
     /**
      * 最左侧那一栏：AI 助手。默认<b>收起</b>（只留一条窄边），点箭头展开。
@@ -194,8 +205,14 @@ public final class MainPanel extends JPanel {
     private AiAssistPanel aiAssist;
     /** 最左侧常驻的图标栏（activity bar）。 */
     private LeftRail leftRail;
-    /** 装"工具树 / AI 助手"两张卡的容器 —— 两者共用同一块地方。 */
+    /** 装"工具树 / AI 助手 / 设置"三张卡的容器 —— 它们共用同一块地方。 */
     private javax.swing.JPanel treeHost;
+    /**
+     * 当前展开的是哪张卡；{@code null} 表示整列收起。
+     *
+     * <p>它同时决定图标高亮和"再点一次是不是收起"。
+     */
+    private String activePanel;
     /**
      * 主题或语言一变就把它们推给网页。
      *
@@ -249,8 +266,6 @@ public final class MainPanel extends JPanel {
     private volatile Process interactiveProcess;
     /** "输出"标题：和清空按钮同处一行。 */
     private JLabel logTitle;
-    /** 命令预览下面那句说明（「可以直接在这里输入…」）。 */
-    private JLabel commandHint;
     /**
      * Opens the tool assistant: the tool's help on one tab, the user's own notes
      * on another. Named for what it opens rather than for the first tab, since
@@ -388,7 +403,14 @@ public final class MainPanel extends JPanel {
      * spare room is better spent on the form. A fraction would also compute a
      * position past what a narrow window allows and be clamped.
      */
-    private static final int LOG_HEIGHT_PX = 190;
+    /**
+     * 输出默认占的高度。
+     *
+     * <p>190 → 150 → 120：一路把高度让给上面的参数卡片 ——
+     * 输出的高度本来就可以拖，而参数列表不能（它靠分隔条分）。
+     * 输出没跑东西时是空的，那四十像素在它那里闲着，在参数区却正好是一行。
+     */
+    private static final int LOG_HEIGHT_PX = 120;
 
     /**
      * Applies initial divider positions once the panel has been laid out.' A component's minimum extent along one axis, or 0 when unset. */
@@ -849,7 +871,7 @@ public final class MainPanel extends JPanel {
             rebuildPreviewButton.setToolTipText(I18n.t(Strings.HINT_REBUILD_PREVIEW));
             filterField.setToolTipText(I18n.t(Strings.HINT_FILTER_FIELD));
             modeBox.setToolTipText(I18n.t(Strings.HINT_MODE_BOX));
-            commandArea.setToolTipText(I18n.t(Strings.HINT_COMMAND_AREA));
+            commandArea.setToolTipText(I18n.t(Strings.HINT_COMMAND_AREA_LONG));
             // Rebuild the two mode items in the new language. The mode is identified
             // by index (isSshMode() reads it), not by text, so restoring the index
             // keeps the user in the mode they were in despite the new labels.
@@ -889,8 +911,12 @@ public final class MainPanel extends JPanel {
             if (logTitle != null) {
                 logTitle.setText(I18n.t(Strings.TITLE_OUTPUT));
             }
-            if (commandHint != null) {
-                commandHint.setText(I18n.t(Strings.HINT_COMMAND_AREA_LONG));
+            // 状态栏那行常驻提示是按语言取的，所以切语言必须重设一遍。
+            //
+            // 这条是 LanguageSwitchTest 抓出来的：它的文案在字段声明时就定好了，
+            // 而声明只跑一次 —— 切到英文之后那行还留着中文。
+            if (hintLabel != null) {
+                hintLabel.setText(I18n.t(Strings.STATUS_OPTIONS_HINT));
             }
             treeRoot.setUserObject(I18n.t(Strings.LABEL_TREE_ROOT));
             treeModel.nodeChanged(treeRoot);
@@ -1904,18 +1930,7 @@ public final class MainPanel extends JPanel {
         settingsTitle.setFont(settingsTitle.getFont().deriveFont(Font.BOLD));
         UiTheme.role(settingsTitle, "accent");
         head.add(settingsTitle, BorderLayout.WEST);
-        JButton settingsClose = new JButton(I18n.t(Strings.AI_COLLAPSE_SHORT));
-        settingsClose.setName("settings.close");
-        settingsClose.setFocusable(false);
-        settingsClose.setMargin(new Insets(0, 6, 0, 6));
-        settingsClose.setToolTipText(I18n.t(Strings.SETTINGS_CLOSE));
-        settingsClose.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                hideAiAssist();
-            }
-        });
-        head.add(settingsClose, BorderLayout.EAST);
+        // 这里没有"收起"按钮：开关统一在左边那条图标栏上（再点 ⚙ 就收起）。
         p.add(head);
         p.add(javax.swing.Box.createVerticalStrut(12));
 
@@ -2069,10 +2084,16 @@ public final class MainPanel extends JPanel {
         // Saying what the short names mean matters, because the pane is editable:
         // someone who reads "pep" as a file to be created in the working directory
         // would be surprised by where the argument actually points.
-        commandArea.setToolTipText(I18n.t(Strings.HINT_COMMAND_AREA));
+        commandArea.setToolTipText(I18n.t(Strings.HINT_COMMAND_AREA_LONG));
         // Distinguish the plugin's own writes from the user's typing: the former
         // must not count as an edit, or the preview would stop updating the moment
         // it was first filled in.
+        // "调用"那一段锁住：删不掉、也改不了，只能在它后面写。
+        // 这条规则不是为了限制用户，是为了让"预览"永远说得出自己跑的是哪个工具。
+        if (commandArea.getDocument() instanceof javax.swing.text.AbstractDocument) {
+            ((javax.swing.text.AbstractDocument) commandArea.getDocument())
+                    .setDocumentFilter(new PrefixLock());
+        }
         commandArea.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
             @Override
             public void insertUpdate(javax.swing.event.DocumentEvent e) {
@@ -2103,7 +2124,6 @@ public final class MainPanel extends JPanel {
         commandPanel.setBorder(commandBorder);
         JScrollPane commandScroll = new JScrollPane(commandArea);
         UiTheme.role(commandScroll, "terminal");
-        commandPanel.add(commandScroll, BorderLayout.CENTER);
 
         // The button sits inside the preview's own panel so the action is next to
         // the thing it acts on.
@@ -2115,18 +2135,22 @@ public final class MainPanel extends JPanel {
                 rebuildPreviewFromForm();
             }
         });
-        JPanel cmdSouth = new JPanel(new java.awt.FlowLayout(
-                java.awt.FlowLayout.LEFT, 6, 2));
-        // 存成字段：这句话原来是个局部变量，于是语言切换够不着它，切完英文界面上
-        // 它还留着中文。凡是构造时按语言取过文字、之后又该跟着换的控件，都得留个引用。
-        commandHint = new JLabel(I18n.t(Strings.HINT_COMMAND_AREA_LONG));
-        JLabel hint = commandHint;
-        UiTheme.role(hint, "muted");
-        hint.setForeground(new Color(0x66, 0x66, 0x66));
-        cmdSouth.add(hint);
-        cmdSouth.add(rebuildPreviewButton);
-        commandPanel.add(cmdSouth, BorderLayout.SOUTH);
-        commandPanel.setMinimumSize(new Dimension(200, 90));
+        // 「重置命令」放在命令行<b>右端</b>，和它管的那一行输入同处一个面板。
+        //
+        // 它干的事就是"把这个框里的内容重置掉"，贴着框最直接；而且这样
+        // <b>省掉输入框下面的一整行</b> —— 那一行只放一个按钮，高度全浪费了。
+        //
+        // 这一块同时是显隐开关：平时（预览跟着表单走）整块藏起来，见 updatePreviewHint。
+        previewActions = new JPanel(new java.awt.BorderLayout());
+        previewActions.setOpaque(false);
+        previewActions.add(rebuildPreviewButton, BorderLayout.CENTER);
+
+        JPanel cmdRow = new JPanel(new java.awt.BorderLayout(6, 0));
+        cmdRow.setOpaque(false);
+        cmdRow.add(commandScroll, BorderLayout.CENTER);
+        cmdRow.add(previewActions, BorderLayout.EAST);
+        commandPanel.add(cmdRow, BorderLayout.CENTER);
+        commandPanel.setMinimumSize(new Dimension(200, 46));
 
         JPanel logPanel = new JPanel(new BorderLayout());
         logPanelRef = logPanel;
@@ -2267,31 +2291,37 @@ public final class MainPanel extends JPanel {
 
         // 最外层再包一层：AI 助手在最左，默认收起。
         aiAssist = new AiAssistPanel();
-        // 面板右上角那个"收起"按钮：切回工具树。
-        aiAssist.setOnCollapse(new Runnable() {
-            @Override
-            public void run() {
-                hideAiAssist();
-            }
-        });
 
-        // 最左那条图标栏常驻 —— 它是入口，只占一条窄边（40px）。
-        // 以后加"运行历史""设置"只需再 add 一个图标，布局不用动。
+        // 最左那条图标栏，而且是<b>唯一的开关</b>：
+        //     点一个图标   -> 那一列展开成这张卡
+        //     再点同一个   -> 整列收起
+        //
+        // 面板自己不再有"收起"按钮：同一个动作放在两个地方，用户还得先想清楚点哪个 ——
+        // 而且那个按钮还要占掉一行高度。
         leftRail = new LeftRail();
+        leftRail.add("tree", I18n.t(Strings.TREE_ICON), LeftRail.treeIcon(),
+                new LeftRail.Action() {
+                    @Override
+                    public void run() {
+                        togglePanel("tree");
+                    }
+                });
         leftRail.add("ai", I18n.t(Strings.AI_TITLE), LeftRail.robotIcon(),
                 new LeftRail.Action() {
                     @Override
                     public void run() {
-                        showAiAssist();
+                        togglePanel("ai");
                     }
                 });
         leftRail.add("settings", I18n.t(Strings.SETTINGS_ICON), LeftRail.gearIcon(),
                 new LeftRail.Action() {
                     @Override
                     public void run() {
-                        showSettings();
+                        togglePanel("settings");
                     }
                 });
+        activePanel = "tree";
+        leftRail.select("tree");
 
         // AI 助手<b>盖住工具树</b>那一块，而不是另开一列、也不是另开一个窗口。
         //
@@ -2329,47 +2359,41 @@ public final class MainPanel extends JPanel {
     }
 
     /**
-     * 把工具树那一块切成 AI 助手。
+     * 点图标栏上的某一项。
      *
-     * <p>不是另开一列，也不是另开窗口：<b>共用同一块地方</b>。占用是零 ——
-     * 不开 AI 时主界面和以前一模一样，开着的时候也没有谁被挤窄。
+     * <p>再点同一个就<b>收起整列</b>。开关只有这一处，所以"开"和"关"在同一个位置 ——
+     * 不用先去面板里找一个收起按钮。
      */
-    private void showAiAssist() {
-        if (aiAssist == null || treeHost == null) {
+    private void togglePanel(String id) {
+        if (treeHost == null || outerSplit == null) {
             return;
         }
-        // 第一次真要用它的时候才去碰网页运行时 —— 构造阶段绝不碰。
-        aiAssist.ensureLoaded();
-        aiAssist.pushTheme(UiTheme.current());
-        aiAssist.pushLang(bioenv.i18n.Lang.EN == I18n.get() ? "en" : "zh");
-        card().show(treeHost, "ai");
-        leftRail.select("ai");
+        if (id.equals(activePanel)) {
+            // 同一个图标再点一次：整列收起，图标不再高亮。
+            activePanel = null;
+            leftRail.clearSelection();
+            outerSplit.setDividerLocation(0);
+            outerSplit.revalidate();
+            outerSplit.repaint();
+            return;
+        }
+        activePanel = id;
+        card().show(treeHost, id);
+        leftRail.select(id);
+        outerSplit.setDividerLocation(panelWidth(id));
+        if ("ai".equals(id)) {
+            // 第一次真要用它的时候才去碰网页运行时 —— 构造阶段绝不碰。
+            aiAssist.ensureLoaded();
+            aiAssist.pushTheme(UiTheme.current());
+            aiAssist.pushLang(bioenv.i18n.Lang.EN == I18n.get() ? "en" : "zh");
+        }
         treeHost.revalidate();
         treeHost.repaint();
     }
 
-    /** 把工具树那一块切成设置卡（原来的顶栏）。 */
-    private void showSettings() {
-        if (treeHost == null) {
-            return;
-        }
-        card().show(treeHost, "settings");
-        leftRail.select("settings");
-        refreshConnectionSummary();
-        treeHost.revalidate();
-        treeHost.repaint();
-    }
-
-    /** 切回工具树（面板右上角的"收起"按钮接的就是这里）。 */
-    private void hideAiAssist() {
-        if (treeHost == null) {
-            return;
-        }
-        card().show(treeHost, "tree");
-        // 收起来之后图标不该还亮着 —— 它表示"当前显示的是 AI"。
-        leftRail.clearSelection();
-        treeHost.revalidate();
-        treeHost.repaint();
+    /** 每张卡合适的宽度：对话要宽一些，树和设置 260 够。 */
+    private static int panelWidth(String id) {
+        return "ai".equals(id) ? 340 : TREE_WIDTH_PX;
     }
 
     /** 换卡片。 */
@@ -2392,7 +2416,9 @@ public final class MainPanel extends JPanel {
     @Override
     public void doLayout() {
         super.doLayout();
-        if (outerSplitPending && outerSplit != null && outerSplit.getWidth() > 0) {
+        // 整列收起时（activePanel == null）不能在这里按树宽把它拽回来。
+        if (outerSplitPending && outerSplit != null && outerSplit.getWidth() > 0
+                && activePanel != null) {
             int want = TREE_WIDTH_PX;
             int max = outerSplit.getWidth() - outerSplit.getDividerSize()
                     - minimumOf(outerSplit.getRightComponent(), true);
@@ -3358,10 +3384,13 @@ public final class MainPanel extends JPanel {
             setPreviewText("");
             return;
         }
-        // Once the user has written the command themselves, it is theirs. Form
-        // changes no longer touch it, because silently replacing a command someone
-        // typed would be worse than showing a stale one.
+        // 用户自己写过之后，参数部分就是他的：表单不再覆盖它，因为悄悄替换掉
+        // 别人手打的内容，比显示一条过时的更糟。
         if (previewEdited) {
+            // 但"调用"那一段除外 —— 它必须跟着表单走。
+            // 锁住它（见 PrefixLock）之后，切换工具时还要把它换掉而保留用户的尾巴，
+            // 否则切完工具预览里会留着一个旧工具名，而 PrefixLock 又不让人改它。
+            syncPrefix();
             return;
         }
         try {
@@ -3381,9 +3410,89 @@ public final class MainPanel extends JPanel {
             shownPreview = shown;
             setPreviewText(shown.text());
             commandArea.setCaretPosition(0);
+            previewPrefixLength = invocationOf().length();
         } catch (Exception e) {
             shownPreview = null;
             setPreviewText(I18n.t(Strings.LOG_CANNOT_BUILD, e.getMessage()));
+        }
+    }
+
+    /** 当前该锁住的那一段。 */
+    private String invocationOf() {
+        if (selected == null || formPanel == null) {
+            return "";
+        }
+        return bioenv.core.CommandBuilder.invocation(selected, formPanel.currentSubPath());
+    }
+
+    /**
+     * 把"调用"那一段换成表单现在算出来的，<b>保留用户写在后面的部分</b>。
+     *
+     * <p>这一步不能省：锁住前缀之后，切换工具时若不移除旧前缀，预览里会一直留着
+     * 上一个工具的名字，而用户又改不掉它 —— 那才是真的死角。
+     */
+    private void syncPrefix() {
+        String want = invocationOf();
+        if (previewPrefixLength > 0 && want.equals(
+                commandArea.getText().length() >= previewPrefixLength
+                        ? commandArea.getText().substring(0, previewPrefixLength) : "")) {
+            return;
+        }
+        String text = commandArea.getText();
+        String tail = text.length() >= previewPrefixLength ? text.substring(previewPrefixLength) : "";
+        setPreviewText(want + tail);
+        previewPrefixLength = want.length();
+    }
+
+    /**
+     * 只放行"调用"那一段之后的编辑。
+     *
+     * <p>删、改、粘贴，只要落点在受保护区里就一律拒绝。这样用户既删不掉工具名，
+     * 也没法把它改成别的 —— 于是预览永远说得出自己跑的是哪个工具。
+     */
+    private final class PrefixLock extends javax.swing.text.DocumentFilter {
+        /**
+         * 该不该拦下这次编辑。
+         *
+         * <p>★ {@code previewWriting} 那一半是必须的，而且很容易漏 —— 漏了就是一个
+         * 严重的 bug：{@code JTextArea.setText()} 内部是<b>先 remove(0, 全长) 再
+         * insertString(0, …)</b>，起点正好是 0。只要前缀长度记下来了，插件自己刷新
+         * 预览的写入也会被这个过滤器当成"改受保护区"拦掉 ——
+         * 于是<b>表单里填了参数，预览再也不会更新</b>。
+         *
+         * <p>过滤器是用来区分"用户改"和"插件写"的，不是用来拦一切写入的。
+         */
+        private boolean blocked(int offset) {
+            return !previewWriting && offset < previewPrefixLength;
+        }
+
+        @Override
+        public void insertString(FilterBypass fb, int offset, String str,
+                                 javax.swing.text.AttributeSet a)
+                throws javax.swing.text.BadLocationException {
+            if (blocked(offset)) {
+                return;
+            }
+            fb.insertString(offset, str, a);
+        }
+
+        @Override
+        public void remove(FilterBypass fb, int offset, int length)
+                throws javax.swing.text.BadLocationException {
+            if (blocked(offset)) {
+                return;
+            }
+            fb.remove(offset, length);
+        }
+
+        @Override
+        public void replace(FilterBypass fb, int offset, int length, String str,
+                            javax.swing.text.AttributeSet a)
+                throws javax.swing.text.BadLocationException {
+            if (blocked(offset)) {
+                return;
+            }
+            fb.replace(offset, length, str, a);
         }
     }
 
@@ -3439,7 +3548,19 @@ public final class MainPanel extends JPanel {
         }
         refreshCommandPanelTitle();
         if (rebuildPreviewButton != null) {
-            rebuildPreviewButton.setEnabled(previewEdited && selected != null);
+            boolean usable = previewEdited && selected != null;
+            rebuildPreviewButton.setEnabled(usable);
+            // 只有真能点的时候才把这一行露出来。
+            //
+            // 平时（预览跟着表单走）它是灰的：一个点了没反应的按钮常驻在那儿，
+            // 既是视觉噪音，又白占一行高度。
+            //
+            // 它不能删 —— 见 rebuildPreviewFromForm 的注释：预览一旦被手工改过就
+            // 停止跟随表单，而这是唯一的回头路。所以：需要时出现，不需要时连那一行
+            // 一起收掉。出现的那一刻，标题也已经变成「命令预览（已手工编辑）」了。
+            if (previewActions != null) {
+                previewActions.setVisible(usable);
+            }
         }
     }
 

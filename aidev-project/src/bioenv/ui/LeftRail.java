@@ -154,6 +154,27 @@ public final class LeftRail extends JPanel {
     // 现成的图标
     // ------------------------------------------------------------------
 
+    /** 一棵树：工具树。 */
+    public static Icon treeIcon() {
+        return new Shape() {
+            @Override
+            public void draw(Graphics2D g, int size, Color color) {
+                g.setColor(color);
+                g.setStroke(new BasicStroke(1.7f, BasicStroke.CAP_ROUND,
+                        BasicStroke.JOIN_ROUND));
+                // 主干
+                g.drawLine(5, 12, 14, 12);
+                // 三条分叉，末端各一个点
+                g.drawLine(14, 12, 19, 6);
+                g.drawLine(14, 12, 19, 12);
+                g.drawLine(14, 12, 19, 18);
+                g.fillOval(18, 4, 5, 4);
+                g.fillOval(18, 10, 5, 4);
+                g.fillOval(18, 16, 5, 4);
+            }
+        };
+    }
+
     /** 小机器人：AI 助手。 */
     public static Icon robotIcon() {
         return new Shape() {

@@ -47,7 +47,6 @@ import bioenv.i18n.Strings;
 public final class AiAssistPanel extends JPanel {
 
     private final JPanel body = new JPanel(new BorderLayout());
-    private final JButton collapseButton;
 
     private AiWebView view;
     private boolean loaded;
@@ -58,39 +57,14 @@ public final class AiAssistPanel extends JPanel {
     private String theme = "classic";
     private String lang = "zh";
 
-    /** 收起时的回调（由外面接到"切回工具树"）。 */
-    private Runnable onCollapse;
-
     public AiAssistPanel() {
         setLayout(new BorderLayout());
         setMinimumSize(new Dimension(0, 0));
 
-        // 只放一个收起按钮，右上角。
+        // 这里刻意没有任何标题栏或收起按钮。
         //
-        // 刻意不加标题：这一栏是<b>盖在工具树上面</b>的，位置本身已经说明它是什么，
-        // 而左边那条图标栏也亮着。多一行标题只会占掉对话的高度。
-        JPanel head = new JPanel(new java.awt.BorderLayout());
-        head.setBorder(new javax.swing.border.EmptyBorder(2, 4, 2, 4));
-        collapseButton = new JButton("\u00bb");
-        collapseButton.setName("ai.collapse");
-        collapseButton.setFocusable(false);
-        collapseButton.setMargin(new java.awt.Insets(0, 6, 0, 6));
-        collapseButton.setText(I18n.t(Strings.AI_COLLAPSE_SHORT));
-        collapseButton.setToolTipText(I18n.t(Strings.AI_COLLAPSE));
-        collapseButton.addActionListener(new java.awt.event.ActionListener() {
-            @Override
-            public void actionPerformed(java.awt.event.ActionEvent e) {
-                if (onCollapse != null) {
-                    onCollapse.run();
-                }
-            }
-        });
-        head.add(collapseButton, BorderLayout.EAST);
-        add(head, BorderLayout.NORTH);
-
-        add(body, BorderLayout.CENTER);
-
-        // 先把"还没加载"这一句放上；真正显示时会被替换。
+        // 开关统一在左边那条图标栏上：点 🤖 展开、再点一次收起。面板自己再放一个
+        // "收起"只是在同一个位置重复第二遍同样的动作，还白占一行对话的高度。
         showMessage(I18n.t(Strings.AI_LOADING));
     }
 
@@ -192,21 +166,9 @@ public final class AiAssistPanel extends JPanel {
     /** 跟着插件的语言走（zh / en）。 */
     public void pushLang(String code) {
         lang = "en".equalsIgnoreCase(code) ? "en" : "zh";
-        relabel();
         if (view != null) {
             view.run("window.tbvAi && window.tbvAi.setLang(" + jsString(lang) + ")");
         }
-    }
-
-    /** 收起按钮点了之后做什么（接到"切回工具树"）。 */
-    public void setOnCollapse(Runnable action) {
-        this.onCollapse = action;
-    }
-
-    /** 语言切换时更新按钮文案。 */
-    private void relabel() {
-        collapseButton.setText(I18n.t(Strings.AI_COLLAPSE_SHORT));
-        collapseButton.setToolTipText(I18n.t(Strings.AI_COLLAPSE));
     }
 
     /** 让 Java 侧主动问一句（留给以后的"一键解释报错"）。 */
