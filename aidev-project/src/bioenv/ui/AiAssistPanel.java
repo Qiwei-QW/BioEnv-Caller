@@ -66,6 +66,34 @@ public final class AiAssistPanel extends JPanel {
         // 开关统一在左边那条图标栏上：点 🤖 展开、再点一次收起。面板自己再放一个
         // "收起"只是在同一个位置重复第二遍同样的动作，还白占一行对话的高度。
         showMessage(I18n.t(Strings.AI_LOADING));
+
+        // ★ 等这一栏真正显示在屏幕上之后再建网页。
+        //
+        // 这是从 minisvg 的字节码里学来的：它建完 WebGuiJPanel 之后挂了一个
+        // addHierarchyListener，等面板真的可显示了才做后续设置。
+        //
+        // 原因：网页视图要靠一个真实的绘制表面，而那是"显示出来"之后才有的。
+        // 在卡片还没切到前面时把它建好，它拿不到表面 —— 实测就是页面报告一个固定
+        // 尺寸（1050×832）、而容器只有三百多像素，屏幕上则是一片空白，
+        // 连父容器的 revalidate/repaint 都叫不动它。
+        addHierarchyListener(new java.awt.event.HierarchyListener() {
+            private boolean done;
+
+            @Override
+            public void hierarchyChanged(java.awt.event.HierarchyEvent e) {
+                if (done || !isShowing() || getWidth() <= 0) {
+                    return;
+                }
+                done = true;
+                javax.swing.SwingUtilities.invokeLater(new Runnable() {
+                    @Override
+                    public void run() {
+                        ensureLoaded();
+                        onShown();
+                    }
+                });
+            }
+        });
     }
 
     /** 折叠状态的箭头方向由外部决定（它知道分隔条的位置）。 */

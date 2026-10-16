@@ -2382,8 +2382,8 @@ public final class MainPanel extends JPanel {
         leftRail.select(id);
         outerSplit.setDividerLocation(panelWidth(id));
         if ("ai".equals(id)) {
-            // 第一次真要用它的时候才去碰网页运行时 —— 构造阶段绝不碰。
-            aiAssist.ensureLoaded();
+            // 这里不建网页：等这一栏真正显示出来再建，见 AiAssistPanel 的
+            // HierarchyListener。建早了它拿不到绘制表面，画出来是空白。
             aiAssist.pushTheme(UiTheme.current());
             aiAssist.pushLang(bioenv.i18n.Lang.EN == I18n.get() ? "en" : "zh");
         }
@@ -2396,9 +2396,14 @@ public final class MainPanel extends JPanel {
         }
     }
 
-    /** 每张卡合适的宽度：对话要宽一些，树和设置 260 够。 */
+    /**
+     * 每张卡展开时的宽度。
+     *
+     * <p>都用工具树那条宽度：三张卡占的是同一块地方，切来切去时列宽跟着跳，
+     * 看上去像界面在抖。想更宽更窄，拖分隔条就是 —— 那是用户自己的选择。
+     */
     private static int panelWidth(String id) {
-        return "ai".equals(id) ? 340 : TREE_WIDTH_PX;
+        return TREE_WIDTH_PX;
     }
 
     /** 换卡片。 */
