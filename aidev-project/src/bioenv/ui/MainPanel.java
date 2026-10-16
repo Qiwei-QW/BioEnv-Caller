@@ -2389,6 +2389,11 @@ public final class MainPanel extends JPanel {
         }
         treeHost.revalidate();
         treeHost.repaint();
+        if ("ai".equals(id)) {
+            // 网页视图是重量级组件，容器变大变小时父容器的 repaint 叫不醒它，
+            // 得单独让它按现在的尺寸重排一次。见 AiAssistPanel.onShown。
+            aiAssist.onShown();
+        }
     }
 
     /** 每张卡合适的宽度：对话要宽一些，树和设置 260 够。 */

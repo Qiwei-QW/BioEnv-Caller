@@ -171,6 +171,30 @@ public final class AiAssistPanel extends JPanel {
         }
     }
 
+    /**
+     * 卡片刚被切到前面时叫一次。
+     *
+     * <p>为什么必须这么做：内嵌的网页视图是<b>重量级组件</b>，而且它是在被加进
+     * CardLayout 的时候按<b>当时</b>的大小建起来的。之后卡片被切出来、容器尺寸变了，
+     * 父容器的 revalidate/repaint <b>叫不醒它</b> —— 它继续按旧尺寸画，画在一块
+     * 尺寸对不上的地方，看上去就是一片空白（实测：页面自己报告 1050×832，而那一列
+     * 只有三百多像素宽）。
+     *
+     * <p>所以这里显式把它的边界摆成父容器现在的大小，再让它自己重排一次。
+     */
+    public void onShown() {
+        if (view != null && view.panel() != null) {
+            java.awt.Container parent = view.panel().getParent();
+            if (parent != null && parent.getWidth() > 0 && parent.getHeight() > 0) {
+                view.panel().setBounds(0, 0, parent.getWidth(), parent.getHeight());
+            }
+            view.panel().revalidate();
+            view.panel().repaint();
+        }
+        revalidate();
+        repaint();
+    }
+
     /** 让 Java 侧主动问一句（留给以后的"一键解释报错"）。 */
     public void ask(String text) {
         ensureLoaded();
