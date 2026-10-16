@@ -120,8 +120,18 @@
 #explain{display:none;width:100%;margin:0 0 6px;font-size:12px;text-align:left}
 /* 输入框高一些。原来一行高，+ 和 ▶ 挤在里面，字还没打几个就到边了。 */
 #askWrap #ask{min-height:104px;line-height:1.55;resize:none;padding-top:9px;padding-bottom:38px}
-#askWrap #pick{left:9px;bottom:9px;width:32px;height:32px}
-#askWrap #go{right:9px;bottom:9px;width:46px;height:32px}
+/* 加号：不要外框，就是一个符号。它是个辅助入口，不该和发送那个主按钮一样重。 */
+#askWrap #pick{left:9px;bottom:9px;width:26px;height:26px;padding:0;
+               border:none;background:transparent;box-shadow:none;
+               font-size:16px;font-weight:400;line-height:1;color:var(--muted)}
+#askWrap #pick:hover{color:var(--ink);background:transparent}
+/* 发送：蓝色圆形，里面一个白箭头。字号图标在这个尺寸下不好看，用 SVG。 */
+#askWrap #go{right:9px;bottom:9px;width:32px;height:32px;padding:0;
+             border-radius:50%;display:flex;align-items:center;justify-content:center}
+#askWrap #go svg{width:16px;height:16px;display:block}
+#askWrap #go .stop{display:none}
+#askWrap #go.busy .send{display:none}
+#askWrap #go.busy .stop{display:block}
 </style>
 </head>
 <body class="theme-classic">
@@ -162,7 +172,11 @@
     <!-- 一个按钮，两种状态：不忙是发送（▶），忙了是停止（■）。
          本来就是同一件事的两面，分成两个按钮只会让人犹豫按哪个。 -->
     <button id="pick" class="icon" title="添加文件或图片">＋</button>
-    <button id="go" class="primary" title="发送">▶</button>
+    <button id="go" class="primary" title="发送"><svg class="ic send" viewBox="0 0 24 24"
+      aria-hidden="true"><path d="M12 5v13M6 11l6-6 6 6" fill="none" stroke="currentColor"
+      stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg><svg
+      class="ic stop" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10"
+      height="10" rx="1.6" fill="currentColor"/></svg></button>
     </div>
   </div>
   <div class="bar">
@@ -611,7 +625,8 @@ function setStatus(text, cls) {
 function goUI() {
   var b = el("go");
   if (!b) { return; }
-  b.textContent = busy ? "■" : "▶";
+  // 切 class，不再改 textContent —— 里面是两个 SVG，改文字会把它们冲掉。
+  b.className = busy ? "primary busy" : "primary";
   b.title = busy ? t("stop") : t("send");
 }
 
