@@ -168,7 +168,7 @@
   <button id="explain"></button>
   <div class="row">
     <div id="askWrap">
-    <textarea id="ask" rows="4" placeholder="按 Enter 发送，Shift+Enter 换行"></textarea>
+    <textarea id="ask" rows="4"></textarea>
     <!-- 一个按钮，两种状态：不忙是发送（▶），忙了是停止（■）。
          本来就是同一件事的两面，分成两个按钮只会让人犹豫按哪个。 -->
     <button id="pick" class="icon" title="添加文件或图片">＋</button>
@@ -749,7 +749,6 @@ function refreshCtx() {
 
 function applyLang() {
   document.documentElement.lang = lang === "en" ? "en" : "zh";
-  el("ask").placeholder = t("ask");
   goUI();
   el("sessNew").title = t("sessNew");
   el("sessDel").title = t("sessDel");
