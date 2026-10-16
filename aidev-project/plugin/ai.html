@@ -745,26 +745,22 @@ function send() {
   if (!bridge) { return; }
 
   var q = el("ask").value.trim();
-  if (!q) { return; }
+  // 只带附件、不写字也得能发 —— 否则传个文件问它是什么这件事就做不了。
+  if (!q && !atts.length) { return; }
   el("ask").value = "";
 
   var ctx = ctxText();
   var full = ctx ? ("以下是当前状态：\n\n" + ctx + "\n\n---\n\n问题：" + q) : q;
 
-  // 空对话时把"选一个工具"那句提示清掉，免得它留在记录里。
-  if (!turns.length) { el("log").innerHTML = ""; }
-  bubble("u", q);
-
-  // 发给模型的历史：只带 user/assistant，不带 system（system 单独放最前）。
-  var msgs = [{ role: "system", content: sysPrompt() }];
-  for (var i = 0; i < turns.length; i++) {
-    if (turns[i].role === "user" || turns[i].role === "assistant") { msgs.push(turns[i]); }
-  }
-  msgs.push({ role: "user", content: full });
-
-  // 文本附件拼进问题；图片挑第一张走 chatImage。
+  // ★ 附件必须在消息装进 msgs 之前拼好。
+  //
+  // 原来这一段写在 msgs.push 的后面 —— 而 full 是字符串，push 拷的是
+  // 当时的值，后面的 += 只改了局部变量。于是附件永远到不了模型（用户实测：
+  // AI 回说当前对话中没有包含具体的文件路径或文件内容）。
   var img = null;
+  var names = [];
   for (var i = 0; i < atts.length; i++) {
+    names.push(atts[i].name);
     if (atts[i].kind === "img" && !img) { img = atts[i]; }
     else if (atts[i].kind === "txt") {
       full += "\n\n[附件 " + atts[i].name + "]\n" + String(atts[i].data).slice(0, 8000);
@@ -772,6 +768,17 @@ function send() {
   }
   atts.length = 0;
   renderAtts();
+
+  // 空对话时把"选一个工具"那句提示清掉，免得它留在记录里。
+  if (!turns.length) { el("log").innerHTML = ""; }
+  bubble("u", names.length ? (q + "\n\n\u{1F4CE} " + names.join("、")) : q);
+
+  // 发给模型的历史：只带 user/assistant，不带 system（system 单独放最前）。
+  var msgs = [{ role: "system", content: sysPrompt() }];
+  for (var i = 0; i < turns.length; i++) {
+    if (turns[i].role === "user" || turns[i].role === "assistant") { msgs.push(turns[i]); }
+  }
+  msgs.push({ role: "user", content: full });
 
   var box = bubble("a", "");
   busy = true;
