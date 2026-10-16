@@ -112,28 +112,25 @@
 -->
 <div id="boot">正在检查网页运行时……如果这句话一直不消失，说明网页里的 JavaScript 没有运行。</div>
 
-<header>
+<!-- header 用 flex + 一个会长的空档，把两个会话按钮压到右上角。 -->
+<header style="display:flex;align-items:center;gap:8px">
   <b id="title">AI 助手</b>
   <select id="sessSel" title="会话"></select>
+  <span style="flex:1"></span>
+  <button id="sessNew" class="icon" title="新建会话">＋</button>
   <button id="sessDel" class="icon" title="删除这个会话">🗑</button>
-  <span id="status">正在检查…</span>
+  <!-- status 只在出错时才有字。平时空白，"就绪"那两个字没有信息量。 -->
+  <span id="status"></span>
 </header>
-
-<!-- 诊断卡单独放：它不属于对话，清空会话时不该被清掉 -->
-<div id="diag"></div>
 
 <div id="log"></div>
 
 <footer>
-  <details class="ctx" id="ctxBox">
-    <summary id="ctxSummary">本次将发送的内容</summary>
-    <pre id="ctxPre">（无）</pre>
-  </details>
   <div class="row">
     <textarea id="ask" placeholder="按 Enter 发送，Shift+Enter 换行"></textarea>
-    <button id="sessNew" class="icon" title="新建会话">＋</button>
-    <button id="send" class="primary">发送</button>
-    <button id="stop" disabled>停止</button>
+    <!-- 一个按钮，两种状态：不忙是发送（▶），忙了是停止（■）。
+         本来就是同一件事的两面，分成两个按钮只会让人犹豫按哪个。 -->
+    <button id="go" class="primary" title="发送">▶</button>
   </div>
   <div class="bar">
     <span id="budget"></span>
@@ -487,9 +484,20 @@ function bubble(kind, text) {
 }
 
 function setStatus(text, cls) {
+  // 只在出错时显示。cls 为 ok（也就是"就绪"）时留空 —— 那两个字常驻没有信息量，
+  // 用户要求去掉；但错误必须还看得见，所以这个元素留着，只是平时不写字。
   var s = el("status");
-  s.textContent = text;
+  var ok = !cls || cls === "ok";
+  s.textContent = ok ? "" : text;
   s.className = cls || "";
+}
+
+/** 发送/停止那一个按钮的样子：不忙是 ▶，忙了是 ■。 */
+function goUI() {
+  var b = el("go");
+  if (!b) { return; }
+  b.textContent = busy ? "■" : "▶";
+  b.title = busy ? t("stop") : t("send");
 }
 
 /* ---------------- 启动诊断 ----------------
@@ -499,62 +507,9 @@ function setStatus(text, cls) {
 function boot() {
   bridge = (window.tbtools && window.tbtools.ai) ? window.tbtools.ai : null;
 
-  var rows = [];
-  rows.push(["window.tbtools", window.tbtools ? "在" : "不在"]);
-  rows.push(["window.tbtools.ai", bridge ? "在" : "不在"]);
+  // 只探测桥，不再摆那张诊断卡（用户要求去掉）。
+  // 桥不在、或者形状不对，就走 status 那一行报出来 —— 那种时候必须有话说。
   if (bridge) {
-    var keys = [];
-    try {
-      for (var k in bridge) { keys.push(k); }
-    } catch (e) {
-      keys.push("（枚举不到：" + e + "）");
-    }
-    rows.push(["ai 上的方法", keys.length ? keys.join(", ") : "（枚举不到）"]);
-  }
-  rows.push(["location", location.href]);
-
-  var details = document.createElement("details");
-  details.className = "diag" + (bridge ? "" : " bad");
-  var sum = document.createElement("summary");
-  sum.textContent = bridge ? t("diagOk") : t("diagBad");
-  details.appendChild(sum);
-
-  if (bridge) {
-    var tb = document.createElement("table");
-    for (var i = 0; i < rows.length; i++) {
-      var tr = document.createElement("tr");
-      var c1 = document.createElement("td"); c1.textContent = rows[i][0];
-      var c2 = document.createElement("td");
-      var code = document.createElement("code"); code.textContent = String(rows[i][1]);
-      c2.appendChild(code);
-      tr.appendChild(c1); tr.appendChild(c2);
-      tb.appendChild(tr);
-    }
-    details.appendChild(tb);
-
-    var row = document.createElement("div");
-    row.style.cssText = "margin:0 0 8px 10px;display:flex;gap:8px;align-items:center";
-    var pingBtn = document.createElement("button");
-    pingBtn.id = "ping";
-    pingBtn.textContent = t("ping");
-    var hint = document.createElement("span");
-    hint.style.cssText = "font-size:11px;color:var(--muted)";
-    hint.textContent = t("pingPh");
-    row.appendChild(pingBtn); row.appendChild(hint);
-    details.appendChild(row);
-  } else {
-    var p = document.createElement("p");
-    p.style.cssText = "margin:4px 0 8px 10px";
-    p.textContent = t("noBridgeWhy");
-    details.appendChild(p);
-  }
-
-  el("diag").innerHTML = "";
-  el("diag").appendChild(details);
-
-  if (bridge) {
-    setStatus(t("ready"), "ok");
-    el("ping").onclick = ping;
     if (typeof bridge.chat !== "function") {
       setStatus("ai.chat 不是函数 —— 接口形状和预期不同", "bad");
     }
@@ -650,7 +605,6 @@ function ctxText() {
 }
 
 function refreshCtx() {
-  el("ctxPre").textContent = ctxText() || t("none");
   var txt = ctxText();
   el("budget").textContent = txt ? (txt.length + " 字符 / 上限约 32000") : "";
 }
@@ -658,10 +612,8 @@ function refreshCtx() {
 function applyLang() {
   document.documentElement.lang = lang === "en" ? "en" : "zh";
   el("title").textContent = t("title");
-  el("send").textContent = busy ? t("stop") : t("send");
-  el("stop").textContent = t("stop");
   el("ask").placeholder = t("ask");
-  el("ctxSummary").textContent = t("ctx");
+  goUI();
   el("sessNew").title = t("sessNew");
   el("sessDel").title = t("sessDel");
   boot();
@@ -706,8 +658,7 @@ function send() {
 
   var box = bubble("a", "");
   busy = true;
-  el("send").textContent = t("stop");
-  el("stop").disabled = false;
+  goUI();
 
   var base = "";
   var p;
@@ -748,8 +699,7 @@ function send() {
   function finish() {
     busy = false;
     abortFn = null;
-    el("send").textContent = t("send");
-    el("stop").disabled = true;
+    goUI();
     el("log").scrollTop = el("log").scrollHeight;
     refreshCtx();
   }
@@ -788,8 +738,8 @@ function addRetry(original) {
 }
 
 /* ---------------- 事件 ---------------- */
-el("send").onclick = send;
-el("stop").onclick = stop;
+// 一个按钮：忙的时候 send() 自己会转去 stop()（见它第一行）。
+el("go").onclick = send;
 el("ask").addEventListener("keydown", function (e) {
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
 });
