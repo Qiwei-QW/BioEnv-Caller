@@ -61,11 +61,62 @@ public final class AiAssistPanel extends JPanel {
         setLayout(new BorderLayout());
         setMinimumSize(new Dimension(0, 0));
 
+        // ★ 这一行是整个面板能不能显示的分水岭。
+        //
+        // body 是装内容的地方：网页视图进它的 CENTER，提示文字进它的 NORTH。
+        // 它以前从来没有被加进来过 —— 于是它没有父容器、尺寸恒为 0x0、
+        // isDisplayable 为 false，里面放什么都画不出来。
+        //
+        // 后果是这一栏从第一版起就一个字都没显示过，连"加载中…"都没有。
+        // 那本身就是线索：从不显示任何 Swing 内容，而不只是网页画不出来 ——
+        // 我却一直以为是网页视图的问题，查了六轮。
+        //
+        // 诊断行给出的铁证：self=260x735 而 body=0x0。
+        add(body, BorderLayout.CENTER);
+
         // 这里刻意没有任何标题栏或收起按钮。
         //
         // 开关统一在左边那条图标栏上：点 🤖 展开、再点一次收起。面板自己再放一个
         // "收起"只是在同一个位置重复第二遍同样的动作，还白占一行对话的高度。
         showMessage(I18n.t(Strings.AI_LOADING));
+
+        // ★ 等这一栏真正显示在屏幕上之后再建网页。
+        //
+        // 这是从 minisvg 的字节码里学来的：它建完 WebGuiJPanel 之后挂了一个
+        // addHierarchyListener，等面板真的可显示了才做后续设置。
+        //
+        // 原因：网页视图要靠一个真实的绘制表面，而那是"显示出来"之后才有的。
+        // 在卡片还没切到前面时把它建好，它拿不到表面 —— 实测就是页面报告一个固定
+        // 尺寸（1050×832）、而容器只有三百多像素，屏幕上则是一片空白，
+        // 连父容器的 revalidate/repaint 都叫不动它。
+        addHierarchyListener(new java.awt.event.HierarchyListener() {
+            private boolean done;
+
+            @Override
+            public void hierarchyChanged(java.awt.event.HierarchyEvent e) {
+                if (done || !isShowing() || getWidth() <= 0) {
+                    return;
+                }
+                done = true;
+                javax.swing.SwingUtilities.invokeLater(new Runnable() {
+                    @Override
+                    public void run() {
+                        ensureLoaded();
+                        onShown();
+                        // 这一栏以后每次被改尺寸，也要跟着摆 —— 内层的浏览器组件
+                        // 不会自己响应外层布局（见 AiWebView.resizeTo）。
+                        addComponentListener(new java.awt.event.ComponentAdapter() {
+                            @Override
+                            public void componentResized(java.awt.event.ComponentEvent e) {
+                                if (view != null) {
+                                    view.resizeTo(getWidth(), getHeight());
+                                }
+                            }
+                        });
+                    }
+                });
+            }
+        });
     }
 
     /** 折叠状态的箭头方向由外部决定（它知道分隔条的位置）。 */
@@ -139,6 +190,7 @@ public final class AiAssistPanel extends JPanel {
         body.revalidate();
         body.repaint();
 
+
         // 补推：主题、语言、以及期间攒下来的上下文。
         pushTheme(theme);
         pushLang(lang);
@@ -169,6 +221,33 @@ public final class AiAssistPanel extends JPanel {
         if (view != null) {
             view.run("window.tbvAi && window.tbvAi.setLang(" + jsString(lang) + ")");
         }
+    }
+
+    /**
+     * 卡片刚被切到前面时叫一次。
+     *
+     * <p>为什么必须这么做：内嵌的网页视图是<b>重量级组件</b>，而且它是在被加进
+     * CardLayout 的时候按<b>当时</b>的大小建起来的。之后卡片被切出来、容器尺寸变了，
+     * 父容器的 revalidate/repaint <b>叫不醒它</b> —— 它继续按旧尺寸画，画在一块
+     * 尺寸对不上的地方，看上去就是一片空白（实测：页面自己报告 1050×832，而那一列
+     * 只有三百多像素宽）。
+     *
+     * <p>所以这里显式把它的边界摆成父容器现在的大小，再让它自己重排一次。
+     */
+    public void onShown() {
+        if (view != null) {
+            view.resizeTo(getWidth(), getHeight());
+        }
+        if (view != null && view.panel() != null) {
+            java.awt.Container parent = view.panel().getParent();
+            if (parent != null && parent.getWidth() > 0 && parent.getHeight() > 0) {
+                view.panel().setBounds(0, 0, parent.getWidth(), parent.getHeight());
+            }
+            view.panel().revalidate();
+            view.panel().repaint();
+        }
+        revalidate();
+        repaint();
     }
 
     /** 让 Java 侧主动问一句（留给以后的"一键解释报错"）。 */

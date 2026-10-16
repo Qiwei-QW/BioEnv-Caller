@@ -2128,6 +2128,14 @@ public final class MainPanel extends JPanel {
         // The button sits inside the preview's own panel so the action is next to
         // the thing it acts on.
         rebuildPreviewButton.setEnabled(false);
+        // 压扁：字号小一号、上下不留白。
+        //
+        // 目的是让它不高于那一行命令 —— 那样这一行的高度由输入框决定，
+        // 有没有这个按钮都一样，也就不会跳。它是个次要动作（退回表单拼的命令），
+        // 本来也不该和「运行」那些主按钮一样大。
+        rebuildPreviewButton.setFont(
+                rebuildPreviewButton.getFont().deriveFont(java.awt.Font.PLAIN, 11f));
+        rebuildPreviewButton.setMargin(new java.awt.Insets(0, 8, 0, 8));
         rebuildPreviewButton.setToolTipText(I18n.t(Strings.HINT_REBUILD_PREVIEW));
         rebuildPreviewButton.addActionListener(new ActionListener() {
             @Override
@@ -2141,9 +2149,15 @@ public final class MainPanel extends JPanel {
         // <b>省掉输入框下面的一整行</b> —— 那一行只放一个按钮，高度全浪费了。
         //
         // 这一块同时是显隐开关：平时（预览跟着表单走）整块藏起来，见 updatePreviewHint。
-        previewActions = new JPanel(new java.awt.BorderLayout());
+        // 右对齐，而且不拉伸。
+        //
+        // 原来用 BorderLayout，按钮在 CENTER 会被纵向撑满到整行高度 ——
+        // 而它比一行输入框高，于是它一出现就把命令预览那一行撑高，
+        // 上面所有东西跟着跳一下。FlowLayout 认首选尺寸，不撑。
+        previewActions = new JPanel(new java.awt.FlowLayout(
+                java.awt.FlowLayout.RIGHT, 0, 0));
         previewActions.setOpaque(false);
-        previewActions.add(rebuildPreviewButton, BorderLayout.CENTER);
+        previewActions.add(rebuildPreviewButton);
 
         JPanel cmdRow = new JPanel(new java.awt.BorderLayout(6, 0));
         cmdRow.setOpaque(false);
@@ -2382,18 +2396,28 @@ public final class MainPanel extends JPanel {
         leftRail.select(id);
         outerSplit.setDividerLocation(panelWidth(id));
         if ("ai".equals(id)) {
-            // 第一次真要用它的时候才去碰网页运行时 —— 构造阶段绝不碰。
-            aiAssist.ensureLoaded();
+            // 这里不建网页：等这一栏真正显示出来再建，见 AiAssistPanel 的
+            // HierarchyListener。建早了它拿不到绘制表面，画出来是空白。
             aiAssist.pushTheme(UiTheme.current());
             aiAssist.pushLang(bioenv.i18n.Lang.EN == I18n.get() ? "en" : "zh");
         }
         treeHost.revalidate();
         treeHost.repaint();
+        if ("ai".equals(id)) {
+            // 网页视图是重量级组件，容器变大变小时父容器的 repaint 叫不醒它，
+            // 得单独让它按现在的尺寸重排一次。见 AiAssistPanel.onShown。
+            aiAssist.onShown();
+        }
     }
 
-    /** 每张卡合适的宽度：对话要宽一些，树和设置 260 够。 */
+    /**
+     * 每张卡展开时的宽度。
+     *
+     * <p>都用工具树那条宽度：三张卡占的是同一块地方，切来切去时列宽跟着跳，
+     * 看上去像界面在抖。想更宽更窄，拖分隔条就是 —— 那是用户自己的选择。
+     */
     private static int panelWidth(String id) {
-        return "ai".equals(id) ? 340 : TREE_WIDTH_PX;
+        return TREE_WIDTH_PX;
     }
 
     /** 换卡片。 */

@@ -841,14 +841,14 @@ public final class SchemaFormPanel extends JPanel {
      * 旁边却空着三分之一。
      *
      * <p>现在给参数列表 80%。附加参数并没有被折叠或藏起来（它有存在的理由：
-     * 帮助里没描述的参数只能写在那儿），只是不再喧宾夺主。想要更多照样拖分隔条。
+     * 帮助里没描述的参数只能写在那儿），只是不再喧宾夺主。分隔条已拿掉，位置固定。
      *
      * <p>提成常量而不是留四处字面量：这个数在四个地方各写了一遍，改一次要改四处，
      * 漏一处就会出现"拖动时一边、重摆时另一边"的错位。
      */
     private static final double FORM_SPLIT_RATIO = 0.80;
 
-    /** Divides the option list from the extra-arguments box; resizable. */
+    /** Divides the option list from the extra-arguments box; not resizable, the divider is 0 wide. */
     private JSplitPane formSplit;
 
     /**
@@ -1508,7 +1508,12 @@ public final class SchemaFormPanel extends JPanel {
         if (formSplit == null) {
             formSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, optionHost, extras);
             formSplit.setResizeWeight(FORM_SPLIT_RATIO);
-            formSplit.setDividerSize(6);
+            // 0 = 没有拖动条，位置就钉在上面那个比例上。
+        //
+        // 原来这里是 6：一条能抓的分隔条。问题是它只会被往一个方向拉 ——
+        // 往下拉就是压缩附加参数，而附加参数已经贴在下沿，拉下去只是把它挤扁。
+        // 用户要的是"默认就在最下面，而且拉不动"，那就把能抓的东西去掉。
+        formSplit.setDividerSize(0);
             formSplit.setBorder(null);
             // 分隔位置要等分栏自己有尺寸之后再摆，而且布局分几步走（先 0、再 509、最后
             // 535），早摆一次就会停在中间态上。所以每次高度变化都重摆，直到高度稳住。
@@ -1713,7 +1718,17 @@ public final class SchemaFormPanel extends JPanel {
             return p;
         }
         p.add(new JLabel(I18n.t(Strings.FORM_RAW_ARGS)), BorderLayout.NORTH);
-        p.add(new JScrollPane(rawArgsArea), BorderLayout.CENTER);
+        // SOUTH 而不是 CENTER，也不是 NORTH。
+        //
+        // 用 CENTER 它会跟着容器一起长高，占的是上面参数表的地方；
+        // 用 NORTH 高度是钉住了，但多出来的空白留在它下面 ——
+        // 于是它离下面的命令预览隔着一片空，看着像两块东西。
+        //
+        // 用 SOUTH：空白留在它上方，它紧贴命令预览。这两样本来就是一件事的两半
+        // （写进附加参数的会直接接在预览那条命令后面），挨着放才对。
+        JPanel argsHolder = new JPanel(new BorderLayout());
+        argsHolder.add(rawArgsScroll(), BorderLayout.SOUTH);
+        p.add(argsHolder, BorderLayout.CENTER);
         // 这里<b>不</b>再放一条工作目录行。
         //
         // 它已经在 {@link #buildHead()} 里了，而页头对每个工具都显示——解析得出的和
@@ -3002,9 +3017,29 @@ public final class SchemaFormPanel extends JPanel {
         extraArgsLabel = new JLabel(I18n.t(Strings.FORM_EXTRA_ARGS));
         extraArgsLabel.setToolTipText(I18n.t(Strings.FORM_EXTRA_ARGS_TIP));
         p.add(extraArgsLabel, BorderLayout.NORTH);
-        configureRawArgs();
-        p.add(new JScrollPane(rawArgsArea), BorderLayout.CENTER);
+        // SOUTH：同上 —— 空白留上方，它紧贴下面的命令预览。
+        JPanel argsHolder = new JPanel(new BorderLayout());
+        argsHolder.add(rawArgsScroll(), BorderLayout.SOUTH);
+        p.add(argsHolder, BorderLayout.CENTER);
         return p;
+    }
+
+    /**
+     * 附加参数那个滚动框，固定两行高。
+     *
+     * <p>它以前是用 {@code BorderLayout.CENTER} 摆的，于是跟着容器一起长高。
+     * 附加参数是"偶尔补一句"的地方，不是主输入区 —— 它多占的高度是从上面那张
+     * 参数表身上拿的，而那张表才是天天用的。
+     *
+     * <p>所以钉子钉在这里：按文本区自己的两行定出首选高度，摆的时候用 SOUTH ——
+     * 高度不再变，而且多出来的空白留在它上方，它紧贴下面的命令预览。
+     */
+    private JScrollPane rawArgsScroll() {
+        configureRawArgs();
+        JScrollPane sp = new JScrollPane(rawArgsArea);
+        sp.setPreferredSize(new java.awt.Dimension(240,
+                rawArgsArea.getPreferredSize().height + 4));
+        return sp;
     }
 
     private void configureRawArgs() {
