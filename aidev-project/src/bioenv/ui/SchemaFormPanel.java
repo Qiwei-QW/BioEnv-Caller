@@ -1713,7 +1713,10 @@ public final class SchemaFormPanel extends JPanel {
             return p;
         }
         p.add(new JLabel(I18n.t(Strings.FORM_RAW_ARGS)), BorderLayout.NORTH);
-        p.add(new JScrollPane(rawArgsArea), BorderLayout.CENTER);
+        // NORTH 而不是 CENTER：按首选的两行高摆，不跟着容器长。见 rawArgsScroll。
+        JPanel argsHolder = new JPanel(new BorderLayout());
+        argsHolder.add(rawArgsScroll(), BorderLayout.NORTH);
+        p.add(argsHolder, BorderLayout.CENTER);
         // 这里<b>不</b>再放一条工作目录行。
         //
         // 它已经在 {@link #buildHead()} 里了，而页头对每个工具都显示——解析得出的和
@@ -3002,9 +3005,29 @@ public final class SchemaFormPanel extends JPanel {
         extraArgsLabel = new JLabel(I18n.t(Strings.FORM_EXTRA_ARGS));
         extraArgsLabel.setToolTipText(I18n.t(Strings.FORM_EXTRA_ARGS_TIP));
         p.add(extraArgsLabel, BorderLayout.NORTH);
-        configureRawArgs();
-        p.add(new JScrollPane(rawArgsArea), BorderLayout.CENTER);
+        // NORTH 而不是 CENTER：同上，两行就够。
+        JPanel argsHolder = new JPanel(new BorderLayout());
+        argsHolder.add(rawArgsScroll(), BorderLayout.NORTH);
+        p.add(argsHolder, BorderLayout.CENTER);
         return p;
+    }
+
+    /**
+     * 附加参数那个滚动框，固定两行高。
+     *
+     * <p>它以前是用 {@code BorderLayout.CENTER} 摆的，于是跟着容器一起长高。
+     * 附加参数是"偶尔补一句"的地方，不是主输入区 —— 它多占的高度是从上面那张
+     * 参数表身上拿的，而那张表才是天天用的。
+     *
+     * <p>所以钉子钉在这里：按文本区自己的两行定出首选高度，摆的时候用 NORTH，
+     * 下面留白，不再往上长。
+     */
+    private JScrollPane rawArgsScroll() {
+        configureRawArgs();
+        JScrollPane sp = new JScrollPane(rawArgsArea);
+        sp.setPreferredSize(new java.awt.Dimension(240,
+                rawArgsArea.getPreferredSize().height + 4));
+        return sp;
     }
 
     private void configureRawArgs() {
