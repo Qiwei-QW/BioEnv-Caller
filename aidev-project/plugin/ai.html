@@ -105,6 +105,19 @@
              min-width:0;padding:0;font-size:13px;line-height:1}
 /* 会话名占满那一行：它是这一栏里唯一需要宽度看全的东西。 */
 #sessSel{flex:1;min-width:0}
+/* + 在输入框左下角，发送在右下角。 */
+#askWrap{padding:0}
+#askWrap #ask{padding-left:34px;padding-right:52px}
+#askWrap #pick{position:absolute;left:7px;bottom:7px;width:28px;height:28px;
+               min-width:0;padding:0;font-size:15px;line-height:1;font-weight:600}
+#atts{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 6px}
+#atts .att{display:flex;align-items:center;gap:4px;font-size:11px;
+           background:var(--panel);border:1px solid var(--line);border-radius:10px;
+           padding:2px 8px;max-width:100%}
+#atts .att span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:190px}
+#atts .att b{cursor:pointer;font-weight:400;opacity:.6;padding:0 2px}
+#atts .att b:hover{opacity:1}
+#explain{display:none;width:100%;margin:0 0 6px;font-size:12px;text-align:left}
 </style>
 </head>
 <body class="theme-classic">
@@ -130,16 +143,21 @@
   <span id="status"></span>
 </header>
 
+<input type="file" id="file" multiple style="display:none">
+
 <div id="log"></div>
 
 <footer>
   <!-- 按钮压在输入框里面的右下角：它只管这一格里的字，放在格子里最直接，
        也把那一行的高度让给文字。 -->
+  <div id="atts"></div>
+  <button id="explain"></button>
   <div class="row">
     <div id="askWrap">
     <textarea id="ask" placeholder="按 Enter 发送，Shift+Enter 换行"></textarea>
     <!-- 一个按钮，两种状态：不忙是发送（▶），忙了是停止（■）。
          本来就是同一件事的两面，分成两个按钮只会让人犹豫按哪个。 -->
+    <button id="pick" class="icon" title="添加文件或图片">＋</button>
     <button id="go" class="primary" title="发送">▶</button>
     </div>
   </div>
@@ -211,6 +229,11 @@ var T = {
     chk: "正在检查…", noBridge: "桥不可用", ready: "就绪",
     newS: "新建", delS: "删除",
     sessNew: "新建会话", sessDel: "删除这个会话",
+  pick: "添加文件或图片", drop: "移除这个附件", attach: "附件",
+  explain: "上次运行失败了 · 让 AI 看看",
+  explainQ: "刚才这一步运行失败了。请看看下面的输出，告诉我最可能的原因，以及我该改哪个参数或哪一步。",
+  untitled: "新会话", bigFile: "文件太大，没有加进来：",
+  imgNoStream: "（图片请求不带历史，也不流式返回）",
     untitled: "新会话",
     confirmDel: "删除这个会话？它的对话记录会一起删掉。",
     storeOff: "（本次运行内有效：网页存储不可用）",
@@ -229,6 +252,11 @@ var T = {
     chk: "Checking…", noBridge: "No bridge", ready: "Ready",
     newS: "New", delS: "Delete",
     sessNew: "New conversation", sessDel: "Delete this conversation",
+  pick: "Add a file or an image", drop: "Remove this attachment", attach: "Attachments",
+  explain: "The last run failed - let the AI look",
+  explainQ: "That last run failed. Look at the output below and tell me the most likely cause, and which option or step I should change.",
+  untitled: "New conversation", bigFile: "File too large, not attached: ",
+  imgNoStream: "(image requests carry no history and do not stream)",
     untitled: "New conversation",
     confirmDel: "Delete this conversation? Its messages go with it.",
     storeOff: "(kept for this run only: web storage is unavailable)",
@@ -462,9 +490,22 @@ function deleteCurrent() {
   selectSession(sessions[0].id);
 }
 
+/**
+ * 会话标题：工具名 + 时间。
+ *
+ * 以前取第一条消息的头几个字 -- 于是发一句“你好”，下拉框里就只显示一个“你”。
+ * 一个字什么也说不明，还白白占着刚给会话名让出来的宽度。
+ */
+function titleStamp() {
+  var d = new Date();
+  var hm = ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2);
+  var tool = (context && context.tool) ? context.tool : "";
+  return (tool ? tool + " · " : "") + hm;
+}
+
 function touchTitle() {
   var s = findCurrent();
-  if (s && !s.title) { s.title = titleOf(s.turns); }
+  if (s && !s.title) { s.title = titleStamp(); }
   saveStore();
   renderSessions();
 }
@@ -472,6 +513,53 @@ function touchTitle() {
 /* ================================================================
  * 对话区
  * ================================================================ */
+/* ---------------- 附件 ----------------
+ * 图片走 Tbtools 桥自带的 chatImage（它官方支持），文本文件在网页里读出来拼进问题 --
+ * 桥没有读文件的能力。两边都限大小：桥的错误码里有 too_large，说明图片有上限；
+ * 文本不限会直接顶爆 32000 字符的预算。
+ */
+var atts = [];
+
+function renderAtts() {
+  var box = el("atts");
+  if (!box) { return; }
+  box.innerHTML = "";
+  for (var i = 0; i < atts.length; i++) {
+    (function (n) {
+      var d = document.createElement("div");
+      d.className = "att";
+      var s = document.createElement("span");
+      s.textContent = (atts[n].kind === "img" ? "\u{1F5BC} " : "\u{1F4C4} ") + atts[n].name;
+      var x = document.createElement("b");
+      x.textContent = "\u00d7";
+      x.title = t("drop");
+      x.onclick = function () { atts.splice(n, 1); renderAtts(); };
+      d.appendChild(s); d.appendChild(x);
+      box.appendChild(d);
+    })(i);
+  }
+}
+
+function addFiles(list) {
+  for (var i = 0; i < list.length; i++) {
+    (function (f) {
+      var img = /^image\//.test(f.type);
+      if (f.size > 4 * 1024 * 1024) {
+        setStatus(t("bigFile") + f.name, "bad");
+        return;
+      }
+      var r = new FileReader();
+      r.onload = function () {
+        atts.push({ kind: img ? "img" : "txt", name: f.name,
+                    data: r.result, mime: f.type || "application/octet-stream" });
+        renderAtts();
+      };
+      r.onerror = function () { setStatus(t("bigFile") + f.name, "bad"); };
+      if (img) { r.readAsDataURL(f); } else { r.readAsText(f); }
+    })(list[i]);
+  }
+}
+
 function renderLog() {
   el("log").innerHTML = "";
   for (var i = 0; i < turns.length; i++) {
@@ -616,6 +704,14 @@ function ctxText() {
 }
 
 function refreshCtx() {
+  // 上次运行失败了就露一个入口。数据是 Java 已经在推的 context.lastRun，
+  // 不用为它新建任何通道。
+  var bad = context && context.lastRun && context.lastRun.exit !== 0;
+  var b = el("explain");
+  if (b) {
+    b.textContent = t("explain");
+    b.style.display = bad ? "" : "none";
+  }
   var txt = ctxText();
   el("budget").textContent = txt ? (txt.length + " 字符 / 上限约 32000") : "";
 }
@@ -666,13 +762,30 @@ function send() {
   }
   msgs.push({ role: "user", content: full });
 
+  // 文本附件拼进问题；图片挑第一张走 chatImage。
+  var img = null;
+  for (var i = 0; i < atts.length; i++) {
+    if (atts[i].kind === "img" && !img) { img = atts[i]; }
+    else if (atts[i].kind === "txt") {
+      full += "\n\n[附件 " + atts[i].name + "]\n" + String(atts[i].data).slice(0, 8000);
+    }
+  }
+  atts.length = 0;
+  renderAtts();
+
   var box = bubble("a", "");
   busy = true;
   goUI();
+  if (img) { box.textContent = t("imgNoStream"); }
 
   var base = "";
   var p;
   try {
+    if (img) {
+      // 图片走 chatImage。注意它的签名是 (text, dataUrl, mime) --
+      // 一条文本，不是消息数组，所以这一次请求不带历史、也没有流式增量。
+      p = bridge.chatImage(full, img.data, img.mime);
+    } else {
     p = bridge.chat(msgs, {
       onDelta: function (s) {
         // 实测：s 是增量。最终以 promise 的返回值覆盖。
@@ -681,6 +794,7 @@ function send() {
         el("log").scrollTop = el("log").scrollHeight;
       }
     });
+    }
   } catch (e) {
     box.className = "m e";
     box.textContent = describe(e);
@@ -750,6 +864,13 @@ function addRetry(original) {
 /* ---------------- 事件 ---------------- */
 // 一个按钮：忙的时候 send() 自己会转去 stop()（见它第一行）。
 el("go").onclick = send;
+el("pick").onclick = function () { el("file").click(); };
+el("file").onchange = function () { addFiles(el("file").files); el("file").value = ""; };
+el("explain").onclick = function () {
+  if (busy) { return; }
+  el("ask").value = t("explainQ");
+  send();
+};
 el("ask").addEventListener("keydown", function (e) {
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
 });
