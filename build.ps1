@@ -144,7 +144,8 @@ $passed = @()
 $skipped = @()
 try {
     $regression = @(
-        'bioenv.test.SelfTest',
+        'bioenv.test.AiPaneWiringTest',
+            'bioenv.test.SelfTest',
         'bioenv.test.CommandLineTest',
         'bioenv.test.ConcisePreviewTest',
         'bioenv.test.DiscoveryCacheTest',
