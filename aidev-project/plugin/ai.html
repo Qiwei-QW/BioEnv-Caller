@@ -98,6 +98,13 @@
   button.icon{padding:6px 9px;font-size:13px;line-height:1}
   button:disabled{opacity:.5;cursor:default}
   .bar{display:flex;justify-content:space-between;align-items:center;margin-top:6px;font-size:11px;color:var(--muted)}
+/* 发送按钮进输入框：外层相对定位，按钮压右下角；文字给它让出一条。 */
+#askWrap{position:relative;flex:1;display:flex}
+#askWrap #ask{flex:1;width:100%;padding-right:52px}
+#askWrap #go{position:absolute;right:7px;bottom:7px;width:38px;height:28px;
+             min-width:0;padding:0;font-size:13px;line-height:1}
+/* 会话名占满那一行：它是这一栏里唯一需要宽度看全的东西。 */
+#sessSel{flex:1;min-width:0}
 </style>
 </head>
 <body class="theme-classic">
@@ -114,9 +121,9 @@
 
 <!-- header 用 flex + 一个会长的空档，把两个会话按钮压到右上角。 -->
 <header style="display:flex;align-items:center;gap:8px">
-  <b id="title">AI 助手</b>
+  <!-- 这里原本还有一句「AI 助手」。标签页上写着 BioEnv Caller、左边图标是机器人，
+       再说一遍只是占地方。省下的空间给会话名 —— 那里才是需要宽度的地方。 -->
   <select id="sessSel" title="会话"></select>
-  <span style="flex:1"></span>
   <button id="sessNew" class="icon" title="新建会话">＋</button>
   <button id="sessDel" class="icon" title="删除这个会话">🗑</button>
   <!-- status 只在出错时才有字。平时空白，"就绪"那两个字没有信息量。 -->
@@ -126,11 +133,15 @@
 <div id="log"></div>
 
 <footer>
+  <!-- 按钮压在输入框里面的右下角：它只管这一格里的字，放在格子里最直接，
+       也把那一行的高度让给文字。 -->
   <div class="row">
+    <div id="askWrap">
     <textarea id="ask" placeholder="按 Enter 发送，Shift+Enter 换行"></textarea>
     <!-- 一个按钮，两种状态：不忙是发送（▶），忙了是停止（■）。
          本来就是同一件事的两面，分成两个按钮只会让人犹豫按哪个。 -->
     <button id="go" class="primary" title="发送">▶</button>
+    </div>
   </div>
   <div class="bar">
     <span id="budget"></span>
@@ -611,7 +622,6 @@ function refreshCtx() {
 
 function applyLang() {
   document.documentElement.lang = lang === "en" ? "en" : "zh";
-  el("title").textContent = t("title");
   el("ask").placeholder = t("ask");
   goUI();
   el("sessNew").title = t("sessNew");
