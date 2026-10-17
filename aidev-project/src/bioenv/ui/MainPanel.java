@@ -322,14 +322,14 @@ public final class MainPanel extends JPanel {
     private EnvScanner scanner;
     private EnvRunner envRunner;
     private ToolRegistry registry;
-    /** 设置浮窗的宿主；居中就靠它的 GridBagLayout。 */
-    private javax.swing.JPanel settingsHost;
-    /** 设置浮窗本身。 */
-    private SettingsWindow settingsWindow;
-    /** 内容区的两张卡：主界面 / 设置。 */
-    private javax.swing.JPanel pageHost;
-    /** 设置窗口是否已经铺满。 */
-    private boolean settingsMaximized;
+    /**
+     * 设置窗口。
+     *
+     * <p>独立的一个系统窗口，和「编辑参数…」那个一样 —— 最小化、
+     * 最大化、关闭都由系统窗口自带，居中靠 setLocationRelativeTo。
+     * 不要自己画标题栏：那一套看起来不像系统窗口，也做不全。
+     */
+    private javax.swing.JFrame settingsWindow;
     private Runner runner;
     private Tool selected;
     private Runner.Job currentJob;
@@ -2367,42 +2367,13 @@ public final class MainPanel extends JPanel {
                 ? new Dimension(120, 120) : treeSide.getMinimumSize());
         treeHost.add(treeSide == null ? new javax.swing.JPanel() : treeSide, "tree");
         treeHost.add(aiAssist, "ai");
-        // 设置不在这里了。
-        //
-        // 它原来和树、AI 共用同一列 —— 于是五个设置项挤在 380px
-        // 宽的一条竖列里从上往下堆，读起来没有条理。现在它是一块
-        // 居中的浮窗，有自己的地盘，才放得下“左边导航、右边内容”那种排法。
-        settingsHost = new javax.swing.JPanel(new java.awt.GridBagLayout());
-        settingsHost.setName("bioenv.settingsHost");
-        settingsHost.setOpaque(true);
-        UiTheme.role(settingsHost, "surface");
-        settingsWindow = new SettingsWindow(buildSettingsPanel(),
-                new Runnable() {
-                    @Override
-                    public void run() {
-                        closeSettings();
-                    }
-                },
-                new Runnable() {
-                    @Override
-                    public void run() {
-                        toggleSettingsMaximized();
-                    }
-                });
-        settingsHost.add(settingsWindow);
-
-        pageHost = new javax.swing.JPanel(new java.awt.CardLayout());
-        pageHost.setName("bioenv.pageHost");
-        pageHost.add(split, "main");
-        pageHost.add(settingsHost, "settings");
-        ((java.awt.CardLayout) pageHost.getLayout()).show(pageHost, "main");
         split.setLeftComponent(treeHost);
         ((java.awt.CardLayout) treeHost.getLayout()).show(treeHost, "tree");
 
         javax.swing.JPanel whole = new javax.swing.JPanel(new java.awt.BorderLayout());
         whole.setName("bioenv.mainArea");
         whole.add(leftRail, java.awt.BorderLayout.WEST);
-        whole.add(pageHost, java.awt.BorderLayout.CENTER);
+        whole.add(split, java.awt.BorderLayout.CENTER);
         return whole;
     }
 
@@ -2426,21 +2397,11 @@ public final class MainPanel extends JPanel {
         if (treeHost == null || outerSplit == null) {
             return;
         }
-        // 设置是浮窗，不占左栏 —— 它自己一条路。
+        // 设置是一个独立窗口，不是左栏的一张卡。
         if ("settings".equals(id)) {
-            if ("settings".equals(activePanel)) {
-                closeSettings();
-            } else {
-                leftRail.clearSelection();
-                activePanel = "settings";
-                leftRail.select("settings");
-                outerSplit.setDividerLocation(0);
-                showSettings(true);
-            }
+            leftRail.clearSelection();
+            openSettingsWindow();
             return;
-        }
-        if ("settings".equals(activePanel)) {
-            closeSettings();
         }
         if (id.equals(activePanel)) {
             // 同一个图标再点一次：整列收起，图标不再高亮。
@@ -2476,45 +2437,32 @@ public final class MainPanel extends JPanel {
      * <p>都用工具树那条宽度：三张卡占的是同一块地方，切来切去时列宽跟着跳，
      * 看上去像界面在抖。想更宽更窄，拖分隔条就是 —— 那是用户自己的选择。
      */
-    /** 打开 / 关闭设置浮窗。 */
-    private void showSettings(boolean on) {
-        if (pageHost == null) {
-            return;
-        }
-        ((java.awt.CardLayout) pageHost.getLayout()).show(pageHost, on ? "settings" : "main");
-        pageHost.revalidate();
-        pageHost.repaint();
-    }
-
-    /** 点 ×：回主界面，图标不再高亮。 */
-    private void closeSettings() {
-        if ("settings".equals(activePanel)) {
-            activePanel = null;
-        }
-        leftRail.clearSelection();
-        settingsMaximized = false;
-        showSettings(false);
-    }
-
     /**
-     * 点 □：铺满 / 还原。
+     * 打开设置窗口 —— 照「编辑参数…」那个窗口的做法。
      *
-     * <p>居中靠 GridBagLayout（按首选尺寸居中摆），铺满靠 BorderLayout
-     * （CENTER 跟着宿主走）。两种排法切换时必须重新 add 一次
-     * —— 换布局层不会自动重新装配子组件。
+     * <p>用 JFrame 而不是自己画一个面板：最小化、最大化、关闭是系统窗口
+     * 自带的，setLocationRelativeTo 负责居中，耐性也和用户已经熟悉的那个窗口一致。
      */
-    private void toggleSettingsMaximized() {
-        if (settingsHost == null || settingsWindow == null) {
+    private void openSettingsWindow() {
+        if (settingsWindow != null && settingsWindow.isDisplayable()) {
+            settingsWindow.toFront();
+            settingsWindow.requestFocus();
             return;
         }
-        settingsMaximized = !settingsMaximized;
-        settingsHost.removeAll();
-        settingsHost.setLayout(settingsMaximized
-                ? new java.awt.BorderLayout()
-                : new java.awt.GridBagLayout());
-        settingsHost.add(settingsWindow);
-        settingsHost.revalidate();
-        settingsHost.repaint();
+        settingsWindow = new javax.swing.JFrame(I18n.t(Strings.SETTINGS_TITLE));
+        settingsWindow.setDefaultCloseOperation(javax.swing.WindowConstants.DISPOSE_ON_CLOSE);
+        settingsWindow.setContentPane(buildSettingsPanel());
+        settingsWindow.setSize(760, 560);
+        settingsWindow.setMinimumSize(new Dimension(420, 320));
+        settingsWindow.setLocationRelativeTo(this);
+        settingsWindow.setResizable(true);
+        settingsWindow.addWindowListener(new java.awt.event.WindowAdapter() {
+            @Override
+            public void windowClosed(java.awt.event.WindowEvent e) {
+                settingsWindow = null;
+            }
+        });
+        settingsWindow.setVisible(true);
     }
 
     private static int panelWidth(String id) {
