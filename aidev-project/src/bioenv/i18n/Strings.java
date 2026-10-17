@@ -222,6 +222,8 @@ public final class Strings {
     public static final String AI_COLLAPSE_SHORT = "ai.collapseShort";
     /** 设置卡（原来顶栏那一条）。 */
     public static final String SETTINGS_TITLE = "settings.title";
+    /** 设置里“连接”那一块的标题。 */
+    public static final String SETTINGS_CONN = "settings.conn";
     public static final String SETTINGS_LOOK = "settings.look";
     public static final String SETTINGS_LANGUAGE = "settings.language";
     public static final String SETTINGS_CLOSE = "settings.close";
@@ -1181,6 +1183,7 @@ public final class Strings {
                 "Collapse the AI assistant and go back to the tool tree");
         put(ZH_TEXT, EN_TEXT, AI_COLLAPSE_SHORT, "收起", "Hide");
         put(ZH_TEXT, EN_TEXT, SETTINGS_TITLE, "设置", "Settings");
+        put(ZH_TEXT, EN_TEXT, SETTINGS_CONN, "连接", "Connection");
         put(ZH_TEXT, EN_TEXT, SETTINGS_LOOK, "界面风格", "Theme");
         put(ZH_TEXT, EN_TEXT, SETTINGS_LANGUAGE, "语言", "Language");
         put(ZH_TEXT, EN_TEXT, SETTINGS_CLOSE, "收起设置，回到工具树",

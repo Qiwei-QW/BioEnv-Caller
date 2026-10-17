@@ -1935,80 +1935,110 @@ public final class MainPanel extends JPanel {
      * <p>竖着排而不是横着排：这一列只有两百多像素宽，横排会挤成一团。
      */
     private JPanel buildSettingsPanel() {
-        JPanel p = new JPanel();
-        p.setName("bioenv.settingsPanel");
-        p.setLayout(new javax.swing.BoxLayout(p, javax.swing.BoxLayout.Y_AXIS));
-        p.setBorder(BorderFactory.createEmptyBorder(6, 10, 8, 10));
+        // 左边一列导航，右边一块内容 —— 而不是把五样东西堆成一列。
+        //
+        // 原来它们上下相接：连接方式、发行版、扫描按钮、界面风格、语言。
+        // 五样层级不同的东西排成一列，读起来没有形状；分成三块之后，
+        // 每一块只说一件事。
+        JPanel root = new JPanel(new java.awt.BorderLayout(16, 0));
+        root.setName("bioenv.settingsPanel");
+        root.setBorder(BorderFactory.createEmptyBorder(14, 14, 14, 14));
+        UiTheme.role(root, "surface");
 
-        JPanel head = new JPanel(new BorderLayout());
-        head.setOpaque(false);
-        head.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
-        JLabel settingsTitle = new JLabel(I18n.t(Strings.SETTINGS_TITLE));
-        settingsTitle.setFont(settingsTitle.getFont().deriveFont(Font.BOLD));
-        UiTheme.role(settingsTitle, "accent");
-        head.add(settingsTitle, BorderLayout.WEST);
-        // 这里没有"收起"按钮：开关统一在左边那条图标栏上（再点 ⚙ 就收起）。
-        p.add(head);
-        p.add(javax.swing.Box.createVerticalStrut(12));
+        final JPanel pages = new JPanel(new java.awt.CardLayout());
 
-        // 连接方式：它决定旁边那个框里装的是 WSL 发行版还是保存的虚拟机配置。
+        // —— 连接：连接方式 + 发行版 + 扫描 ——
         modeLabel = new JLabel(I18n.t(Strings.CONN_MODE_LABEL));
         UiTheme.role(modeLabel, "muted");
-        modeLabel.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
-        p.add(modeLabel);
         modeBox.setToolTipText(I18n.t(Strings.HINT_MODE_BOX));
-        modeBox.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
         modeBox.setMaximumSize(new Dimension(Integer.MAX_VALUE,
                 modeBox.getPreferredSize().height));
-        p.add(modeBox);
-        p.add(javax.swing.Box.createVerticalStrut(10));
-
-        // 这一项的标题会在"WSL 发行版"和"保存的配置"之间切换，所以留在字段里。
+        // 这一项的标题会在“WSL 发行版”和“保存的配置”之间切换，所以留在字段里。
         distroLabel = new JLabel(I18n.t(Strings.CONN_LABEL_WSL));
         UiTheme.role(distroLabel, "muted");
-        distroLabel.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
-        p.add(distroLabel);
         applySourceLabels(false);
-        distroBox.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
         distroBox.setMaximumSize(new Dimension(Integer.MAX_VALUE,
                 distroBox.getPreferredSize().height));
-        p.add(distroBox);
-        // 「＋ 新增配置」在下拉框里，不在旁边加按钮 —— 见原来那段注释。
-        p.add(javax.swing.Box.createVerticalStrut(12));
-        detectButton.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
-        p.add(detectButton);
+        pages.add(settingsSection(I18n.t(Strings.SETTINGS_CONN),
+                modeLabel, modeBox, distroLabel, distroBox, detectButton), "conn");
 
-        p.add(javax.swing.Box.createVerticalStrut(18));
-        JLabel look = new JLabel(I18n.t(Strings.SETTINGS_LOOK));
-        UiTheme.role(look, "muted");
-        look.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
-        p.add(look);
-        themeSwitcher.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
-        p.add(themeSwitcher);
+        // —— 外观：界面风格 ——
+        pages.add(settingsSection(I18n.t(Strings.SETTINGS_LOOK), themeSwitcher), "look");
 
-        p.add(javax.swing.Box.createVerticalStrut(12));
-        JLabel langLbl = new JLabel(I18n.t(Strings.SETTINGS_LANGUAGE));
-        UiTheme.role(langLbl, "muted");
-        langLbl.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
-        p.add(langLbl);
-        langToggle.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
-        p.add(langToggle);
+        // —— 语言 ——
+        pages.add(settingsSection(I18n.t(Strings.SETTINGS_LANGUAGE), langToggle), "lang");
 
-        // ★ BoxLayout 的坑：它按"最大高度"给子组件分配纵向空间，而 JPanel/JLabel
-        // 默认的最大高度是<b>无限</b> —— 于是每个控件都被拉长，中间撑出一大片空白。
-        // 截图里"设置／收起"被拉到半空中、各项之间几百像素的空档，就是这个。
-        //
-        // 把每个子组件的最大高度钉成它的首选高度；不用 VerticalGlue —— 那是"允许
-        // 拉伸"的写法，和这里要的正好相反。
-        for (java.awt.Component c : p.getComponents()) {
+        // 导航。三个按钮互斥，点哪个右边就切到哪块。
+        JPanel nav = new JPanel();
+        nav.setLayout(new javax.swing.BoxLayout(nav, javax.swing.BoxLayout.Y_AXIS));
+        nav.setOpaque(false);
+        nav.setPreferredSize(new Dimension(120, 0));
+        final String[] cards = {"conn", "look", "lang"};
+        final String[] names = {I18n.t(Strings.SETTINGS_CONN),
+                I18n.t(Strings.SETTINGS_LOOK), I18n.t(Strings.SETTINGS_LANGUAGE)};
+        javax.swing.ButtonGroup group = new javax.swing.ButtonGroup();
+        for (int k = 0; k < cards.length; k++) {
+            final javax.swing.JToggleButton b = new javax.swing.JToggleButton(names[k], k == 0);
+            b.setName("bioenv.settingsNav." + cards[k]);
+            b.setFocusable(false);
+            b.setHorizontalAlignment(javax.swing.SwingConstants.LEFT);
+            b.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+            b.setMaximumSize(new Dimension(Integer.MAX_VALUE, 30));
+            b.setPreferredSize(new Dimension(120, 30));
+            b.setBorder(BorderFactory.createEmptyBorder(0, 10, 0, 10));
+            final String card = cards[k];
+            b.addActionListener(new ActionListener() {
+                @Override
+                public void actionPerformed(ActionEvent e) {
+                    ((java.awt.CardLayout) pages.getLayout()).show(pages, card);
+                }
+            });
+            group.add(b);
+            nav.add(b);
+            nav.add(javax.swing.Box.createVerticalStrut(2));
+        }
+
+        root.add(nav, java.awt.BorderLayout.WEST);
+        root.add(pages, java.awt.BorderLayout.CENTER);
+        ((java.awt.CardLayout) pages.getLayout()).show(pages, "conn");
+        return root;
+    }
+
+    /**
+     * 设置里一块内容：标题 + 几个控件，从上往下排。
+     *
+     * <p>控件的最大高度要钉成首选高度 —— BoxLayout 按“最大高度”分配
+     * 纵向空间，而 JLabel/JPanel 默认是无限高，于是每个控件都被拉长、
+     * 中间撑出一片空白。这个坑本文件里已经踩过一次了。
+     */
+    private JPanel settingsSection(String title, java.awt.Component... items) {
+        JPanel box = new JPanel();
+        box.setOpaque(false);
+        box.setLayout(new javax.swing.BoxLayout(box, javax.swing.BoxLayout.Y_AXIS));
+        box.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
+        JLabel head = new JLabel(title);
+        head.setFont(head.getFont().deriveFont(Font.BOLD, 14f));
+        UiTheme.role(head, "accent");
+        head.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+        box.add(head);
+        box.add(javax.swing.Box.createVerticalStrut(10));
+        for (int k = 0; k < items.length; k++) {
+            java.awt.Component it = items[k];
+            if (it instanceof javax.swing.JComponent) {
+                javax.swing.JComponent jc = (javax.swing.JComponent) it;
+                jc.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+            }
+            box.add(it);
+            box.add(javax.swing.Box.createVerticalStrut(8));
+        }
+        for (java.awt.Component c : box.getComponents()) {
             if (c instanceof javax.swing.JComponent) {
                 javax.swing.JComponent jc = (javax.swing.JComponent) c;
                 java.awt.Dimension pref = jc.getPreferredSize();
                 jc.setMaximumSize(new java.awt.Dimension(Integer.MAX_VALUE, pref.height));
             }
         }
-        UiTheme.role(p, "surface");
-        return p;
+        return box;
     }
 
     /**
