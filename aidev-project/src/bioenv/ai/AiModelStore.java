@@ -46,6 +46,12 @@ public final class AiModelStore {
         /** 形如 {@code deepseek-chat}。 */
         public String model = "";
 
+        /** 输出上限，作为 max_tokens 发出去。 0 = 不发。 */
+        public int maxOut;
+
+        /** 输入上限（token）。 0 = 不截。只在本地截历史，不发给服务端。 */
+        public int maxIn;
+
         /** 界面上的名字：没起名就用模型名。 */
         public String label() {
             return (name != null && name.trim().length() > 0) ? name.trim()
@@ -81,6 +87,8 @@ public final class AiModelStore {
             m.baseUrl = baseUrl;
             m.apiKey = apiKey;
             m.model = model;
+            m.maxOut = maxOut;
+            m.maxIn = maxIn;
             return m;
         }
     }
@@ -143,6 +151,10 @@ public final class AiModelStore {
                     m.apiKey = v;
                 } else if ("model".equals(field)) {
                     m.model = v;
+                } else if ("maxOut".equals(field)) {
+                    m.maxOut = intOf(v);
+                } else if ("maxIn".equals(field)) {
+                    m.maxIn = intOf(v);
                 }
             }
             int n = (count >= 0 && count <= buf.size()) ? count : buf.size();
@@ -179,6 +191,8 @@ public final class AiModelStore {
                 w.write("m" + i + ".baseUrl=" + escape(m.baseUrl) + "\n");
                 w.write("m" + i + ".apiKey=" + escape(m.apiKey) + "\n");
                 w.write("m" + i + ".model=" + escape(m.model) + "\n");
+                w.write("m" + i + ".maxOut=" + m.maxOut + "\n");
+                w.write("m" + i + ".maxIn=" + m.maxIn + "\n");
             }
             w.flush();
         } catch (Exception e) {
@@ -206,11 +220,21 @@ public final class AiModelStore {
             b.append("\",\"baseUrl\":\"").append(json(trimSlash(m.baseUrl)));
             b.append("\",\"apiKey\":\"").append(json(m.apiKey));
             b.append("\",\"model\":\"").append(json(m.model));
-            b.append("\",\"ok\":").append(m.complete());
+            b.append("\",\"maxOut\":").append(Math.max(0, m.maxOut));
+            b.append(",\"maxIn\":").append(Math.max(0, m.maxIn));
+            b.append(",\"ok\":").append(m.complete());
             b.append('}');
         }
         b.append(']');
         return b.toString();
+    }
+
+    private static int intOf(String s) {
+        try {
+            return Math.max(0, Integer.parseInt(s.trim()));
+        } catch (Exception e) {
+            return 0;
+        }
     }
 
     private static String trimSlash(String s) {

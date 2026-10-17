@@ -2135,13 +2135,17 @@ public final class MainPanel extends JPanel {
         final javax.swing.JTextField urlF = new javax.swing.JTextField(m.baseUrl, 24);
         final javax.swing.JPasswordField keyF = new javax.swing.JPasswordField(m.apiKey, 24);
         final javax.swing.JTextField modelF = new javax.swing.JTextField(m.model, 18);
+        final javax.swing.JTextField maxInF = new javax.swing.JTextField(
+                m.maxIn > 0 ? String.valueOf(m.maxIn) : "", 10);
+        final javax.swing.JTextField maxOutF = new javax.swing.JTextField(
+                m.maxOut > 0 ? String.valueOf(m.maxOut) : "", 10);
         final boolean[] ok = {false};
 
         JPanel form = new JPanel();
         form.setLayout(new javax.swing.BoxLayout(form, javax.swing.BoxLayout.Y_AXIS));
         form.setBorder(javax.swing.BorderFactory.createEmptyBorder(12, 14, 8, 14));
-        form.add(mutedLabel(I18n.t(Strings.AI_MODEL_NAME_FIELD)));
-        form.add(nameF);
+        form.add(mutedLabel(I18n.t(Strings.AI_MODEL_NAME)));
+        form.add(modelF);
         form.add(javax.swing.Box.createVerticalStrut(6));
         form.add(mutedLabel(I18n.t(Strings.AI_MODEL_URL)));
         form.add(urlF);
@@ -2157,8 +2161,14 @@ public final class MainPanel extends JPanel {
         });
         form.add(show);
         form.add(javax.swing.Box.createVerticalStrut(6));
-        form.add(mutedLabel(I18n.t(Strings.AI_MODEL_NAME)));
-        form.add(modelF);
+        form.add(mutedLabel(I18n.t(Strings.AI_MODEL_MAX_IN)));
+        form.add(maxInF);
+        form.add(javax.swing.Box.createVerticalStrut(6));
+        form.add(mutedLabel(I18n.t(Strings.AI_MODEL_MAX_OUT)));
+        form.add(maxOutF);
+        form.add(javax.swing.Box.createVerticalStrut(6));
+        form.add(mutedLabel(I18n.t(Strings.AI_MODEL_NAME_FIELD)));
+        form.add(nameF);
         form.add(javax.swing.Box.createVerticalStrut(8));
         form.add(mutedLabel("<html><body style='width:300px'>"
                 + I18n.t(Strings.AI_MODEL_KEY_NOTE) + "</body></html>"));
@@ -2173,6 +2183,8 @@ public final class MainPanel extends JPanel {
                 m.baseUrl = urlF.getText().trim();
                 m.apiKey = new String(keyF.getPassword()).trim();
                 m.model = modelF.getText().trim();
+                m.maxIn = parseLen(maxInF.getText());
+                m.maxOut = parseLen(maxOutF.getText());
                 ok[0] = true;
                 dlg.dispose();
             }
@@ -2193,6 +2205,15 @@ public final class MainPanel extends JPanel {
         dlg.setLocationRelativeTo(this);
         dlg.setVisible(true);
         return ok[0];
+    }
+
+    /** 长度输入框→int。空字串或非数字都当未设（0）。 */
+    private static int parseLen(String s) {
+        try {
+            return Math.max(0, Integer.parseInt(s == null ? "" : s.trim()));
+        } catch (Exception e) {
+            return 0;
+        }
     }
 
     /** 一行灰字。 */

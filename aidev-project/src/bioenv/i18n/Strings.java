@@ -240,6 +240,8 @@ public final class Strings {
     public static final String AI_MODEL_INCOMPLETE = "ai.model.incomplete";
     public static final String AI_MODEL_SHOW_KEY = "ai.model.showkey";
     public static final String AI_MODEL_KEY_NOTE = "ai.model.keynote";
+    public static final String AI_MODEL_MAX_OUT = "ai.model.maxout";
+    public static final String AI_MODEL_MAX_IN = "ai.model.maxin";
     public static final String SETTINGS_CONN = "settings.conn";
     public static final String SETTINGS_LOOK = "settings.look";
     public static final String SETTINGS_LANGUAGE = "settings.language";
@@ -1207,7 +1209,7 @@ public final class Strings {
         put(ZH_TEXT, EN_TEXT, AI_MODEL_URL, "接口地址", "Endpoint");
         put(ZH_TEXT, EN_TEXT, AI_MODEL_KEY,
                 "API key（明文保存在本机）", "API key (plain text, local)");
-        put(ZH_TEXT, EN_TEXT, AI_MODEL_NAME, "模型名", "Model name");
+        put(ZH_TEXT, EN_TEXT, AI_MODEL_NAME, "模型名称", "Model name");
         put(ZH_TEXT, EN_TEXT, AI_MODEL_SAVE, "保存", "Save");
         put(ZH_TEXT, EN_TEXT, AI_MODEL_HINT,
                 "自定义模式下请求由页面直接发出。"
@@ -1217,11 +1219,17 @@ public final class Strings {
         put(ZH_TEXT, EN_TEXT, AI_MODEL_ADD, "＋ 添加模型", "Add model");
         put(ZH_TEXT, EN_TEXT, AI_MODEL_EDIT, "编辑", "Edit");
         put(ZH_TEXT, EN_TEXT, AI_MODEL_DELETE, "删除", "Delete");
-        put(ZH_TEXT, EN_TEXT, AI_MODEL_NAME_FIELD, "名称", "Name");
+        put(ZH_TEXT, EN_TEXT, AI_MODEL_NAME_FIELD, "显示名称", "Display name");
         put(ZH_TEXT, EN_TEXT, AI_MODEL_EMPTY,
                 "还没有配置模型，现在用的是内置模型。",
                 "No models configured yet; the built-in one is in use.");
         put(ZH_TEXT, EN_TEXT, AI_MODEL_INCOMPLETE, "配置不完整", "Incomplete");
+        put(ZH_TEXT, EN_TEXT, AI_MODEL_MAX_IN,
+                "最大输入长度（上下文上限，留空不限）",
+                "Max input (context cap, blank = no cap)");
+        put(ZH_TEXT, EN_TEXT, AI_MODEL_MAX_OUT,
+                "最大输出长度（max_tokens，留空用服务端默认）",
+                "Max output (max_tokens, blank = server default)");
         put(ZH_TEXT, EN_TEXT, AI_MODEL_SHOW_KEY, "显示", "Show");
         put(ZH_TEXT, EN_TEXT, AI_MODEL_KEY_NOTE,
                 "API key 不会写入日志、提示或错误文字；"

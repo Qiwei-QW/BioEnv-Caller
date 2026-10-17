@@ -109,10 +109,9 @@
     background:var(--panel);color:var(--fg);cursor:pointer}
   .mcfg-note{color:var(--muted)}
 /* 模型胶囊：输入框右下，点开在上面弹列表 */
-  .pill{position:absolute;right:50px;bottom:9px;max-width:118px;height:26px;
-    padding:0 8px;border:1px solid var(--line);border-radius:13px;background:var(--panel);
-    color:var(--muted);font-size:11px;cursor:pointer;overflow:hidden;white-space:nowrap;
-    text-overflow:ellipsis;font-family:inherit}
+  .pill{position:absolute;right:50px;bottom:9px;height:26px;padding:0 6px;
+    border:0;background:transparent;color:var(--muted);font-size:11px;cursor:pointer;
+    white-space:nowrap;font-family:inherit}
   .pill:hover{color:var(--ink)}
   .pop{position:absolute;right:50px;bottom:40px;min-width:190px;max-height:220px;overflow:auto;
     background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:4px;
@@ -134,7 +133,7 @@
 #sessSel{flex:1;min-width:0}
 /* + 在输入框左下角，发送在右下角。 */
 #askWrap{padding:0}
-#askWrap #ask{padding-left:34px;padding-right:52px}
+#askWrap #ask{padding-left:10px;padding-right:52px}
 #askWrap #pick{position:absolute;left:7px;bottom:7px;width:28px;height:28px;
                min-width:0;padding:0;font-size:15px;line-height:1;font-weight:600}
 #atts{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 6px}
@@ -371,7 +370,8 @@ var bridge = null;           // window.tbtools.ai
    */
   var models = [];              // [{id,label,baseUrl,apiKey,model,ok}]
   var SELKEY = "tbv.ai.sel";
-  var selId = null;             // null = 内置
+  var selId = null;
+  var popOpen = false;   // 列表是否展开（箭头朝向跟它走）             // null = 内置
 
   function loadSel() {
     try {
@@ -404,8 +404,10 @@ var bridge = null;           // window.tbtools.ai
 
   function renderPill() {
     var b = el("modelPill");
-    b.textContent = modelLabel() + " ‹";
-    b.title = (lang === "en") ? "Switch model" : "切换模型";
+    b.textContent = modelLabel() + (popOpen ? " \u2304" : " \u2303");  // 闭合朝上，展开朝下
+    // 名字不截断，所以输入框右侧要按胶囊实宽让位。
+    var w = b.offsetWidth || 90;
+    el("ask").style.paddingRight = Math.max(52, w + 56) + "px";
   }
 
   function renderPop() {
@@ -443,8 +445,10 @@ var bridge = null;           // window.tbtools.ai
   function openPop(open) {
     var pop = el("modelPop");
     if (open === undefined) { open = pop.hasAttribute("hidden"); }
-    if (open) { renderPop(); pop.removeAttribute("hidden"); }
+    popOpen = !!open;
+    if (popOpen) { renderPop(); pop.removeAttribute("hidden"); }
     else { pop.setAttribute("hidden", ""); }
+    renderPill();
   }
 
            // window.tbtools.ai，没有就是 null
@@ -971,7 +975,24 @@ function sysPrompt() {
  * <p>流式解析：SSE 的事件之间用空行分隔，而分片不保证落在边界上 ——
  * 所以必须把它当流处理，不能假设每一块就是一个完整事件。
  */
-function sendExternal(msgs, box, cfg) {
+function trimToBudget(msgs, maxIn) {
+    // 不发给服务端 —— 只在本地决定发多少上下文。
+    // 字符数当两个 token 粗估；宁可保守，也不要被截断。
+    if (!maxIn || maxIn <= 0 || msgs.length <= 2) { return msgs; }
+    var budget = maxIn * 2;
+    var total = 0;
+    for (var i = 0; i < msgs.length; i++) {
+      total += String(msgs[i].content || "").length;
+    }
+    var out = msgs.slice();
+    while (total > budget && out.length > 2) {
+      var dropped = out.splice(1, 1)[0];      // 第 0 条是 system，不动
+      total -= String(dropped.content || "").length;
+    }
+    return out;
+  }
+
+  function sendExternal(msgs, box, cfg) {
   var ctrl = new AbortController();
   var acc = "";
 
@@ -997,6 +1018,9 @@ function sendExternal(msgs, box, cfg) {
     }
   }
 
+  // 输出上限：填了才发，否则用服务端默认。
+  var body = { model: cfg.model, messages: trimToBudget(msgs, cfg.maxIn), stream: true };
+  if (cfg.maxOut > 0) { body.max_tokens = cfg.maxOut; }
   var url = String(cfg.baseUrl).replace(/\/+$/, "") + "/chat/completions";
   var p = fetch(url, {
     method: "POST",
@@ -1005,7 +1029,7 @@ function sendExternal(msgs, box, cfg) {
       "Content-Type": "application/json",
       "Authorization": "Bearer " + (cfg.apiKey || "")
     },
-    body: JSON.stringify({ model: cfg.model, messages: msgs, stream: true })
+    body: JSON.stringify(body)
   }).then(function (res) {
     if (!res.ok) {
       return res.text().then(function (body) {
