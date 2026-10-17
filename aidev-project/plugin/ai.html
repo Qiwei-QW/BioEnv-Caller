@@ -97,6 +97,17 @@
   /* 图标按钮：方一点，不抢视线 */
   button.icon{padding:6px 9px;font-size:13px;line-height:1}
   button:disabled{opacity:.5;cursor:default}
+  /* 模型配置：放在面板里，不再藏在设置窗口后面 */
+  .link{background:none;border:0;padding:0;font:inherit;color:var(--accent);cursor:pointer}
+  .mcfg{border:1px solid var(--line);border-radius:8px;padding:8px;margin-top:6px;font-size:11px}
+  .mcfg[hidden]{display:none}
+  .mcfg-h{font-weight:600;margin-bottom:6px;color:var(--fg)}
+  .mcfg select,.mcfg input{width:100%;box-sizing:border-box;font-size:11px;padding:4px 6px;
+    margin:3px 0;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg)}
+  .mcfg-f{display:flex;align-items:center;gap:8px;margin-top:4px}
+  .mcfg-f button{font-size:11px;padding:3px 10px;border:1px solid var(--line);border-radius:6px;
+    background:var(--panel);color:var(--fg);cursor:pointer}
+  .mcfg-note{color:var(--muted)}
   .bar{display:flex;justify-content:space-between;align-items:center;margin-top:6px;font-size:11px;color:var(--muted)}
 /* 发送按钮进输入框：外层相对定位，按钮压右下角；文字给它让出一条。 */
 #askWrap{position:relative;flex:1;display:flex}
@@ -185,9 +196,25 @@ pre .cp:hover{opacity:1}
       height="10" rx="1.6" fill="currentColor"/></svg></button>
     </div>
   </div>
+  <div id="modelCfg" class="mcfg" hidden>
+    <div class="mcfg-h">模型</div>
+    <select id="mMode">
+      <option value="builtin">内置模型</option>
+      <option value="custom">自定义（OpenAI 兼容）</option>
+    </select>
+    <div id="mCustom">
+      <input id="mUrl" placeholder="https://api.deepseek.com/v1">
+      <input id="mKey" placeholder="API key（明文存在本机）">
+      <input id="mModel" placeholder="deepseek-chat">
+    </div>
+    <div class="mcfg-f">
+      <button id="mSave">保存</button>
+      <span id="mNote" class="mcfg-note"></span>
+    </div>
+  </div>
   <div class="bar">
     <span id="budget"></span>
-    <span id="model"></span>
+    <button id="model" class="link"></button>
   </div>
 </footer>
 
@@ -332,6 +359,54 @@ function why(code) {
 /* ---------------- 状态 ---------------- */
 var bridge = null;           // window.tbtools.ai
   var modelCfg = null;         // Java 推过来的模型配置
+
+  /**
+   * 模型配置存在页面自己这里。
+   *
+   * <p>为什么不存 Java 那边：页面→Java 没有通道，写不进去。
+   * 而同一份配置存两处，早晚会不一致 —— 所以只存这一处。
+   */
+  var MKEY = "tbv.ai.model";
+
+  function loadModel() {
+    try {
+      var raw = localStorage.getItem(MKEY);
+      if (raw) { modelCfg = JSON.parse(raw); }
+    } catch (e) {
+      // file:// 下 localStorage 可能直接抛 —— 那就退成“这次运行内有效”。
+    }
+  }
+
+  function saveModel() {
+    try { localStorage.setItem(MKEY, JSON.stringify(modelCfg)); } catch (e) {}
+  }
+
+  /** 下面那个小链接显示当前的模型名。 */
+  function renderModel() {
+    el("model").textContent = customModel() ? String(modelCfg.model) : "内置模型";
+    el("model").title = customModel() ? String(modelCfg.baseUrl) : "点一下换模型";
+  }
+
+  function openModelCfg(open) {
+    var box = el("modelCfg");
+    if (open === undefined) { open = box.hasAttribute("hidden"); }
+    if (open) {
+      box.removeAttribute("hidden");
+      el("mMode").value = (modelCfg && modelCfg.mode === "custom") ? "custom" : "builtin";
+      el("mUrl").value = (modelCfg && modelCfg.baseUrl) || "";
+      el("mKey").value = (modelCfg && modelCfg.apiKey) || "";
+      el("mModel").value = (modelCfg && modelCfg.model) || "";
+      syncCustomVisible();
+    } else {
+      box.setAttribute("hidden", "");
+    }
+    el("log").scrollTop = el("log").scrollHeight;
+  }
+
+  function syncCustomVisible() {
+    el("mCustom").style.display =
+      (el("mMode").value === "custom") ? "block" : "none";
+  }
 
   /** 现在是不是要走用户自己的接口。 */
   function customModel() {
@@ -942,7 +1017,31 @@ function sendExternal(msgs, box) {
   return p;
 }
 
-function send() {
+loadModel();
+  renderModel();
+  el("model").onclick = function () { openModelCfg(); };
+  el("mMode").onchange = function () { syncCustomVisible(); };
+  el("mSave").onclick = function () {
+    var mode = el("mMode").value === "custom" ? "custom" : "builtin";
+    var url = el("mUrl").value.trim();
+    var name = el("mModel").value.trim();
+    modelCfg = {
+      mode: mode,
+      baseUrl: url,
+      apiKey: el("mKey").value.trim(),
+      model: name
+    };
+    saveModel();
+    renderModel();
+    var bad = (mode === "custom" && !url) ? "请填接口地址"
+            : (mode === "custom" && !name) ? "请填模型名" : "";
+    el("mNote").textContent = bad || "已保存";
+    if (!bad) {
+      setTimeout(function () { openModelCfg(false); el("mNote").textContent = ""; }, 700);
+    }
+  };
+
+  function send() {
   if (busy) { stop(); return; }
   // 自定义模式下不需要桥 —— 请求是页面自己发的。
   if (!bridge && !customModel()) { return; }

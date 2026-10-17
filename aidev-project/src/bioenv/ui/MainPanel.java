@@ -1968,18 +1968,15 @@ public final class MainPanel extends JPanel {
         // —— 语言 ——
         pages.add(settingsSection(I18n.t(Strings.SETTINGS_LANGUAGE), langToggle), "lang");
 
-        // —— 模型：内置 / 自定义（OpenAI 兼容） ——
-        pages.add(settingsSection(I18n.t(Strings.AI_MODEL_SECTION), buildModelSection()), "model");
 
         // 导航。三个按钮互斥，点哪个右边就切到哪块。
         JPanel nav = new JPanel();
         nav.setLayout(new javax.swing.BoxLayout(nav, javax.swing.BoxLayout.Y_AXIS));
         nav.setOpaque(false);
         nav.setPreferredSize(new Dimension(120, 0));
-        final String[] cards = {"conn", "look", "lang", "model"};
+        final String[] cards = {"conn", "look", "lang"};
         final String[] names = {I18n.t(Strings.SETTINGS_CONN),
-                I18n.t(Strings.SETTINGS_LOOK), I18n.t(Strings.SETTINGS_LANGUAGE),
-                I18n.t(Strings.AI_MODEL_SECTION)};
+                I18n.t(Strings.SETTINGS_LOOK), I18n.t(Strings.SETTINGS_LANGUAGE)};
         javax.swing.ButtonGroup group = new javax.swing.ButtonGroup();
         for (int k = 0; k < cards.length; k++) {
             final javax.swing.JToggleButton b = new javax.swing.JToggleButton(names[k], k == 0);
@@ -2006,91 +2003,6 @@ public final class MainPanel extends JPanel {
         root.add(pages, java.awt.BorderLayout.CENTER);
         ((java.awt.CardLayout) pages.getLayout()).show(pages, "conn");
         return root;
-    }
-
-    /**
-     * “模型”那一块：内置还是自定义，以及自定义需要的四样东西。
-     *
-     * <p>保存之后立即推给 AI 面板 —— 不推的话用户得关掉重开才生效，
-     * 而“点了保存好像没反应”是最难排查的那种。
-     */
-    private JPanel buildModelSection() {
-        final bioenv.ai.AiModelStore store = bioenv.ai.AiModelStore.load();
-
-        final javax.swing.JComboBox<String> modeSel = new javax.swing.JComboBox<String>(
-                new String[] {I18n.t(Strings.AI_MODEL_BUILTIN), I18n.t(Strings.AI_MODEL_CUSTOM)});
-        modeSel.setName("bioenv.model.mode");
-        modeSel.setSelectedIndex(bioenv.ai.AiModelStore.MODE_CUSTOM.equals(store.mode) ? 1 : 0);
-        modeSel.setMaximumSize(new Dimension(260, 28));
-
-        final javax.swing.JTextField urlField = new javax.swing.JTextField(store.baseUrl, 26);
-        urlField.setName("bioenv.model.url");
-        urlField.setToolTipText("https://api.deepseek.com/v1");
-        final javax.swing.JTextField keyField = new javax.swing.JTextField(store.apiKey, 26);
-        keyField.setName("bioenv.model.key");
-        final javax.swing.JTextField nameField = new javax.swing.JTextField(store.model, 18);
-        nameField.setName("bioenv.model.name");
-        nameField.setToolTipText("deepseek-chat");
-
-        final JLabel status = new JLabel(" ");
-        UiTheme.role(status, "muted");
-
-        javax.swing.JButton save = new javax.swing.JButton(I18n.t(Strings.AI_MODEL_SAVE));
-        save.setName("bioenv.model.save");
-        save.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                store.mode = modeSel.getSelectedIndex() == 1
-                        ? bioenv.ai.AiModelStore.MODE_CUSTOM
-                        : bioenv.ai.AiModelStore.MODE_BUILTIN;
-                store.baseUrl = urlField.getText().trim();
-                store.apiKey = keyField.getText().trim();
-                store.model = nameField.getText().trim();
-                store.save();
-                aiAssist.setModelConfig(store.toJson());
-                String bad = store.problem();
-                status.setText(bad == null ? I18n.t(Strings.AI_MODEL_SAVE) + " ✓" : bad);
-            }
-        });
-
-        JPanel box = new JPanel();
-        box.setOpaque(false);
-        box.setLayout(new javax.swing.BoxLayout(box, javax.swing.BoxLayout.Y_AXIS));
-        box.add(modeSel);
-        box.add(javax.swing.Box.createVerticalStrut(10));
-        box.add(mutedLabel(I18n.t(Strings.AI_MODEL_URL)));
-        box.add(urlField);
-        box.add(javax.swing.Box.createVerticalStrut(8));
-        box.add(mutedLabel(I18n.t(Strings.AI_MODEL_KEY)));
-        box.add(keyField);
-        box.add(javax.swing.Box.createVerticalStrut(8));
-        box.add(mutedLabel(I18n.t(Strings.AI_MODEL_NAME)));
-        box.add(nameField);
-        box.add(javax.swing.Box.createVerticalStrut(10));
-        box.add(save);
-        box.add(javax.swing.Box.createVerticalStrut(6));
-        box.add(status);
-        box.add(javax.swing.Box.createVerticalStrut(10));
-        JLabel hint = new JLabel("<html><body style='width:320px'>"
-                + I18n.t(Strings.AI_MODEL_HINT) + "</body></html>");
-        UiTheme.role(hint, "muted");
-        hint.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
-        box.add(hint);
-        for (java.awt.Component c : box.getComponents()) {
-            if (c instanceof javax.swing.JComponent) {
-                javax.swing.JComponent jc = (javax.swing.JComponent) c;
-                jc.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
-            }
-        }
-        return box;
-    }
-
-    /** 一行灰字。 */
-    private JLabel mutedLabel(String text) {
-        JLabel l = new JLabel(text);
-        UiTheme.role(l, "muted");
-        l.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
-        return l;
     }
 
     /**
