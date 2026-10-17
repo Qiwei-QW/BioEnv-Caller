@@ -2336,7 +2336,7 @@ public final class MainPanel extends JPanel {
                         togglePanel("ai");
                     }
                 });
-        leftRail.add("settings", I18n.t(Strings.SETTINGS_ICON), LeftRail.gearIcon(),
+        leftRail.addBottom("settings", I18n.t(Strings.SETTINGS_ICON), LeftRail.gearIcon(),
                 new LeftRail.Action() {
                     @Override
                     public void run() {
