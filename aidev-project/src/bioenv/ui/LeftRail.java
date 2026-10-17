@@ -179,47 +179,145 @@ public final class LeftRail extends JPanel {
     // ------------------------------------------------------------------
 
     /** 一棵树：工具树。 */
+    /**
+     * 工具树：<b>用户自己画的那张图，逆时针转 90° 后逐像素搬过来。</b>
+     *
+     * <p>前五版都是“看着图理解结构，然后自己画一个”—— 五次全错。
+     * 而这张图本身就是干净的黑白图，根本不需要理解结构：裁掉白边、
+     * 转 90°、缩到 24×24，就是图标。所以这里存的是那张图的像素，
+     * 不是对它的描述。</p>
+     *
+     * <p>存的是 <b>alpha</b>（遵供应：只保留形状不保留颜色），
+     * 画的时候再按当前主题的颜色填上去 —— 所以选中/未选中、
+     * 浅色/深色主题都能跟着变。</p>
+     */
     public static Icon treeIcon() {
         return new Shape() {
             @Override
             public void draw(Graphics2D g, int size, Color color) {
-                g.setColor(color);
-                g.setStroke(new BasicStroke(1.7f, BasicStroke.CAP_ROUND,
-                        BasicStroke.JOIN_ROUND));
-                // 主干
-                g.drawLine(5, 12, 14, 12);
-                // 三条分叉，末端各一个点
-                g.drawLine(14, 12, 19, 6);
-                g.drawLine(14, 12, 19, 12);
-                g.drawLine(14, 12, 19, 18);
-                g.fillOval(18, 4, 5, 4);
-                g.fillOval(18, 10, 5, 4);
-                g.fillOval(18, 16, 5, 4);
+                g.drawImage(tinted(color), 0, 0, 24, 24, null);
             }
         };
     }
 
-    /** 小机器人：AI 助手。 */
+    /** 把 24×24 的 alpha 按给定颜色填成一张图。很小，每次重画都重建也无所谓。 */
+    private static java.awt.image.BufferedImage tinted(Color color) {
+        java.awt.image.BufferedImage out = new java.awt.image.BufferedImage(
+                TREE_SIZE, TREE_SIZE, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+        int rgb = color.getRGB() & 0xFFFFFF;
+        for (int y = 0; y < TREE_SIZE; y++) {
+            for (int x = 0; x < TREE_SIZE; x++) {
+                int a = TREE_ALPHA[y * TREE_SIZE + x] & 0xFF;
+                if (a != 0) {
+                    out.setRGB(x, y, (a << 24) | rgb);
+                }
+            }
+        }
+        return out;
+    }
+
+    /** 蒙版本身的边长。存 64 不存 24：存的是“大一点的图”，
+     * 画的时候缩到 24 —— 缩小是平滑的，而 24 位图被屏幕 DPI 放大就是马赛克。 */
+    private static final int TREE_SIZE = 64;
+
+    /** 那张图的 alpha，Base64。由提取脚本生成，不要手改。 */
+    private static final byte[] TREE_ALPHA =
+            java.util.Base64.getDecoder().decode(""
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEEBAQEBAQEBAQE"
+            + "BAQEBAQEBAQEBAQEBAQEBAQEBAQEBAYGOKm+vr53BQEBAAAAAAAAAAAAAAAAAAAAAAAEBAQBBAQEBAQEBAQEBAQEBAQE"
+            + "BAQEBAQEBAQEBAQEBAQEBAQGRvX//////7EFAgAAAAAAAAAAAAAAAAAAAAAACwsLB3WQkJCOjo6Ojo6Ojo6Ojo6Ojo6O"
+            + "jo6Oj4+Pj4+Ojo6Pj+b/////////ZQQEAAABAQEAAAAAAAAAAAAAAAsLC23/////////////////////////////////"
+            + "/////////////////////7EEBAAAAQEBAAAAAAAAAAAAAAALCwtt////////////////////////////////////////"
+            + "//////////z///+3BAQAAAEBAQAAAAAAAAAAAAAADAwMbf//////////////////////////////////////////////"
+            + "//z8////twQEAAAAAAAAAAAAAAAAAAAAAAwMDFL/////////////////////////////////////////////////////"
+            + "/7cEBAAAAAAAAAAAAAAAAAAAAAAMDAwBPllZWVdYWHfE/v//////////1VhWVlZWVlZWV1dXV1db6/////////99BAQA"
+            + "AAAAAAAAAAAAAAAAAAAABAQEAAMEBAQEBAQEBDWY8//////////fHAYEBAQEBAQEBAQEBWz////////fFQIBAgICAQAA"
+            + "AAAAAAAAAAAAAAAAAAADBAQEBAQEBAQEAyWc/////////8gGBAQEBAQEBAQEBAUFZs/e3t6nIQICAgICAwMDAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAgMDBEPc/v//////kwQEAwAAAAAAAAAAAQMDBwcHAwIBAgUoKCgTAwEAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAgQFGNL8//////93BAMCAgICAgICAgIDAwMDAwMFBUHW+fn56nUCAgAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAABQUh8P///////6YvAgICAgICAgICAgMDAwICBRbx////////XgMDAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAFBWT/////////+8+3tre3t7e3t7e3t7e2uLjQ/////////9ADAwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAQEsf/////////////////////////////////////////qDgMBAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB"
+            + "Ag/J///////////////////////////////////8////6g4BAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAICD6j/"
+            + "/////////////////////////////////////+oOBAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQECTLTr/v//"
+            + "///////9///////////////////////ZBAQBAQEAAAAAAAAAAAAAAAEBAQAAAAAAAAAAAAAAAAABAgMDFTNAQGjI////"
+            + "/f///409PDw+Plr/////////eAQEAQEBAgMDAwMDAwAAAAABAQEAAAAAAAAAAAAAAAAAAAADAwMCAwMEBGLv/f3/////"
+            + "dAgEAwMEZ/D////+nQUCAQEBAgIDAwMDAwMCAAAAAQEBAAAAAAAAAAAAAAAAAAAAAAABAgMDBAQGMen8//////97BAMD"
+            + "BAQbSUlJLwIBAQEBAwMrpMzMzLFEAgAAAAEBAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABgY9/P///////64qAwMDAwQE"
+            + "BAQCAQEBAQMs7////////1cAAQEBAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFBXT/////////9qRTJBMTExMTExMT"
+            + "FBYWuf/////////nAAEBAQAAAAAAAQEBAAAAAAAAAAAAAAAAAAAAAAAAAAQEo/////////////fs7Ozs7Ozs7Ozs7f3/"
+            + "/////////wABAQEAAAAAAQEBAQAAAAAAAAAAAAAAAAAAAAAAAAABAwSv/////////////////////////////////P7/"
+            + "//8AAAAAAAAAAAEBAQEAAAAAAAAAAAAAAAAAAAAAAAAAAAEBApH//////////////////////////////Pz8////AAAA"
+            + "AAAAAAABAQEAAAAAAAAAAAAAAAAAAAAAAAEBAQAAAQEDSsr////////////////////////////8/////wAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAABAQEAAAEBAwMDTKLa9Pz8/Pz9/f39/f38/Pz///////////8AAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAQEBAAAAAAADAwMDBR4rKysrKysrKyoqKy0ttP/////////bAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAEDAwMDAgICAgICAgICAgICAx/f///////1QQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAABAgICAgICAgICAgICAgMDFn6pqamOKgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgICAAAAAgICAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==");
+
+    /**
+     * AI 助手：四角星芒。
+     *
+     * <p>原来是一张拟人的机器人脸（眼睛两个 3px 的圆、嘴一根 1.7px 的线）。
+     * 放大看是个笑脸，缩到 24px 就糊成一团 —— 它靠的是细节，而细节在这个尺寸下不成立。
+     *
+     * <p>星芒只有四条凹边，怎么缩都还是它，而且现在就是“AI”的通用记号。
+     */
     public static Icon robotIcon() {
         return new Shape() {
             @Override
             public void draw(Graphics2D g, int size, Color color) {
                 g.setColor(color);
-                g.setStroke(new BasicStroke(1.7f, BasicStroke.CAP_ROUND,
-                        BasicStroke.JOIN_ROUND));
-                // 天线
-                g.drawLine(12, 2, 12, 5);
-                g.fillOval(10, 0, 4, 4);
-                // 头
-                g.drawRoundRect(4, 6, 16, 13, 5, 5);
-                // 眼睛
-                g.fillOval(8, 10, 3, 3);
-                g.fillOval(14, 10, 3, 3);
-                // 嘴
-                g.drawLine(9, 15, 15, 15);
-                // 两侧的耳朵
-                g.drawLine(4, 11, 2, 11);
-                g.drawLine(20, 11, 22, 11);
+                java.awt.geom.Path2D.Double p = new java.awt.geom.Path2D.Double();
+                double c = 12.0;
+                double outer = 9.3;
+                double inner = 2.5;
+                for (int i = 0; i < 4; i++) {
+                    double a = -Math.PI / 2 + i * Math.PI / 2;
+                    double tipX = c + Math.cos(a) * outer;
+                    double tipY = c + Math.sin(a) * outer;
+                    double nextX = c + Math.cos(a + Math.PI / 2) * outer;
+                    double nextY = c + Math.sin(a + Math.PI / 2) * outer;
+                    double ctrlX = c + Math.cos(a + Math.PI / 4) * inner;
+                    double ctrlY = c + Math.sin(a + Math.PI / 4) * inner;
+                    if (i == 0) {
+                        p.moveTo(tipX, tipY);
+                    } else {
+                        p.lineTo(tipX, tipY);
+                    }
+                    p.quadTo(ctrlX, ctrlY, nextX, nextY);
+                }
+                p.closePath();
+                g.fill(p);
             }
         };
     }
@@ -242,24 +340,39 @@ public final class LeftRail extends JPanel {
     }
 
     /** 齿轮：设置（留给以后）。 */
+    /**
+     * 设置：齿轮。
+     *
+     * <p>原来是一个圆圈加八条向外的直线 —— 数学上确实是“齿轮状”，
+     * 但看起来是太阳。齿轮靠的是“齿的形状”，不是“有没有射线”。
+     *
+     * <p>现在直接把轮廓画成齿轮形：半径随角度做八次起伏，就是八个圆齿。
+     * 中间留一个孔（描边，不填）—— 齿轮就是这么认出来的。
+     */
     public static Icon gearIcon() {
         return new Shape() {
             @Override
             public void draw(Graphics2D g, int size, Color color) {
                 g.setColor(color);
-                g.setStroke(new BasicStroke(1.6f));
-                int c = size / 2;
-                int r = size / 2 - 6;
-                g.drawOval(c - r, c - r, r * 2, r * 2);
-                g.fillOval(c - 2, c - 2, 4, 4);
-                for (int i = 0; i < 8; i++) {
-                    double a = i * Math.PI / 4;
-                    int x1 = (int) Math.round(c + Math.cos(a) * r);
-                    int y1 = (int) Math.round(c + Math.sin(a) * r);
-                    int x2 = (int) Math.round(c + Math.cos(a) * (r + 3));
-                    int y2 = (int) Math.round(c + Math.sin(a) * (r + 3));
-                    g.drawLine(x1, y1, x2, y2);
+                g.setStroke(new BasicStroke(1.8f, BasicStroke.CAP_ROUND,
+                        BasicStroke.JOIN_ROUND));
+                double c = 12.0;
+                java.awt.geom.Path2D.Double p = new java.awt.geom.Path2D.Double();
+                int steps = 192;
+                for (int i = 0; i <= steps; i++) {
+                    double th = i * 2 * Math.PI / steps;
+                    double r = 6.5 + 1.7 * Math.cos(8 * th);
+                    double x = c + Math.cos(th) * r;
+                    double y = c + Math.sin(th) * r;
+                    if (i == 0) {
+                        p.moveTo(x, y);
+                    } else {
+                        p.lineTo(x, y);
+                    }
                 }
+                p.closePath();
+                g.draw(p);
+                g.draw(new java.awt.geom.Ellipse2D.Double(c - 2.1, c - 2.1, 4.2, 4.2));
             }
         };
     }
@@ -286,6 +399,8 @@ public final class LeftRail extends JPanel {
             try {
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
                         RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
+                    RenderingHints.VALUE_INTERPOLATION_BILINEAR);
                 g2.translate(x, y);
                 draw(g2, 24, colorFor(c));
             } finally {
