@@ -2227,12 +2227,27 @@ public final class MainPanel extends JPanel {
      * 于是填错了也照样保存，下次打开就是空的 —— “为什么我填的没了”就是这么来的。
      */
     private static int parseLenOrNeg(String s) {
-        String v = (s == null) ? "" : s.trim();
+        String v = (s == null) ? "" : s.trim().toLowerCase();
         if (v.length() == 0) {
             return 0;
         }
+        // K 按 1024、M 按 1024² —— 用户写 1024K 和 1M 应该是同一个量级，
+        // 那就只能是二进制的 K。十进制的话 1024K 会比 1M 大 2.4%，
+        // 这个不一致会让人以为自己算错了。
+        long mult = 1L;
+        if (v.endsWith("k")) {
+            mult = 1024L;
+            v = v.substring(0, v.length() - 1).trim();
+        } else if (v.endsWith("m")) {
+            mult = 1024L * 1024L;
+            v = v.substring(0, v.length() - 1).trim();
+        }
+        if (v.length() == 0) {
+            return -1;
+        }
         try {
-            return Math.max(0, Integer.parseInt(v));
+            long n = Long.parseLong(v) * mult;
+            return (int) Math.min(Integer.MAX_VALUE, Math.max(0L, n));
         } catch (Exception e) {
             return -1;
         }

@@ -386,6 +386,7 @@ var bridge = null;           // window.tbtools.ai
    */
   var models = [];              // [{id,label,baseUrl,apiKey,model,ok}]
   var SELKEY = "tbv.ai.sel";
+  var lastPromptTok = 0;        // 上一次发出去的提示估算 token
   var selId = null;
   var popOpen = false;   // 列表是否展开（箭头朝向跟它走）             // null = 内置
 
@@ -978,10 +979,28 @@ function refreshCtx() {
   if (context && context.tool) { bits.push(context.tool + " 的帮助"); }
   if (context && context.workdir) { bits.push("工作目录"); }
   if (context && context.lastRun) { bits.push("上次运行"); }
-  el("budget").textContent = txt
-    ? ((bits.length ? "已带上：" + bits.join(" · ") + " · " : "")
-       + compactN(txt.length) + " / " + compactN(32000))
-    : "";
+  updateStats(bits);
+}
+
+/**
+ * 底部那一行：上下文用量 / 上限 / 百分比 · 轮数。
+ *
+ * <p>token 是估的：字符数 ÷ 2。和 trimToBudget 用的是同一个口径 ——
+ * 两处口径不一样的话，用户会看到互相矛盾的两个数字。
+ */
+function updateStats(bits) {
+  var m = currentModel();
+  var lim = (m && m.maxIn > 0) ? m.maxIn : 0;
+  var out = [];
+  if (lastPromptTok > 0) {
+    out.push("\u4e0a\u4e0b\u6587 " + compactN(lastPromptTok)
+             + (lim > 0 ? " / " + compactN(lim) + " \u00b7 "
+                 + Math.min(999, Math.round(lastPromptTok / lim * 100)) + "%" : " token"));
+  }
+  var rounds = Math.floor(turns.length / 2);
+  if (rounds > 0) { out.push(rounds + " \u8f6e"); }
+  if (bits && bits.length) { out.push("\u5df2\u5e26\u4e0a " + bits.length + " \u9879"); }
+  el("budget").textContent = out.join(" \u00b7 ");
 }
 
 function applyLang() {
@@ -1181,6 +1200,14 @@ loadSel();
     if (turns[i].role === "user" || turns[i].role === "assistant") { msgs.push(turns[i]); }
   }
   msgs.push({ role: "user", content: full });
+
+  // 发之前算一次，用来在底部显示上下文用量。
+  var promptChars = 0;
+  for (var pi = 0; pi < msgs.length; pi++) {
+    promptChars += String(msgs[pi].content || "").length;
+  }
+  lastPromptTok = Math.ceil(promptChars / 2);
+  updateStats([]);
 
   var box = bubble("a", "");
   busy = true;
