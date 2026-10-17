@@ -2161,6 +2161,9 @@ public final class MainPanel extends JPanel {
         });
         form.add(show);
         form.add(javax.swing.Box.createVerticalStrut(6));
+        // 下面两项只在自定义模式下生效 —— 内置模型的请求由 TBtools 发。
+        form.add(mutedLabel("<html><body style='width:300px'>"
+                + I18n.t(Strings.AI_MODEL_LEN_NOTE) + "</body></html>"));
         form.add(mutedLabel(I18n.t(Strings.AI_MODEL_MAX_IN)));
         form.add(maxInF);
         form.add(javax.swing.Box.createVerticalStrut(6));
@@ -2183,8 +2186,17 @@ public final class MainPanel extends JPanel {
                 m.baseUrl = urlF.getText().trim();
                 m.apiKey = new String(keyF.getPassword()).trim();
                 m.model = modelF.getText().trim();
-                m.maxIn = parseLen(maxInF.getText());
-                m.maxOut = parseLen(maxOutF.getText());
+                int inVal = parseLenOrNeg(maxInF.getText());
+                int outVal = parseLenOrNeg(maxOutF.getText());
+                if (inVal < 0 || outVal < 0) {
+                    // 填了非数字就停在这里。原来是静默当 0，
+                    // 于是下次打开显示空白 —— 用户只能得出“我填的东西没了”。
+                    javax.swing.JOptionPane.showMessageDialog(dlg,
+                            I18n.t(Strings.AI_MODEL_LEN_BAD));
+                    return;
+                }
+                m.maxIn = inVal;
+                m.maxOut = outVal;
                 ok[0] = true;
                 dlg.dispose();
             }
@@ -2207,12 +2219,22 @@ public final class MainPanel extends JPanel {
         return ok[0];
     }
 
-    /** 长度输入框→int。空字串或非数字都当未设（0）。 */
-    private static int parseLen(String s) {
-        try {
-            return Math.max(0, Integer.parseInt(s == null ? "" : s.trim()));
-        } catch (Exception e) {
+
+    /**
+     * 长度输入框→int。空字串 = 0（不限）；<b>非数字返回 -1</b>。
+     *
+     * <p>-1 是为了让调用方能区分“没填”和“填错了”。以前两种情况都返回 0，
+     * 于是填错了也照样保存，下次打开就是空的 —— “为什么我填的没了”就是这么来的。
+     */
+    private static int parseLenOrNeg(String s) {
+        String v = (s == null) ? "" : s.trim();
+        if (v.length() == 0) {
             return 0;
+        }
+        try {
+            return Math.max(0, Integer.parseInt(v));
+        } catch (Exception e) {
+            return -1;
         }
     }
 

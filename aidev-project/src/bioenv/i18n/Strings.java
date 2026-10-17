@@ -242,6 +242,8 @@ public final class Strings {
     public static final String AI_MODEL_KEY_NOTE = "ai.model.keynote";
     public static final String AI_MODEL_MAX_OUT = "ai.model.maxout";
     public static final String AI_MODEL_MAX_IN = "ai.model.maxin";
+    public static final String AI_MODEL_LEN_NOTE = "ai.model.lennote";
+    public static final String AI_MODEL_LEN_BAD = "ai.model.lenbad";
     public static final String SETTINGS_CONN = "settings.conn";
     public static final String SETTINGS_LOOK = "settings.look";
     public static final String SETTINGS_LANGUAGE = "settings.language";
@@ -1230,6 +1232,14 @@ public final class Strings {
         put(ZH_TEXT, EN_TEXT, AI_MODEL_MAX_OUT,
                 "最大输出长度（max_tokens，留空用服务端默认）",
                 "Max output (max_tokens, blank = server default)");
+        put(ZH_TEXT, EN_TEXT, AI_MODEL_LEN_NOTE,
+                "\u4e0b\u9762\u4e24\u9879\u53ea\u5bf9\u300c\u81ea\u5b9a\u4e49\u300d\u6a21\u578b\u751f\u6548\uff1b"
+                + "\u5185\u7f6e\u6a21\u578b\u7684\u8bf7\u6c42\u7531 TBtools \u53d1\u51fa\uff0c\u65e0\u6cd5\u6307\u5b9a\u3002",
+                "The two below apply to custom models only - built-in requests are sent by "
+                + "TBtools and their length cannot be set here.");
+        put(ZH_TEXT, EN_TEXT, AI_MODEL_LEN_BAD,
+                "\u6700\u5927\u8f93\u5165/\u8f93\u51fa\u957f\u5ea6\u53ea\u80fd\u586b\u6570\u5b57\uff0c\u7559\u7a7a\u8868\u793a\u4e0d\u9650\u3002",
+                "Length must be a number. Leave it blank for no limit.");
         put(ZH_TEXT, EN_TEXT, AI_MODEL_SHOW_KEY, "显示", "Show");
         put(ZH_TEXT, EN_TEXT, AI_MODEL_KEY_NOTE,
                 "API key 不会写入日志、提示或错误文字；"
