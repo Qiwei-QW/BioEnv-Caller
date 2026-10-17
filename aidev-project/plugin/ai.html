@@ -98,6 +98,46 @@
   button.icon{padding:6px 9px;font-size:13px;line-height:1}
   button:disabled{opacity:.5;cursor:default}
   .bar{display:flex;justify-content:space-between;align-items:center;margin-top:6px;font-size:11px;color:var(--muted)}
+/* 发送按钮进输入框：外层相对定位，按钮压右下角；文字给它让出一条。 */
+#askWrap{position:relative;flex:1;display:flex}
+#askWrap #ask{flex:1;width:100%;padding-right:52px}
+#askWrap #go{position:absolute;right:7px;bottom:7px;width:38px;height:28px;
+             min-width:0;padding:0;font-size:13px;line-height:1}
+/* 会话名占满那一行：它是这一栏里唯一需要宽度看全的东西。 */
+#sessSel{flex:1;min-width:0}
+/* + 在输入框左下角，发送在右下角。 */
+#askWrap{padding:0}
+#askWrap #ask{padding-left:34px;padding-right:52px}
+#askWrap #pick{position:absolute;left:7px;bottom:7px;width:28px;height:28px;
+               min-width:0;padding:0;font-size:15px;line-height:1;font-weight:600}
+#atts{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 6px}
+#atts .att{display:flex;align-items:center;gap:4px;font-size:11px;
+           background:var(--panel);border:1px solid var(--line);border-radius:10px;
+           padding:2px 8px;max-width:100%}
+#atts .att span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:190px}
+#atts .att b{cursor:pointer;font-weight:400;opacity:.6;padding:0 2px}
+#atts .att b:hover{opacity:1}
+#explain{display:none;width:100%;margin:0 0 6px;font-size:12px;text-align:left}
+/* 输入框高一些。原来一行高，+ 和 ▶ 挤在里面，字还没打几个就到边了。 */
+#askWrap #ask{min-height:104px;line-height:1.55;resize:none;padding-top:9px;padding-bottom:38px}
+/* 加号：不要外框，就是一个符号。它是个辅助入口，不该和发送那个主按钮一样重。 */
+#askWrap #pick{left:9px;bottom:9px;width:30px;height:30px;padding:0;
+               border:none;background:transparent;box-shadow:none;
+               font-size:21px;font-weight:400;line-height:1;color:var(--muted)}
+#askWrap #pick:hover{color:var(--ink);background:transparent}
+/* 发送：蓝色圆形，里面一个白箭头。字号图标在这个尺寸下不好看，用 SVG。 */
+#askWrap #go{right:9px;bottom:9px;width:32px;height:32px;padding:0;
+             border-radius:50%;display:flex;align-items:center;justify-content:center}
+#askWrap #go svg{width:16px;height:16px;display:block}
+#askWrap #go .stop{display:none}
+#askWrap #go.busy .send{display:none}
+#askWrap #go.busy .stop{display:block}
+/* 代码块的复制按钮：平时不占地方，悬停才出来。 */
+pre{position:relative}
+pre .cp{position:absolute;top:4px;right:4px;font-size:11px;padding:1px 8px;
+        opacity:0;transition:opacity .12s;cursor:pointer}
+pre:hover .cp{opacity:.85}
+pre .cp:hover{opacity:1}
 </style>
 </head>
 <body class="theme-classic">
@@ -112,28 +152,38 @@
 -->
 <div id="boot">正在检查网页运行时……如果这句话一直不消失，说明网页里的 JavaScript 没有运行。</div>
 
-<header>
-  <b id="title">AI 助手</b>
+<!-- header 用 flex + 一个会长的空档，把两个会话按钮压到右上角。 -->
+<header style="display:flex;align-items:center;gap:8px">
+  <!-- 这里原本还有一句「AI 助手」。标签页上写着 BioEnv Caller、左边图标是机器人，
+       再说一遍只是占地方。省下的空间给会话名 —— 那里才是需要宽度的地方。 -->
   <select id="sessSel" title="会话"></select>
+  <button id="sessNew" class="icon" title="新建会话">＋</button>
   <button id="sessDel" class="icon" title="删除这个会话">🗑</button>
-  <span id="status">正在检查…</span>
+  <!-- status 只在出错时才有字。平时空白，"就绪"那两个字没有信息量。 -->
+  <span id="status"></span>
 </header>
 
-<!-- 诊断卡单独放：它不属于对话，清空会话时不该被清掉 -->
-<div id="diag"></div>
+<input type="file" id="file" multiple style="display:none">
 
 <div id="log"></div>
 
 <footer>
-  <details class="ctx" id="ctxBox">
-    <summary id="ctxSummary">本次将发送的内容</summary>
-    <pre id="ctxPre">（无）</pre>
-  </details>
+  <!-- 按钮压在输入框里面的右下角：它只管这一格里的字，放在格子里最直接，
+       也把那一行的高度让给文字。 -->
+  <div id="atts"></div>
+  <button id="explain"></button>
   <div class="row">
-    <textarea id="ask" placeholder="按 Enter 发送，Shift+Enter 换行"></textarea>
-    <button id="sessNew" class="icon" title="新建会话">＋</button>
-    <button id="send" class="primary">发送</button>
-    <button id="stop" disabled>停止</button>
+    <div id="askWrap">
+    <textarea id="ask" rows="4"></textarea>
+    <!-- 一个按钮，两种状态：不忙是发送（▶），忙了是停止（■）。
+         本来就是同一件事的两面，分成两个按钮只会让人犹豫按哪个。 -->
+    <button id="pick" class="icon" title="添加文件或图片">＋</button>
+    <button id="go" class="primary" title="发送"><svg class="ic send" viewBox="0 0 24 24"
+      aria-hidden="true"><path d="M12 5v13M6 11l6-6 6 6" fill="none" stroke="currentColor"
+      stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg><svg
+      class="ic stop" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10"
+      height="10" rx="1.6" fill="currentColor"/></svg></button>
+    </div>
   </div>
   <div class="bar">
     <span id="budget"></span>
@@ -203,6 +253,14 @@ var T = {
     chk: "正在检查…", noBridge: "桥不可用", ready: "就绪",
     newS: "新建", delS: "删除",
     sessNew: "新建会话", sessDel: "删除这个会话",
+  copy: "复制", copied: "已复制",
+  pick: "添加文件或图片", drop: "移除这个附件", attach: "附件",
+  explain: "上次运行失败了 · 让 AI 看看",
+  explainQ: "刚才这一步运行失败了。请看看下面的输出，告诉我最可能的原因，以及我该改哪个参数或哪一步。",
+  untitled: "新会话", bigFile: "文件太大，没有加进来：",
+  bigImg: "图片太大，没有加进来（上限 4 MB，这张 ",
+  cutNote: "（只取了开头一部分，全文 ",
+  imgNoStream: "（图片请求不带历史，也不流式返回）",
     untitled: "新会话",
     confirmDel: "删除这个会话？它的对话记录会一起删掉。",
     storeOff: "（本次运行内有效：网页存储不可用）",
@@ -221,6 +279,14 @@ var T = {
     chk: "Checking…", noBridge: "No bridge", ready: "Ready",
     newS: "New", delS: "Delete",
     sessNew: "New conversation", sessDel: "Delete this conversation",
+  copy: "Copy", copied: "Copied",
+  pick: "Add a file or an image", drop: "Remove this attachment", attach: "Attachments",
+  explain: "The last run failed - let the AI look",
+  explainQ: "That last run failed. Look at the output below and tell me the most likely cause, and which option or step I should change.",
+  untitled: "New conversation", bigFile: "File too large, not attached: ",
+  bigImg: "Image too large, not attached (4 MB limit; this one is ",
+  cutNote: "(only the beginning is included; the whole file is ",
+  imgNoStream: "(image requests carry no history and do not stream)",
     untitled: "New conversation",
     confirmDel: "Delete this conversation? Its messages go with it.",
     storeOff: "(kept for this run only: web storage is unavailable)",
@@ -454,9 +520,22 @@ function deleteCurrent() {
   selectSession(sessions[0].id);
 }
 
+/**
+ * 会话标题：工具名 + 时间。
+ *
+ * 以前取第一条消息的头几个字 -- 于是发一句“你好”，下拉框里就只显示一个“你”。
+ * 一个字什么也说不明，还白白占着刚给会话名让出来的宽度。
+ */
+function titleStamp() {
+  var d = new Date();
+  var hm = ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2);
+  var tool = (context && context.tool) ? context.tool : "";
+  return (tool ? tool + " · " : "") + hm;
+}
+
 function touchTitle() {
   var s = findCurrent();
-  if (s && !s.title) { s.title = titleOf(s.turns); }
+  if (s && !s.title) { s.title = titleStamp(); }
   saveStore();
   renderSessions();
 }
@@ -464,6 +543,61 @@ function touchTitle() {
 /* ================================================================
  * 对话区
  * ================================================================ */
+/* ---------------- 附件 ----------------
+ * 图片走 Tbtools 桥自带的 chatImage（它官方支持），文本文件在网页里读出来拼进问题 --
+ * 桥没有读文件的能力。两边都限大小：桥的错误码里有 too_large，说明图片有上限；
+ * 文本不限会直接顶爆 32000 字符的预算。
+ */
+var atts = [];
+
+function renderAtts() {
+  var box = el("atts");
+  if (!box) { return; }
+  box.innerHTML = "";
+  for (var i = 0; i < atts.length; i++) {
+    (function (n) {
+      var d = document.createElement("div");
+      d.className = "att";
+      var s = document.createElement("span");
+      s.textContent = (atts[n].kind === "img" ? "\u{1F5BC} " : "\u{1F4C4} ") + atts[n].name;
+      var x = document.createElement("b");
+      x.textContent = "\u00d7";
+      x.title = t("drop");
+      x.onclick = function () { atts.splice(n, 1); renderAtts(); };
+      d.appendChild(s); d.appendChild(x);
+      box.appendChild(d);
+    })(i);
+  }
+}
+
+/** 人看得懂的大小。 */
+function mb(n) { return (Math.round(n / 1048576 * 10) / 10) + " MB"; }
+
+function addFiles(list) {
+  for (var i = 0; i < list.length; i++) {
+    (function (f) {
+      var img = /^image\//.test(f.type);
+      // 只有图片设上限。桥的错误码里有 too_large，说明它那边有上限；
+      // 4 MB 是保守划的一条线。撞上了把实际大小也说出来，别让人去猜。
+      if (img && f.size > 4 * 1024 * 1024) {
+        setStatus(t("bigImg") + mb(f.size) + "）", "bad");
+        return;
+      }
+      // 文本文件不按大小挡。它真正的限制是 32000 字符的预算，
+      // 而那是发送时才知道的 —— 拦在这里只会把能用的情况也挡掉。
+      // 照读，拼进问题时截断，并写明只取了开头。
+      var r = new FileReader();
+      r.onload = function () {
+        atts.push({ kind: img ? "img" : "txt", name: f.name,
+                    data: r.result, mime: f.type || "application/octet-stream" });
+        renderAtts();
+      };
+      r.onerror = function () { setStatus(t("bigFile") + f.name, "bad"); };
+      if (img) { r.readAsDataURL(f); } else { r.readAsText(f); }
+    })(list[i]);
+  }
+}
+
 function renderLog() {
   el("log").innerHTML = "";
   for (var i = 0; i < turns.length; i++) {
@@ -471,10 +605,50 @@ function renderLog() {
     if (m.role === "user") {
       bubble("u", m.content);
     } else {
-      bubble("a", "").innerHTML = md(m.content);
+      var bb = bubble("a", "");
+      bb.innerHTML = md(m.content);
+      wireCopy(bb);
     }
   }
   if (!turns.length) { bubble("s", t("empty")); }
+}
+
+/**
+ * 给回复里每个代码块加一个复制按钮。
+ *
+ * 用 execCommand 而不是 navigator.clipboard：JxBrowser 默认拒绝后者
+ * （svguest 的技能文档里记着这一条），而且那个权限是引擎级的，
+ * 一个插件不该去改它。
+ */
+function wireCopy(root) {
+  var pres = root.querySelectorAll ? root.querySelectorAll("pre") : [];
+  for (var i = 0; i < pres.length; i++) {
+    (function (pre) {
+      var b = document.createElement("button");
+      b.className = "cp";
+      b.type = "button";
+      b.textContent = t("copy");
+      b.onclick = function () {
+        var code = pre.querySelector("code");
+        var txt = code ? code.textContent : pre.textContent;
+        var done = false;
+        try {
+          var a = document.createElement("textarea");
+          a.value = txt;
+          a.style.cssText = "position:fixed;left:-9999px";
+          document.body.appendChild(a);
+          a.select();
+          done = document.execCommand("copy");
+          document.body.removeChild(a);
+        } catch (e) { done = false; }
+        if (done) {
+          b.textContent = t("copied");
+          setTimeout(function () { b.textContent = t("copy"); }, 1200);
+        }
+      };
+      pre.appendChild(b);
+    })(pres[i]);
+  }
 }
 
 function bubble(kind, text) {
@@ -487,9 +661,21 @@ function bubble(kind, text) {
 }
 
 function setStatus(text, cls) {
+  // 只在出错时显示。cls 为 ok（也就是"就绪"）时留空 —— 那两个字常驻没有信息量，
+  // 用户要求去掉；但错误必须还看得见，所以这个元素留着，只是平时不写字。
   var s = el("status");
-  s.textContent = text;
+  var ok = !cls || cls === "ok";
+  s.textContent = ok ? "" : text;
   s.className = cls || "";
+}
+
+/** 发送/停止那一个按钮的样子：不忙是 ▶，忙了是 ■。 */
+function goUI() {
+  var b = el("go");
+  if (!b) { return; }
+  // 切 class，不再改 textContent —— 里面是两个 SVG，改文字会把它们冲掉。
+  b.className = busy ? "primary busy" : "primary";
+  b.title = busy ? t("stop") : t("send");
 }
 
 /* ---------------- 启动诊断 ----------------
@@ -499,62 +685,9 @@ function setStatus(text, cls) {
 function boot() {
   bridge = (window.tbtools && window.tbtools.ai) ? window.tbtools.ai : null;
 
-  var rows = [];
-  rows.push(["window.tbtools", window.tbtools ? "在" : "不在"]);
-  rows.push(["window.tbtools.ai", bridge ? "在" : "不在"]);
+  // 只探测桥，不再摆那张诊断卡（用户要求去掉）。
+  // 桥不在、或者形状不对，就走 status 那一行报出来 —— 那种时候必须有话说。
   if (bridge) {
-    var keys = [];
-    try {
-      for (var k in bridge) { keys.push(k); }
-    } catch (e) {
-      keys.push("（枚举不到：" + e + "）");
-    }
-    rows.push(["ai 上的方法", keys.length ? keys.join(", ") : "（枚举不到）"]);
-  }
-  rows.push(["location", location.href]);
-
-  var details = document.createElement("details");
-  details.className = "diag" + (bridge ? "" : " bad");
-  var sum = document.createElement("summary");
-  sum.textContent = bridge ? t("diagOk") : t("diagBad");
-  details.appendChild(sum);
-
-  if (bridge) {
-    var tb = document.createElement("table");
-    for (var i = 0; i < rows.length; i++) {
-      var tr = document.createElement("tr");
-      var c1 = document.createElement("td"); c1.textContent = rows[i][0];
-      var c2 = document.createElement("td");
-      var code = document.createElement("code"); code.textContent = String(rows[i][1]);
-      c2.appendChild(code);
-      tr.appendChild(c1); tr.appendChild(c2);
-      tb.appendChild(tr);
-    }
-    details.appendChild(tb);
-
-    var row = document.createElement("div");
-    row.style.cssText = "margin:0 0 8px 10px;display:flex;gap:8px;align-items:center";
-    var pingBtn = document.createElement("button");
-    pingBtn.id = "ping";
-    pingBtn.textContent = t("ping");
-    var hint = document.createElement("span");
-    hint.style.cssText = "font-size:11px;color:var(--muted)";
-    hint.textContent = t("pingPh");
-    row.appendChild(pingBtn); row.appendChild(hint);
-    details.appendChild(row);
-  } else {
-    var p = document.createElement("p");
-    p.style.cssText = "margin:4px 0 8px 10px";
-    p.textContent = t("noBridgeWhy");
-    details.appendChild(p);
-  }
-
-  el("diag").innerHTML = "";
-  el("diag").appendChild(details);
-
-  if (bridge) {
-    setStatus(t("ready"), "ok");
-    el("ping").onclick = ping;
     if (typeof bridge.chat !== "function") {
       setStatus("ai.chat 不是函数 —— 接口形状和预期不同", "bad");
     }
@@ -645,23 +778,37 @@ function ctxText() {
   if (context.lastRun) {
     parts.push("[上次运行] 退出码 " + context.lastRun.exit + "\n" + (context.lastRun.tail || ""));
   }
-  if (context.docs) { parts.push("[插件用法]\n" + context.docs); }
+  // extras 自带标题（例如“[这台机器上可用的工具]”），
+  // 再套一层“[插件用法]”就串了 —— 它以前确实是插件用法，现在不是了。
+  if (context.docs) { parts.push(context.docs); }
   return parts.join("\n\n");
 }
 
 function refreshCtx() {
-  el("ctxPre").textContent = ctxText() || t("none");
+  // 上次运行失败了就露一个入口。数据是 Java 已经在推的 context.lastRun，
+  // 不用为它新建任何通道。
+  var bad = context && context.lastRun && context.lastRun.exit !== 0;
+  var b = el("explain");
+  if (b) {
+    b.textContent = t("explain");
+    b.style.display = bad ? "" : "none";
+  }
   var txt = ctxText();
-  el("budget").textContent = txt ? (txt.length + " 字符 / 上限约 32000") : "";
+  // 不是把 prompt 铺开（那个面板已经删了），只说“来源” ——
+  // 于是用户知道该去表单里补什么信息。
+  var bits = [];
+  if (context && context.tool) { bits.push(context.tool + " 的帮助"); }
+  if (context && context.workdir) { bits.push("工作目录"); }
+  if (context && context.lastRun) { bits.push("上次运行"); }
+  el("budget").textContent = txt
+    ? ((bits.length ? "已带上：" + bits.join(" · ") + " · " : "")
+       + txt.length + " 字符（上限约 32000）")
+    : "";
 }
 
 function applyLang() {
   document.documentElement.lang = lang === "en" ? "en" : "zh";
-  el("title").textContent = t("title");
-  el("send").textContent = busy ? t("stop") : t("send");
-  el("stop").textContent = t("stop");
-  el("ask").placeholder = t("ask");
-  el("ctxSummary").textContent = t("ctx");
+  goUI();
   el("sessNew").title = t("sessNew");
   el("sessDel").title = t("sessDel");
   boot();
@@ -687,15 +834,39 @@ function send() {
   if (!bridge) { return; }
 
   var q = el("ask").value.trim();
-  if (!q) { return; }
+  // 只带附件、不写字也得能发 —— 否则传个文件问它是什么这件事就做不了。
+  if (!q && !atts.length) { return; }
   el("ask").value = "";
 
   var ctx = ctxText();
   var full = ctx ? ("以下是当前状态：\n\n" + ctx + "\n\n---\n\n问题：" + q) : q;
 
+  // ★ 附件必须在消息装进 msgs 之前拼好。
+  //
+  // 原来这一段写在 msgs.push 的后面 —— 而 full 是字符串，push 拷的是
+  // 当时的值，后面的 += 只改了局部变量。于是附件永远到不了模型（用户实测：
+  // AI 回说当前对话中没有包含具体的文件路径或文件内容）。
+  var img = null;
+  var names = [];
+  for (var i = 0; i < atts.length; i++) {
+    names.push(atts[i].name);
+    if (atts[i].kind === "img" && !img) { img = atts[i]; }
+    else if (atts[i].kind === "txt") {
+      var whole = String(atts[i].data);
+      var part = whole.slice(0, 8000);
+      // 截断了必须写出来。不说的话，模型会拿半截文件当完整的来回答，
+      // 而用户看不出来它只看了一半。
+      full += "\n\n[附件 " + atts[i].name + "]\n" + part
+            + (whole.length > part.length
+               ? "\n" + t("cutNote") + whole.length + " 字符）" : "");
+    }
+  }
+  atts.length = 0;
+  renderAtts();
+
   // 空对话时把"选一个工具"那句提示清掉，免得它留在记录里。
   if (!turns.length) { el("log").innerHTML = ""; }
-  bubble("u", q);
+  bubble("u", names.length ? (q + "\n\n\u{1F4CE} " + names.join("、")) : q);
 
   // 发给模型的历史：只带 user/assistant，不带 system（system 单独放最前）。
   var msgs = [{ role: "system", content: sysPrompt() }];
@@ -706,20 +877,51 @@ function send() {
 
   var box = bubble("a", "");
   busy = true;
-  el("send").textContent = t("stop");
-  el("stop").disabled = false;
+  goUI();
+  if (img) { box.textContent = t("imgNoStream"); }
 
   var base = "";
   var p;
   try {
+    if (img) {
+      // 图片走 chatImage。注意它的签名是 (text, dataUrl, mime) --
+      // 一条文本，不是消息数组，所以这一次请求不带历史、也没有流式增量。
+      p = bridge.chatImage(full, img.data, img.mime);
+    } else {
     p = bridge.chat(msgs, {
       onDelta: function (s) {
-        // 实测：s 是增量。最终以 promise 的返回值覆盖。
-        base += (s || "");
+        s = s || "";
+        // s 到底是“增量”还是“到目前为止的全文” —— 两种都见过。
+        //
+        // 这里原来是 base += s，并注明“实测 s 是增量”。但实际跑起来
+        // 会整段重复、越滚越长 —— 那正是“s 是全文”时 base += s 的样子。
+        //
+        // 两种都接：若 s 以 base 开头且更长，它就是全文，直接接收；
+        // 否则当增量拼上。这样不用去赌桥的行为。
+        // ★ 这里必须是 >= ，不能是 >。
+        //
+        // 实测（从页面里直接调 chat，把每次的 s 记下来）：
+        //   len / prevLen / startsWithPrev
+        //    21 /      21 / True        ← 同一份全文又发了一遍
+        //    32 /      32 / True
+        //    47 /      47 / True
+        // 一条回复 898 次回调，前 30 条里就有 3 次这种“没长”的。
+        //
+        // 而 > 会把它们归到 else 里去做 base += s ——
+        // 于是每发生一次，已经显示的内容就被重反一遍，越滚越长。
+        // 结束时用最终文本重绘，所以看不出来 —— 故障自己把自己藏了。
+        if (s.length >= base.length && s.indexOf(base) === 0) {
+          base = s;
+        } else if (s.length < base.length && base.indexOf(s) === 0) {
+          // 又收到一条更短的，是旧状态，忽略。
+        } else {
+          base += s;
+        }
         box.textContent = base;
         el("log").scrollTop = el("log").scrollHeight;
       }
     });
+    }
   } catch (e) {
     box.className = "m e";
     box.textContent = describe(e);
@@ -732,6 +934,7 @@ function send() {
   Promise.resolve(p).then(function (r) {
     var text = (typeof r === "string" && r) ? r : base;
     box.innerHTML = md(text);
+      wireCopy(box);
     turns.push({ role: "user", content: full });
     turns.push({ role: "assistant", content: text });
     // 历史太长会挤爆请求预算，留最近若干轮就够。
@@ -748,8 +951,7 @@ function send() {
   function finish() {
     busy = false;
     abortFn = null;
-    el("send").textContent = t("send");
-    el("stop").disabled = true;
+    goUI();
     el("log").scrollTop = el("log").scrollHeight;
     refreshCtx();
   }
@@ -788,8 +990,15 @@ function addRetry(original) {
 }
 
 /* ---------------- 事件 ---------------- */
-el("send").onclick = send;
-el("stop").onclick = stop;
+// 一个按钮：忙的时候 send() 自己会转去 stop()（见它第一行）。
+el("go").onclick = send;
+el("pick").onclick = function () { el("file").click(); };
+el("file").onchange = function () { addFiles(el("file").files); el("file").value = ""; };
+el("explain").onclick = function () {
+  if (busy) { return; }
+  el("ask").value = t("explainQ");
+  send();
+};
 el("ask").addEventListener("keydown", function (e) {
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
 });
