@@ -330,7 +330,15 @@ function why(code) {
 }
 
 /* ---------------- 状态 ---------------- */
-var bridge = null;           // window.tbtools.ai，没有就是 null
+var bridge = null;           // window.tbtools.ai
+  var modelCfg = null;         // Java 推过来的模型配置
+
+  /** 现在是不是要走用户自己的接口。 */
+  function customModel() {
+    return !!(modelCfg && modelCfg.mode === "custom"
+              && String(modelCfg.baseUrl || "").trim()
+              && String(modelCfg.model || "").trim());
+  }           // window.tbtools.ai，没有就是 null
 var context = null;          // Java 推过来的上下文
 var busy = false;
 var abortFn = null;
@@ -748,6 +756,18 @@ window.tbvAi = {
     lang = (String(name).toLowerCase() === "en") ? "en" : "zh";
     applyLang();
   },
+  /**
+   * Java 推过来的模型配置。
+   *
+   * <p>页面自己拿不到 Java 那边的存盘，只能靠推。推不到就等于“用内置”。
+   */
+  setModel: function (cfg) {
+    try {
+      modelCfg = (typeof cfg === "string") ? JSON.parse(cfg) : cfg;
+    } catch (e) {
+      modelCfg = null;
+    }
+  },
   ask: function (text) {
     el("ask").value = text || "";
     send();
@@ -829,9 +849,103 @@ function sysPrompt() {
       + "绝对不要编造参数名。给出命令时请放进代码块。回答要简短、可操作。";
 }
 
+/**
+ * 用用户自己的 OpenAI 兼容接口发一次请求。
+ *
+ * <p>为什么在页面里发：页面→Java 没有通道，Java →页面只有注入。
+ * 通道只有一个方向能用，那就只能在这一边发。
+ *
+ * <p>流式解析：SSE 的事件之间用空行分隔，而分片不保证落在边界上 ——
+ * 所以必须把它当流处理，不能假设每一块就是一个完整事件。
+ */
+function sendExternal(msgs, box) {
+  var ctrl = new AbortController();
+  var acc = "";
+
+  function onEvent(chunk) {
+    var lines = chunk.split("\n");
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i].replace(/\r$/, "");
+      if (line.indexOf("data:") !== 0) { continue; }
+      var payload = line.slice(5).trim();
+      if (!payload || payload === "[DONE]") { continue; }
+      try {
+        var j = JSON.parse(payload);
+        var ch = j.choices && j.choices[0];
+        var d = ch && (ch.delta || ch.message);
+        if (d && d.content) {
+          acc += d.content;
+          box.textContent = acc;
+          el("log").scrollTop = el("log").scrollHeight;
+        }
+      } catch (e) {
+        // 一个坏帧不能把整次回答带歪。
+      }
+    }
+  }
+
+  var url = String(modelCfg.baseUrl).replace(/\/+$/, "") + "/chat/completions";
+  var p = fetch(url, {
+    method: "POST",
+    signal: ctrl.signal,
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer " + (modelCfg.apiKey || "")
+    },
+    body: JSON.stringify({ model: modelCfg.model, messages: msgs, stream: true })
+  }).then(function (res) {
+    if (!res.ok) {
+      return res.text().then(function (body) {
+        var tail = String(body || "").slice(0, 300);
+        throw (lang === "en" ? "HTTP " : "接口返回 ") + res.status + "  " + tail;
+      });
+    }
+    if (!res.body || !res.body.getReader) {
+      return res.text().then(function (txt) {
+        try {
+          var j = JSON.parse(txt);
+          var m = j.choices && j.choices[0] && j.choices[0].message;
+          acc = (m && m.content) ? m.content : txt;
+        } catch (e) { acc = txt; }
+        box.textContent = acc;
+        return acc;
+      });
+    }
+    var reader = res.body.getReader();
+    var dec = new TextDecoder("utf-8");
+    var buf = "";
+    function pump() {
+      return reader.read().then(function (r) {
+        if (r.done) {
+          if (buf.trim().length) { onEvent(buf); }
+          return acc;
+        }
+        buf += dec.decode(r.value, { stream: true });
+        var idx;
+        while ((idx = buf.indexOf("\n\n")) >= 0) {
+          onEvent(buf.slice(0, idx));
+          buf = buf.slice(idx + 2);
+        }
+        return pump();
+      });
+    }
+    return pump();
+  }).then(function (text) {
+    return (typeof text === "string" && text) ? text : acc;
+  }, function (e) {
+    if (e && e.name === "AbortError") { return acc; }
+    throw e;
+  });
+
+  // abortFn 靠这个下手。
+  p.abort = function () { try { ctrl.abort(); } catch (e) {} };
+  return p;
+}
+
 function send() {
   if (busy) { stop(); return; }
-  if (!bridge) { return; }
+  // 自定义模式下不需要桥 —— 请求是页面自己发的。
+  if (!bridge && !customModel()) { return; }
 
   var q = el("ask").value.trim();
   // 只带附件、不写字也得能发 —— 否则传个文件问它是什么这件事就做不了。
@@ -883,10 +997,21 @@ function send() {
   var base = "";
   var p;
   try {
+    if (img && customModel()) {
+      // 自定义模式下不支持图片 —— 先说清楚，不要把图当文字发过去。
+      box.className = "m e";
+      box.textContent = (lang === "en")
+        ? "Images are not supported on a custom model."
+        : "自定义模型暂不支持图片。";
+      finish();
+      return;
+    }
     if (img) {
       // 图片走 chatImage。注意它的签名是 (text, dataUrl, mime) --
       // 一条文本，不是消息数组，所以这一次请求不带历史、也没有流式增量。
       p = bridge.chatImage(full, img.data, img.mime);
+    } else if (customModel()) {
+      p = sendExternal(msgs, box);
     } else {
     p = bridge.chat(msgs, {
       onDelta: function (s) {
@@ -929,7 +1054,13 @@ function send() {
     return;
   }
 
-  abortFn = function () { try { if (p && p.requestId) { bridge.abort(p.requestId); } } catch (e) {} };
+  abortFn = function () {
+    try {
+      // 自定义模型走 AbortController；内置走桥的 requestId。
+      if (p && typeof p.abort === "function") { p.abort(); }
+      else if (p && p.requestId) { bridge.abort(p.requestId); }
+    } catch (e) {}
+  };
 
   Promise.resolve(p).then(function (r) {
     var text = (typeof r === "string" && r) ? r : base;

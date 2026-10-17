@@ -196,10 +196,37 @@ public final class AiAssistPanel extends JPanel {
         pushLang(lang);
         if (!pendingContext.isEmpty()) {
             pushContext(pendingContext);
+        pushModel(pendingModel);
         }
     }
 
     /** 把当前工具 / 命令 / 上次运行等推给页面（JSON 字符串）。 */
+    /** 存着要推给页面的模型配置；网页还没建的时候先放这里。 */
+    private String pendingModel = bioenv.ai.AiModelStore.load().toJson();
+    //                                               ↑
+    // 这里必须读一次存盘。默认写死成 builtin 的话，用户上次配好的
+    // 模型要等他再进一次设置、再点一次保存才生效 —— 而“配了却没生效”
+    // 比“没配”难排查得多。
+
+    /**
+     * 把模型配置推给页面。
+     *
+     * <p>页面自己发请求需要这四样东西，而页面拿不到 Java 这边的存盘，
+     * 所以只能这么推。网页没建的时候先记下，等 ensureLoaded 里补推。
+     */
+    public void setModelConfig(String json) {
+        pendingModel = (json == null || json.trim().length() == 0)
+                ? "{\"mode\":\"builtin\"}" : json;
+        pushModel(pendingModel);
+    }
+
+    private void pushModel(String json) {
+        if (view == null) {
+            return;
+        }
+        view.run("window.tbvAi && window.tbvAi.setModel(" + jsString(json) + ")");
+    }
+
     public void pushContext(String json) {
         pendingContext = json == null ? "" : json;
         if (view != null) {

@@ -223,6 +223,15 @@ public final class Strings {
     /** 设置卡（原来顶栏那一条）。 */
     public static final String SETTINGS_TITLE = "settings.title";
     /** 设置里“连接”那一块的标题。 */
+    /** 设置里“模型”那一块。 */
+    public static final String AI_MODEL_SECTION = "ai.model.section";
+    public static final String AI_MODEL_BUILTIN = "ai.model.builtin";
+    public static final String AI_MODEL_CUSTOM = "ai.model.custom";
+    public static final String AI_MODEL_URL = "ai.model.url";
+    public static final String AI_MODEL_KEY = "ai.model.key";
+    public static final String AI_MODEL_NAME = "ai.model.name";
+    public static final String AI_MODEL_SAVE = "ai.model.save";
+    public static final String AI_MODEL_HINT = "ai.model.hint";
     public static final String SETTINGS_CONN = "settings.conn";
     public static final String SETTINGS_LOOK = "settings.look";
     public static final String SETTINGS_LANGUAGE = "settings.language";
@@ -1183,6 +1192,20 @@ public final class Strings {
                 "Collapse the AI assistant and go back to the tool tree");
         put(ZH_TEXT, EN_TEXT, AI_COLLAPSE_SHORT, "收起", "Hide");
         put(ZH_TEXT, EN_TEXT, SETTINGS_TITLE, "设置", "Settings");
+        put(ZH_TEXT, EN_TEXT, AI_MODEL_SECTION, "模型", "Model");
+        put(ZH_TEXT, EN_TEXT, AI_MODEL_BUILTIN, "内置模型", "Built-in");
+        put(ZH_TEXT, EN_TEXT, AI_MODEL_CUSTOM, "自定义（OpenAI 兼容）",
+                "Custom (OpenAI-compatible)");
+        put(ZH_TEXT, EN_TEXT, AI_MODEL_URL, "接口地址", "Endpoint");
+        put(ZH_TEXT, EN_TEXT, AI_MODEL_KEY,
+                "API key（明文保存在本机）", "API key (plain text, local)");
+        put(ZH_TEXT, EN_TEXT, AI_MODEL_NAME, "模型名", "Model name");
+        put(ZH_TEXT, EN_TEXT, AI_MODEL_SAVE, "保存", "Save");
+        put(ZH_TEXT, EN_TEXT, AI_MODEL_HINT,
+                "自定义模式下请求由页面直接发出。"
+                + "连不上多半是跨域(CORS)被拦：本地 Ollama 需设 OLLAMA_ORIGINS=*",
+                "In custom mode the page sends the request itself. If it cannot connect, "
+                + "it is usually CORS: local Ollama needs OLLAMA_ORIGINS=* set.");
         put(ZH_TEXT, EN_TEXT, SETTINGS_CONN, "连接", "Connection");
         put(ZH_TEXT, EN_TEXT, SETTINGS_LOOK, "界面风格", "Theme");
         put(ZH_TEXT, EN_TEXT, SETTINGS_LANGUAGE, "语言", "Language");
