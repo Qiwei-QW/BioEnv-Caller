@@ -179,47 +179,79 @@ public final class LeftRail extends JPanel {
     // ------------------------------------------------------------------
 
     /** 一棵树：工具树。 */
+    /**
+     * 工具树：一条弯的枝，末端三个点。
+     *
+     * <p>原来是一根横线加三条直接分叉，末端各一个椭圆 —— 放大看像一棵树，
+     * 缩到 24px 就只剩一个“分叉符号”。现在换成带弧度的枝和圆点：
+     * 弯线在小尺寸下比直线更容易读，而“末端有点”就是“这些是实体”。
+     */
     public static Icon treeIcon() {
         return new Shape() {
             @Override
             public void draw(Graphics2D g, int size, Color color) {
                 g.setColor(color);
-                g.setStroke(new BasicStroke(1.7f, BasicStroke.CAP_ROUND,
+                g.setStroke(new BasicStroke(1.8f, BasicStroke.CAP_ROUND,
                         BasicStroke.JOIN_ROUND));
-                // 主干
-                g.drawLine(5, 12, 14, 12);
-                // 三条分叉，末端各一个点
-                g.drawLine(14, 12, 19, 6);
-                g.drawLine(14, 12, 19, 12);
-                g.drawLine(14, 12, 19, 18);
-                g.fillOval(18, 4, 5, 4);
-                g.fillOval(18, 10, 5, 4);
-                g.fillOval(18, 16, 5, 4);
+                java.awt.geom.Path2D.Double p = new java.awt.geom.Path2D.Double();
+                // 主干：从左下往上弯到分叉点
+                p.moveTo(4.0, 19.0);
+                p.quadTo(8.6, 12.6, 11.2, 11.2);
+                // 上枝
+                p.moveTo(11.2, 11.2);
+                p.quadTo(13.8, 7.4, 16.6, 5.4);
+                // 下枝
+                p.moveTo(11.2, 11.2);
+                p.quadTo(13.8, 13.2, 16.6, 13.6);
+                g.draw(p);
+                node(g, 4.0, 19.0);
+                node(g, 16.6, 5.4);
+                node(g, 16.6, 13.6);
             }
         };
     }
 
+    /** 枝末端那个点。 */
+    private static void node(Graphics2D g, double x, double y) {
+        double r = 1.9;
+        g.fill(new java.awt.geom.Ellipse2D.Double(x - r, y - r, r * 2, r * 2));
+    }
+
     /** 小机器人：AI 助手。 */
+    /**
+     * AI 助手：四角星芒。
+     *
+     * <p>原来是一张拟人的机器人脸（眼睛两个 3px 的圆、嘴一根 1.7px 的线）。
+     * 放大看是个笑脸，缩到 24px 就糊成一团 —— 它靠的是细节，而细节在这个尺寸下不成立。
+     *
+     * <p>星芒只有四条凹边，怎么缩都还是它，而且现在就是“AI”的通用记号。
+     */
     public static Icon robotIcon() {
         return new Shape() {
             @Override
             public void draw(Graphics2D g, int size, Color color) {
                 g.setColor(color);
-                g.setStroke(new BasicStroke(1.7f, BasicStroke.CAP_ROUND,
-                        BasicStroke.JOIN_ROUND));
-                // 天线
-                g.drawLine(12, 2, 12, 5);
-                g.fillOval(10, 0, 4, 4);
-                // 头
-                g.drawRoundRect(4, 6, 16, 13, 5, 5);
-                // 眼睛
-                g.fillOval(8, 10, 3, 3);
-                g.fillOval(14, 10, 3, 3);
-                // 嘴
-                g.drawLine(9, 15, 15, 15);
-                // 两侧的耳朵
-                g.drawLine(4, 11, 2, 11);
-                g.drawLine(20, 11, 22, 11);
+                java.awt.geom.Path2D.Double p = new java.awt.geom.Path2D.Double();
+                double c = 12.0;
+                double outer = 9.3;
+                double inner = 2.5;
+                for (int i = 0; i < 4; i++) {
+                    double a = -Math.PI / 2 + i * Math.PI / 2;
+                    double tipX = c + Math.cos(a) * outer;
+                    double tipY = c + Math.sin(a) * outer;
+                    double nextX = c + Math.cos(a + Math.PI / 2) * outer;
+                    double nextY = c + Math.sin(a + Math.PI / 2) * outer;
+                    double ctrlX = c + Math.cos(a + Math.PI / 4) * inner;
+                    double ctrlY = c + Math.sin(a + Math.PI / 4) * inner;
+                    if (i == 0) {
+                        p.moveTo(tipX, tipY);
+                    } else {
+                        p.lineTo(tipX, tipY);
+                    }
+                    p.quadTo(ctrlX, ctrlY, nextX, nextY);
+                }
+                p.closePath();
+                g.fill(p);
             }
         };
     }
@@ -242,24 +274,39 @@ public final class LeftRail extends JPanel {
     }
 
     /** 齿轮：设置（留给以后）。 */
+    /**
+     * 设置：齿轮。
+     *
+     * <p>原来是一个圆圈加八条向外的直线 —— 数学上确实是“齿轮状”，
+     * 但看起来是太阳。齿轮靠的是“齿的形状”，不是“有没有射线”。
+     *
+     * <p>现在直接把轮廓画成齿轮形：半径随角度做八次起伏，就是八个圆齿。
+     * 中间留一个孔（描边，不填）—— 齿轮就是这么认出来的。
+     */
     public static Icon gearIcon() {
         return new Shape() {
             @Override
             public void draw(Graphics2D g, int size, Color color) {
                 g.setColor(color);
-                g.setStroke(new BasicStroke(1.6f));
-                int c = size / 2;
-                int r = size / 2 - 6;
-                g.drawOval(c - r, c - r, r * 2, r * 2);
-                g.fillOval(c - 2, c - 2, 4, 4);
-                for (int i = 0; i < 8; i++) {
-                    double a = i * Math.PI / 4;
-                    int x1 = (int) Math.round(c + Math.cos(a) * r);
-                    int y1 = (int) Math.round(c + Math.sin(a) * r);
-                    int x2 = (int) Math.round(c + Math.cos(a) * (r + 3));
-                    int y2 = (int) Math.round(c + Math.sin(a) * (r + 3));
-                    g.drawLine(x1, y1, x2, y2);
+                g.setStroke(new BasicStroke(1.8f, BasicStroke.CAP_ROUND,
+                        BasicStroke.JOIN_ROUND));
+                double c = 12.0;
+                java.awt.geom.Path2D.Double p = new java.awt.geom.Path2D.Double();
+                int steps = 192;
+                for (int i = 0; i <= steps; i++) {
+                    double th = i * 2 * Math.PI / steps;
+                    double r = 6.5 + 1.7 * Math.cos(8 * th);
+                    double x = c + Math.cos(th) * r;
+                    double y = c + Math.sin(th) * r;
+                    if (i == 0) {
+                        p.moveTo(x, y);
+                    } else {
+                        p.lineTo(x, y);
+                    }
                 }
+                p.closePath();
+                g.draw(p);
+                g.draw(new java.awt.geom.Ellipse2D.Double(c - 2.1, c - 2.1, 4.2, 4.2));
             }
         };
     }
