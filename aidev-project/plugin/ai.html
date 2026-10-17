@@ -132,6 +132,12 @@
 #askWrap #go .stop{display:none}
 #askWrap #go.busy .send{display:none}
 #askWrap #go.busy .stop{display:block}
+/* 代码块的复制按钮：平时不占地方，悬停才出来。 */
+pre{position:relative}
+pre .cp{position:absolute;top:4px;right:4px;font-size:11px;padding:1px 8px;
+        opacity:0;transition:opacity .12s;cursor:pointer}
+pre:hover .cp{opacity:.85}
+pre .cp:hover{opacity:1}
 </style>
 </head>
 <body class="theme-classic">
@@ -247,6 +253,7 @@ var T = {
     chk: "正在检查…", noBridge: "桥不可用", ready: "就绪",
     newS: "新建", delS: "删除",
     sessNew: "新建会话", sessDel: "删除这个会话",
+  copy: "复制", copied: "已复制",
   pick: "添加文件或图片", drop: "移除这个附件", attach: "附件",
   explain: "上次运行失败了 · 让 AI 看看",
   explainQ: "刚才这一步运行失败了。请看看下面的输出，告诉我最可能的原因，以及我该改哪个参数或哪一步。",
@@ -272,6 +279,7 @@ var T = {
     chk: "Checking…", noBridge: "No bridge", ready: "Ready",
     newS: "New", delS: "Delete",
     sessNew: "New conversation", sessDel: "Delete this conversation",
+  copy: "Copy", copied: "Copied",
   pick: "Add a file or an image", drop: "Remove this attachment", attach: "Attachments",
   explain: "The last run failed - let the AI look",
   explainQ: "That last run failed. Look at the output below and tell me the most likely cause, and which option or step I should change.",
@@ -597,10 +605,50 @@ function renderLog() {
     if (m.role === "user") {
       bubble("u", m.content);
     } else {
-      bubble("a", "").innerHTML = md(m.content);
+      var bb = bubble("a", "");
+      bb.innerHTML = md(m.content);
+      wireCopy(bb);
     }
   }
   if (!turns.length) { bubble("s", t("empty")); }
+}
+
+/**
+ * 给回复里每个代码块加一个复制按钮。
+ *
+ * 用 execCommand 而不是 navigator.clipboard：JxBrowser 默认拒绝后者
+ * （svguest 的技能文档里记着这一条），而且那个权限是引擎级的，
+ * 一个插件不该去改它。
+ */
+function wireCopy(root) {
+  var pres = root.querySelectorAll ? root.querySelectorAll("pre") : [];
+  for (var i = 0; i < pres.length; i++) {
+    (function (pre) {
+      var b = document.createElement("button");
+      b.className = "cp";
+      b.type = "button";
+      b.textContent = t("copy");
+      b.onclick = function () {
+        var code = pre.querySelector("code");
+        var txt = code ? code.textContent : pre.textContent;
+        var done = false;
+        try {
+          var a = document.createElement("textarea");
+          a.value = txt;
+          a.style.cssText = "position:fixed;left:-9999px";
+          document.body.appendChild(a);
+          a.select();
+          done = document.execCommand("copy");
+          document.body.removeChild(a);
+        } catch (e) { done = false; }
+        if (done) {
+          b.textContent = t("copied");
+          setTimeout(function () { b.textContent = t("copy"); }, 1200);
+        }
+      };
+      pre.appendChild(b);
+    })(pres[i]);
+  }
 }
 
 function bubble(kind, text) {
@@ -744,7 +792,16 @@ function refreshCtx() {
     b.style.display = bad ? "" : "none";
   }
   var txt = ctxText();
-  el("budget").textContent = txt ? (txt.length + " 字符 / 上限约 32000") : "";
+  // 不是把 prompt 铺开（那个面板已经删了），只说“来源” ——
+  // 于是用户知道该去表单里补什么信息。
+  var bits = [];
+  if (context && context.tool) { bits.push(context.tool + " 的帮助"); }
+  if (context && context.workdir) { bits.push("工作目录"); }
+  if (context && context.lastRun) { bits.push("上次运行"); }
+  el("budget").textContent = txt
+    ? ((bits.length ? "已带上：" + bits.join(" · ") + " · " : "")
+       + txt.length + " 字符（上限约 32000）")
+    : "";
 }
 
 function applyLang() {
@@ -875,6 +932,7 @@ function send() {
   Promise.resolve(p).then(function (r) {
     var text = (typeof r === "string" && r) ? r : base;
     box.innerHTML = md(text);
+      wireCopy(box);
     turns.push({ role: "user", content: full });
     turns.push({ role: "assistant", content: text });
     // 历史太长会挤爆请求预算，留最近若干轮就够。

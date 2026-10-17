@@ -3641,11 +3641,54 @@ public final class MainPanel extends JPanel {
      *
      * <p>整个方法吞掉所有异常：AI 那一栏拿不到上下文，<b>不能影响选工具本身</b>。
      */
+    /**
+     * 这台机器上可用的工具名，一行。还没扫描时返回空串。
+     *
+     * <p>用 {@code Tool.command} 而不是映像的键：名字就是用户会输进命令行的
+     * 那个，而键是什么没有文档保证。
+     */
+    private String installedToolNames() {
+        try {
+            if (registry == null) {
+                return "";
+            }
+            java.util.List<String> names = new java.util.ArrayList<String>();
+            for (bioenv.core.Tool tool : registry.getTools().values()) {
+                if (tool != null && tool.command != null && !tool.command.trim().isEmpty()) {
+                    names.add(tool.command.trim());
+                }
+            }
+            java.util.Collections.sort(names);
+            StringBuilder b = new StringBuilder();
+            for (int i = 0; i < names.size(); i++) {
+                if (b.length() > 0) {
+                    b.append(' ');
+                }
+                b.append(names.get(i));
+            }
+            return b.toString();
+        } catch (Throwable t) {
+            return "";
+        }
+    }
+
     private void pushAiContext() {
         if (aiAssist == null || formPanel == null) {
             return;
         }
         try {
+            // 把“这台机器上有哪些工具”一并推过去。
+            //
+            // 模型一直在说“我不会编造不存在的工具名”，但它根本不知道
+            // 你装了什么 —— 那句承诺它做不到。而这份清单插件自己就有
+            // （状态栏里的“389 个命令可用”就是它），上下文预算也远远够用。
+            java.util.List<String> extras = new java.util.ArrayList<String>();
+            String names = installedToolNames();
+            if (!names.isEmpty()) {
+                extras.add("[这台机器上可用的工具]\n" + names
+                        + "\n（只列了名字。用户问到别的工具时，只能从这个清单里挑；"
+                        + "清单里没有的，就说这台机器上没有，不要编。）");
+            }
             aiAssist.pushContext(bioenv.ai.AiContext.build(
                     selected == null ? "" : selected.command,
                     selected == null ? "" : selected.envName,
@@ -3653,7 +3696,7 @@ public final class MainPanel extends JPanel {
                     "",
                     "",
                     formPanel.rawWorkdir(),
-                    null));
+                    extras));
         } catch (Throwable ignored) {
             // 故意吞掉：AI 是附加功能，坏了也只该是它自己不显示。
         }
