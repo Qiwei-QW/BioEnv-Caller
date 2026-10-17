@@ -180,43 +180,55 @@ public final class LeftRail extends JPanel {
 
     /** 一棵树：工具树。 */
     /**
-     * 工具树：一根主干 + 两条弯着往下的枝 + 三个末端点。
+     * 工具树：<b>用户自己画的那张图，逆时针转 90° 后逐像素搬过来。</b>
      *
-     * <p>按用户重画的那张来的。他画的主干在右、枝朝左；
-     * 这里镜像过来 —— 主干在左、枝朝右。
+     * <p>前五版都是“看着图理解结构，然后自己画一个”—— 五次全错。
+     * 而这张图本身就是干净的黑白图，根本不需要理解结构：裁掉白边、
+     * 转 90°、缩到 24×24，就是图标。所以这里存的是那张图的像素，
+     * 不是对它的描述。</p>
      *
-     * <p>主干上端不另外点一个点：他画的那里就是一个圆头笔触，
-     * 和下面三个明显大一圈的点不一样。
+     * <p>存的是 <b>alpha</b>（遵供应：只保留形状不保留颜色），
+     * 画的时候再按当前主题的颜色填上去 —— 所以选中/未选中、
+     * 浅色/深色主题都能跟着变。</p>
      */
     public static Icon treeIcon() {
         return new Shape() {
             @Override
             public void draw(Graphics2D g, int size, Color color) {
-                g.setColor(color);
-                g.setStroke(new BasicStroke(1.8f, BasicStroke.CAP_ROUND,
-                        BasicStroke.JOIN_ROUND));
-                java.awt.geom.Path2D.Double p = new java.awt.geom.Path2D.Double();
-                // 弯边：左下的点往左鼓着上去，到顶点。
-                p.moveTo(5.0, 19.0);
-                p.quadTo(5.6, 11.4, 12.0, 7.6);
-                // 直边：从顶点竖直向下。
-                p.moveTo(12.0, 7.6);
-                p.lineTo(12.0, 18.2);
-                g.draw(p);
-                node(g, 5.0, 19.0);
-                node(g, 12.0, 7.6);
-                node(g, 12.0, 18.2);
+                g.drawImage(tinted(color), 0, 0, null);
             }
         };
     }
 
-    /** 枝末端那个点。 */
-    private static void node(Graphics2D g, double x, double y) {
-        double r = 1.9;
-        g.fill(new java.awt.geom.Ellipse2D.Double(x - r, y - r, r * 2, r * 2));
+    /** 把 24×24 的 alpha 按给定颜色填成一张图。很小，每次重画都重建也无所谓。 */
+    private static java.awt.image.BufferedImage tinted(Color color) {
+        java.awt.image.BufferedImage out = new java.awt.image.BufferedImage(
+                24, 24, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+        int rgb = color.getRGB() & 0xFFFFFF;
+        for (int y = 0; y < 24; y++) {
+            for (int x = 0; x < 24; x++) {
+                int a = TREE_ALPHA[y * 24 + x] & 0xFF;
+                if (a != 0) {
+                    out.setRGB(x, y, (a << 24) | rgb);
+                }
+            }
+        }
+        return out;
     }
 
-    /** 小机器人：AI 助手。 */
+    /** 那张图的 24×24 alpha，Base64。由提取脚本生成，不要手改。 */
+    private static final byte[] TREE_ALPHA =
+            java.util.Base64.getDecoder().decode(""
++ "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAsXlxWSFRgXV5eXsq3BwEBAAAABAAAAABNo6HR"
+            + "/8OWpKKipv/3EQMDAAAAAwAAAAAAAAAATMgvAAAAADgwAAAAAAAAAAAAAAACBAQCAD3zVyEYGxQSNag/AAIBAAAA"
+            + "AAAAAAAABQBEwsfy3MDL2/+cAgcAAgAAAAAAAAAAAAIAAAdI2jUACGATAAAEAAAAAAAAAAAAAAADAQEASeVxLRwp"
+            + "LVXYfQAAAAAAAAAAAAAAAAAEADGryMvLyOP/2QAAAAAAAAAAAAAAAAAAAwAAAAAAABqVQQAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+
     /**
      * AI 助手：四角星芒。
      *
