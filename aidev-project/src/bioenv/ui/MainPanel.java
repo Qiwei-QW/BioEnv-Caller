@@ -463,6 +463,15 @@ public final class MainPanel extends JPanel {
     private void adoptRegistry(ToolRegistry reg, EnvScanner sc,
                                Transport bridge, EnvRunner er) {
         this.registry = reg;
+        // 装上 registry 之后必须补推一次 AI 上下文。
+        //
+        // 原来只有“选工具”和“开始加载”会推，而扫描完成、
+        // registry 真正装上那一刻没人叫它 —— 于是“这台机器上有哪些工具”
+        // 这份清单永远到不了 AI 那边。
+        //
+        // 用户实测就是这个样子：问“当前环境有多少个可用工具”，
+        // AI 回“你没有提供当前环境的上下文信息”。
+        updateRunEnabled();
         this.scanner = sc;
         this.wsl = bridge;
         this.envRunner = er;

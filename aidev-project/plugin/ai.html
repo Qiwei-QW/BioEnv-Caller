@@ -778,7 +778,9 @@ function ctxText() {
   if (context.lastRun) {
     parts.push("[上次运行] 退出码 " + context.lastRun.exit + "\n" + (context.lastRun.tail || ""));
   }
-  if (context.docs) { parts.push("[插件用法]\n" + context.docs); }
+  // extras 自带标题（例如“[这台机器上可用的工具]”），
+  // 再套一层“[插件用法]”就串了 —— 它以前确实是插件用法，现在不是了。
+  if (context.docs) { parts.push(context.docs); }
   return parts.join("\n\n");
 }
 
