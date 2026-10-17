@@ -53,6 +53,11 @@ public final class LeftRail extends JPanel {
 
     private final ButtonGroup group = new ButtonGroup();
     private final JPanel top = new JPanel();
+    /**
+     * 底那一栏。此刻只有齿轮一个按钮 —— 上面是“工作区”，
+     * 下面是“设置”，这是 VS Code 那条栏的排法：用的在上、配的在下。
+     */
+    private final JPanel bottom = new JPanel();
 
     public LeftRail() {
         setLayout(new java.awt.BorderLayout());
@@ -66,7 +71,7 @@ public final class LeftRail extends JPanel {
         add(top, java.awt.BorderLayout.NORTH);
 
         // 底部留一块，将来放"设置"这类入口（Positron 就是这么排的）。
-        JPanel bottom = new JPanel();
+
         bottom.setLayout(new BoxLayout(bottom, BoxLayout.Y_AXIS));
         bottom.setOpaque(false);
         add(bottom, java.awt.BorderLayout.SOUTH);
@@ -85,6 +90,17 @@ public final class LeftRail extends JPanel {
      */
     public JToggleButton add(final String id, final String tooltip, final Icon icon,
                              final Action action) {
+        return addTo(top, id, tooltip, icon, action);
+    }
+
+    /** 加到最底那一栏。齿轮用它。 */
+    public JToggleButton addBottom(final String id, final String tooltip, final Icon icon,
+                                   final Action action) {
+        return addTo(bottom, id, tooltip, icon, action);
+    }
+
+    private JToggleButton addTo(final JPanel parent, final String id, final String tooltip,
+                                final Icon icon, final Action action) {
         final JToggleButton b = new JToggleButton(icon);
         b.setName("rail." + id);
         b.setToolTipText(tooltip);
@@ -106,45 +122,53 @@ public final class LeftRail extends JPanel {
             }
         });
         group.add(b);
-        top.add(b);
-        top.add(Box.createVerticalStrut(2));
+        parent.add(b);
+        parent.add(Box.createVerticalStrut(2));
         return b;
     }
 
     /** 只选中不触发回调（用于程序化设置初值）。 */
     public void select(String id) {
-        Component[] kids = top.getComponents();
-        for (int i = 0; i < kids.length; i++) {
-            if (kids[i] instanceof JToggleButton) {
-                JToggleButton b = (JToggleButton) kids[i];
-                if (b.getName().equals("rail." + id)) {
-                    b.setSelected(true);
-                    return;
+        for (JToggleButton b : all()) {
+            if (b.getName().equals("rail." + id)) {
+                b.setSelected(true);
+                return;
+            }
+        }
+    }
+
+    /**
+     * 上下两栏里所有的图标按钮。
+     *
+     * <p>齿轮移到下面之后，只扫 {@code top} 的地方就找不到它了 ——
+     * 三个查询方法都要走这里。
+     */
+    private java.util.List<JToggleButton> all() {
+        java.util.List<JToggleButton> out = new java.util.ArrayList<JToggleButton>();
+        for (JPanel p : new JPanel[] {top, bottom}) {
+            Component[] kids = p.getComponents();
+            for (int i = 0; i < kids.length; i++) {
+                if (kids[i] instanceof JToggleButton) {
+                    out.add((JToggleButton) kids[i]);
                 }
             }
         }
+        return out;
     }
 
     /** 全部取消选中（AI 收起来之后，图标不该还亮着）。 */
     public void clearSelection() {
         group.clearSelection();
-        Component[] kids = top.getComponents();
-        for (int i = 0; i < kids.length; i++) {
-            if (kids[i] instanceof JToggleButton) {
-                ((JToggleButton) kids[i]).repaint();
-            }
+        for (JToggleButton b : all()) {
+            b.repaint();
         }
     }
 
     /** 当前是否有某个 id 处于选中态。 */
     public boolean isSelected(String id) {
-        Component[] kids = top.getComponents();
-        for (int i = 0; i < kids.length; i++) {
-            if (kids[i] instanceof JToggleButton) {
-                JToggleButton b = (JToggleButton) kids[i];
-                if (b.getName().equals("rail." + id)) {
-                    return b.isSelected();
-                }
+        for (JToggleButton b : all()) {
+            if (b.getName().equals("rail." + id)) {
+                return b.isSelected();
             }
         }
         return false;
