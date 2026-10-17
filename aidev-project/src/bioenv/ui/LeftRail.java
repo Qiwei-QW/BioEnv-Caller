@@ -180,11 +180,12 @@ public final class LeftRail extends JPanel {
 
     /** 一棵树：工具树。 */
     /**
-     * 工具树：一条弯的枝，末端三个点。
+     * 工具树：一段弯边 + 一段直边，共享一个顶点，三个末端各一个点。
      *
-     * <p>原来是一根横线加三条直接分叉，末端各一个椭圆 —— 放大看像一棵树，
-     * 缩到 24px 就只剩一个“分叉符号”。现在换成带弧度的枝和圆点：
-     * 弯线在小尺寸下比直线更容易读，而“末端有点”就是“这些是实体”。
+     * <p>按用户手画的那张来的。它不是“一条主干分叉成两支”（我第一版画错了），
+     * 而是一条路径：从左下弯上去到顶点，再从顶点竖直落下来。
+     *
+     * <p>弯的那边向左鼓 —— 向右鼓就变成了一个“反弯”，和手画的不一样。
      */
     public static Icon treeIcon() {
         return new Shape() {
@@ -194,19 +195,16 @@ public final class LeftRail extends JPanel {
                 g.setStroke(new BasicStroke(1.8f, BasicStroke.CAP_ROUND,
                         BasicStroke.JOIN_ROUND));
                 java.awt.geom.Path2D.Double p = new java.awt.geom.Path2D.Double();
-                // 主干：从左下往上弯到分叉点
-                p.moveTo(4.0, 19.0);
-                p.quadTo(8.6, 12.6, 11.2, 11.2);
-                // 上枝
-                p.moveTo(11.2, 11.2);
-                p.quadTo(13.8, 7.4, 16.6, 5.4);
-                // 下枝
-                p.moveTo(11.2, 11.2);
-                p.quadTo(13.8, 13.2, 16.6, 13.6);
+                // 弯边：左下的点往左鼓着上去，到顶点。
+                p.moveTo(5.0, 19.0);
+                p.quadTo(5.6, 11.4, 12.0, 7.6);
+                // 直边：从顶点竖直向下。
+                p.moveTo(12.0, 7.6);
+                p.lineTo(12.0, 18.2);
                 g.draw(p);
-                node(g, 4.0, 19.0);
-                node(g, 16.6, 5.4);
-                node(g, 16.6, 13.6);
+                node(g, 5.0, 19.0);
+                node(g, 12.0, 7.6);
+                node(g, 12.0, 18.2);
             }
         };
     }
