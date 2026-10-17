@@ -232,6 +232,14 @@ public final class Strings {
     public static final String AI_MODEL_NAME = "ai.model.name";
     public static final String AI_MODEL_SAVE = "ai.model.save";
     public static final String AI_MODEL_HINT = "ai.model.hint";
+    public static final String AI_MODEL_ADD = "ai.model.add";
+    public static final String AI_MODEL_EDIT = "ai.model.edit";
+    public static final String AI_MODEL_DELETE = "ai.model.delete";
+    public static final String AI_MODEL_NAME_FIELD = "ai.model.namefield";
+    public static final String AI_MODEL_EMPTY = "ai.model.empty";
+    public static final String AI_MODEL_INCOMPLETE = "ai.model.incomplete";
+    public static final String AI_MODEL_SHOW_KEY = "ai.model.showkey";
+    public static final String AI_MODEL_KEY_NOTE = "ai.model.keynote";
     public static final String SETTINGS_CONN = "settings.conn";
     public static final String SETTINGS_LOOK = "settings.look";
     public static final String SETTINGS_LANGUAGE = "settings.language";
@@ -1206,6 +1214,20 @@ public final class Strings {
                 + "连不上多半是跨域(CORS)被拦：本地 Ollama 需设 OLLAMA_ORIGINS=*",
                 "In custom mode the page sends the request itself. If it cannot connect, "
                 + "it is usually CORS: local Ollama needs OLLAMA_ORIGINS=* set.");
+        put(ZH_TEXT, EN_TEXT, AI_MODEL_ADD, "＋ 添加模型", "Add model");
+        put(ZH_TEXT, EN_TEXT, AI_MODEL_EDIT, "编辑", "Edit");
+        put(ZH_TEXT, EN_TEXT, AI_MODEL_DELETE, "删除", "Delete");
+        put(ZH_TEXT, EN_TEXT, AI_MODEL_NAME_FIELD, "名称", "Name");
+        put(ZH_TEXT, EN_TEXT, AI_MODEL_EMPTY,
+                "还没有配置模型，现在用的是内置模型。",
+                "No models configured yet; the built-in one is in use.");
+        put(ZH_TEXT, EN_TEXT, AI_MODEL_INCOMPLETE, "配置不完整", "Incomplete");
+        put(ZH_TEXT, EN_TEXT, AI_MODEL_SHOW_KEY, "显示", "Show");
+        put(ZH_TEXT, EN_TEXT, AI_MODEL_KEY_NOTE,
+                "API key 不会写入日志、提示或错误文字；"
+                + "但请求由页面发出，所以请求期间它存在页面内存里。",
+                "The API key never goes into logs, hints or error text. "
+                + "The request is sent from the page, so the key is in page memory while it runs.");
         put(ZH_TEXT, EN_TEXT, SETTINGS_CONN, "连接", "Connection");
         put(ZH_TEXT, EN_TEXT, SETTINGS_LOOK, "界面风格", "Theme");
         put(ZH_TEXT, EN_TEXT, SETTINGS_LANGUAGE, "语言", "Language");

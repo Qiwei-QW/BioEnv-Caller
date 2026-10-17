@@ -196,10 +196,33 @@ public final class AiAssistPanel extends JPanel {
         pushLang(lang);
         if (!pendingContext.isEmpty()) {
             pushContext(pendingContext);
+        pushModels(pendingModels);
         }
     }
 
     /** 把当前工具 / 命令 / 上次运行等推给页面（JSON 字符串）。 */
+    /** 模型列表；网页还没建的时候先放这里。 */
+    private String pendingModels = "[]";
+
+    /**
+     * 把模型列表推给页面。
+     *
+     * <p>页面拿不到 Java 那边的存盘，只能推。这里面带 API key ——
+     * 请求是页面发的，没有它发不出去；同一进程里没有更安全的通道。
+     * 这一点在设置界面上写清楚了。
+     */
+    public void setModels(String json) {
+        pendingModels = (json == null || json.trim().length() == 0) ? "[]" : json;
+        pushModels(pendingModels);
+    }
+
+    private void pushModels(String json) {
+        if (view == null) {
+            return;
+        }
+        view.run("window.tbvAi && window.tbvAi.setModels(" + jsString(json) + ")");
+    }
+
     public void pushContext(String json) {
         pendingContext = json == null ? "" : json;
         if (view != null) {

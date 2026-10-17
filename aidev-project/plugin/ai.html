@@ -108,6 +108,22 @@
   .mcfg-f button{font-size:11px;padding:3px 10px;border:1px solid var(--line);border-radius:6px;
     background:var(--panel);color:var(--fg);cursor:pointer}
   .mcfg-note{color:var(--muted)}
+/* 模型胶囊：输入框右下，点开在上面弹列表 */
+  .pill{position:absolute;right:50px;bottom:9px;max-width:118px;height:26px;
+    padding:0 8px;border:1px solid var(--line);border-radius:13px;background:var(--panel);
+    color:var(--muted);font-size:11px;cursor:pointer;overflow:hidden;white-space:nowrap;
+    text-overflow:ellipsis;font-family:inherit}
+  .pill:hover{color:var(--ink)}
+  .pop{position:absolute;right:50px;bottom:40px;min-width:190px;max-height:220px;overflow:auto;
+    background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:4px;
+    box-shadow:0 6px 20px rgba(0,0,0,.18);font-size:12px;z-index:20}
+  .pop[hidden]{display:none}
+  .pop-item{display:flex;align-items:center;gap:7px;padding:6px 8px;border-radius:7px;cursor:pointer}
+  .pop-item:hover{background:var(--hover, rgba(128,128,128,.16))}
+  .pop-item .dot{width:7px;height:7px;border-radius:50%;background:#9a9a9a;flex:none}
+  .pop-item .dot.ok{background:#2ea043}
+  .pop-item .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .pop-item.now{background:var(--hover, rgba(128,128,128,.16));font-weight:600}
   .bar{display:flex;justify-content:space-between;align-items:center;margin-top:6px;font-size:11px;color:var(--muted)}
 /* 发送按钮进输入框：外层相对定位，按钮压右下角；文字给它让出一条。 */
 #askWrap{position:relative;flex:1;display:flex}
@@ -189,32 +205,17 @@ pre .cp:hover{opacity:1}
     <!-- 一个按钮，两种状态：不忙是发送（▶），忙了是停止（■）。
          本来就是同一件事的两面，分成两个按钮只会让人犹豫按哪个。 -->
     <button id="pick" class="icon" title="添加文件或图片">＋</button>
-    <button id="go" class="primary" title="发送"><svg class="ic send" viewBox="0 0 24 24"
+    <button id="modelPill" class="pill" title="切换模型"></button>
+   <div id="modelPop" class="pop" hidden></div>
+   <button id="go" class="primary" title="发送"><svg class="ic send" viewBox="0 0 24 24"
       aria-hidden="true"><path d="M12 5v13M6 11l6-6 6 6" fill="none" stroke="currentColor"
       stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg><svg
       class="ic stop" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10"
       height="10" rx="1.6" fill="currentColor"/></svg></button>
     </div>
   </div>
-  <div id="modelCfg" class="mcfg" hidden>
-    <div class="mcfg-h">模型</div>
-    <select id="mMode">
-      <option value="builtin">内置模型</option>
-      <option value="custom">自定义（OpenAI 兼容）</option>
-    </select>
-    <div id="mCustom">
-      <input id="mUrl" placeholder="https://api.deepseek.com/v1">
-      <input id="mKey" placeholder="API key（明文存在本机）">
-      <input id="mModel" placeholder="deepseek-chat">
-    </div>
-    <div class="mcfg-f">
-      <button id="mSave">保存</button>
-      <span id="mNote" class="mcfg-note"></span>
-    </div>
-  </div>
   <div class="bar">
     <span id="budget"></span>
-    <button id="model" class="link"></button>
   </div>
 </footer>
 
@@ -358,62 +359,95 @@ function why(code) {
 
 /* ---------------- 状态 ---------------- */
 var bridge = null;           // window.tbtools.ai
-  var modelCfg = null;         // Java 推过来的模型配置
 
   /**
-   * 模型配置存在页面自己这里。
+   * 模型列表由 Java（设置窗口）推过来；页面只存“选中哪一个”。
    *
-   * <p>为什么不存 Java 那边：页面→Java 没有通道，写不进去。
-   * 而同一份配置存两处，早晚会不一致 —— 所以只存这一处。
+   * <p>两个不相交的集合：列表只能在设置里改，选中只能在这里改。
+   * 上一版两边都能改同一份配置，结果面板里改了不生效。
+   *
+   * <p><b>API key 不进这里的任何文本。</b> 列表里带 key（发请求要用），
+   * 但界面只渲染 label；key 不入 DOM、不入 title、不入提示。
    */
-  var MKEY = "tbv.ai.model";
+  var models = [];              // [{id,label,baseUrl,apiKey,model,ok}]
+  var SELKEY = "tbv.ai.sel";
+  var selId = null;             // null = 内置
 
-  function loadModel() {
+  function loadSel() {
     try {
-      var raw = localStorage.getItem(MKEY);
-      if (raw) { modelCfg = JSON.parse(raw); }
+      var raw = localStorage.getItem(SELKEY);
+      selId = (raw === null || raw === "") ? null : raw;
     } catch (e) {
-      // file:// 下 localStorage 可能直接抛 —— 那就退成“这次运行内有效”。
+      // file:// 下 localStorage 可能抛 —— 退成“这次运行内有效”。
     }
   }
 
-  function saveModel() {
-    try { localStorage.setItem(MKEY, JSON.stringify(modelCfg)); } catch (e) {}
+  function saveSel() {
+    try { localStorage.setItem(SELKEY, selId === null ? "" : selId); } catch (e) {}
   }
 
-  /** 下面那个小链接显示当前的模型名。 */
-  function renderModel() {
-    el("model").textContent = customModel() ? String(modelCfg.model) : "内置模型";
-    el("model").title = customModel() ? String(modelCfg.baseUrl) : "点一下换模型";
-  }
-
-  function openModelCfg(open) {
-    var box = el("modelCfg");
-    if (open === undefined) { open = box.hasAttribute("hidden"); }
-    if (open) {
-      box.removeAttribute("hidden");
-      el("mMode").value = (modelCfg && modelCfg.mode === "custom") ? "custom" : "builtin";
-      el("mUrl").value = (modelCfg && modelCfg.baseUrl) || "";
-      el("mKey").value = (modelCfg && modelCfg.apiKey) || "";
-      el("mModel").value = (modelCfg && modelCfg.model) || "";
-      syncCustomVisible();
-    } else {
-      box.setAttribute("hidden", "");
+  /** 当前选中的模型；null = 内置。 */
+  function currentModel() {
+    if (selId === null) { return null; }
+    for (var i = 0; i < models.length; i++) {
+      if (String(models[i].id) === String(selId)) {
+        return models[i].ok ? models[i] : null;
+      }
     }
-    el("log").scrollTop = el("log").scrollHeight;
+    return null;
   }
 
-  function syncCustomVisible() {
-    el("mCustom").style.display =
-      (el("mMode").value === "custom") ? "block" : "none";
+  function modelLabel() {
+    var m = currentModel();
+    return m ? (m.label || m.model) : "内置模型";
   }
 
-  /** 现在是不是要走用户自己的接口。 */
-  function customModel() {
-    return !!(modelCfg && modelCfg.mode === "custom"
-              && String(modelCfg.baseUrl || "").trim()
-              && String(modelCfg.model || "").trim());
-  }           // window.tbtools.ai，没有就是 null
+  function renderPill() {
+    var b = el("modelPill");
+    b.textContent = modelLabel() + " ‹";
+    b.title = (lang === "en") ? "Switch model" : "切换模型";
+  }
+
+  function renderPop() {
+    var pop = el("modelPop");
+    pop.innerHTML = "";
+    pop.appendChild(popItem(null));
+    for (var i = 0; i < models.length; i++) {
+      pop.appendChild(popItem(models[i]));
+    }
+  }
+
+  /** 一行。只拿 label 和 ok，绝不碰 key。 */
+  function popItem(m) {
+    var d = document.createElement("div");
+    d.className = "pop-item";
+    if ((m ? String(m.id) : null) === (selId === null ? null : String(selId))) {
+      d.className += " now";
+    }
+    var dot = document.createElement("span");
+    dot.className = "dot" + (m === null ? " ok" : (m.ok ? " ok" : ""));
+    d.appendChild(dot);
+    var nm = document.createElement("span");
+    nm.className = "nm";
+    nm.textContent = m === null ? "内置模型" : (m.label || m.model);
+    d.appendChild(nm);
+    d.onclick = function () {
+      selId = (m === null) ? null : String(m.id);
+      saveSel();
+      renderPill();
+      openPop(false);
+    };
+    return d;
+  }
+
+  function openPop(open) {
+    var pop = el("modelPop");
+    if (open === undefined) { open = pop.hasAttribute("hidden"); }
+    if (open) { renderPop(); pop.removeAttribute("hidden"); }
+    else { pop.setAttribute("hidden", ""); }
+  }
+
+           // window.tbtools.ai，没有就是 null
 var context = null;          // Java 推过来的上下文
 var busy = false;
 var abortFn = null;
@@ -832,16 +866,20 @@ window.tbvAi = {
     applyLang();
   },
   /**
-   * Java 推过来的模型配置。
+   * Java 推过来的模型列表。
    *
-   * <p>页面自己拿不到 Java 那边的存盘，只能靠推。推不到就等于“用内置”。
+   * <p>这里只拿来渲染 label 和状态点 —— <b>key 不进 DOM</b>。
+   * 请求要用的时候再从对象里取，不渲染、不记录。
    */
-  setModel: function (cfg) {
+  setModels: function (json) {
     try {
-      modelCfg = (typeof cfg === "string") ? JSON.parse(cfg) : cfg;
+      models = (typeof json === "string") ? JSON.parse(json) : (json || []);
     } catch (e) {
-      modelCfg = null;
+      models = [];
     }
+    if (!(models instanceof Array)) { models = []; }
+    renderPill();
+    if (el("modelPop") && !el("modelPop").hasAttribute("hidden")) { renderPop(); }
   },
   ask: function (text) {
     el("ask").value = text || "";
@@ -933,7 +971,7 @@ function sysPrompt() {
  * <p>流式解析：SSE 的事件之间用空行分隔，而分片不保证落在边界上 ——
  * 所以必须把它当流处理，不能假设每一块就是一个完整事件。
  */
-function sendExternal(msgs, box) {
+function sendExternal(msgs, box, cfg) {
   var ctrl = new AbortController();
   var acc = "";
 
@@ -959,19 +997,21 @@ function sendExternal(msgs, box) {
     }
   }
 
-  var url = String(modelCfg.baseUrl).replace(/\/+$/, "") + "/chat/completions";
+  var url = String(cfg.baseUrl).replace(/\/+$/, "") + "/chat/completions";
   var p = fetch(url, {
     method: "POST",
     signal: ctrl.signal,
     headers: {
       "Content-Type": "application/json",
-      "Authorization": "Bearer " + (modelCfg.apiKey || "")
+      "Authorization": "Bearer " + (cfg.apiKey || "")
     },
-    body: JSON.stringify({ model: modelCfg.model, messages: msgs, stream: true })
+    body: JSON.stringify({ model: cfg.model, messages: msgs, stream: true })
   }).then(function (res) {
     if (!res.ok) {
       return res.text().then(function (body) {
         var tail = String(body || "").slice(0, 300);
+        // 服务端万一回显了 key，就打码 —— 错误文字会被用户看到、被截图。
+        if (cfg.apiKey) { tail = tail.split(cfg.apiKey).join("***"); }
         throw (lang === "en" ? "HTTP " : "接口返回 ") + res.status + "  " + tail;
       });
     }
@@ -1017,34 +1057,23 @@ function sendExternal(msgs, box) {
   return p;
 }
 
-loadModel();
-  renderModel();
-  el("model").onclick = function () { openModelCfg(); };
-  el("mMode").onchange = function () { syncCustomVisible(); };
-  el("mSave").onclick = function () {
-    var mode = el("mMode").value === "custom" ? "custom" : "builtin";
-    var url = el("mUrl").value.trim();
-    var name = el("mModel").value.trim();
-    modelCfg = {
-      mode: mode,
-      baseUrl: url,
-      apiKey: el("mKey").value.trim(),
-      model: name
-    };
-    saveModel();
-    renderModel();
-    var bad = (mode === "custom" && !url) ? "请填接口地址"
-            : (mode === "custom" && !name) ? "请填模型名" : "";
-    el("mNote").textContent = bad || "已保存";
-    if (!bad) {
-      setTimeout(function () { openModelCfg(false); el("mNote").textContent = ""; }, 700);
-    }
+loadSel();
+  renderPill();
+  el("modelPill").onclick = function (ev) {
+    ev.stopPropagation();
+    openPop();
   };
+  document.addEventListener("click", function (ev) {
+    var pop = el("modelPop");
+    if (!pop || pop.hasAttribute("hidden")) { return; }
+    if (pop.contains(ev.target) || ev.target === el("modelPill")) { return; }
+    openPop(false);
+  });
 
   function send() {
   if (busy) { stop(); return; }
   // 自定义模式下不需要桥 —— 请求是页面自己发的。
-  if (!bridge && !customModel()) { return; }
+  if (!bridge && !currentModel()) { return; }
 
   var q = el("ask").value.trim();
   // 只带附件、不写字也得能发 —— 否则传个文件问它是什么这件事就做不了。
@@ -1096,7 +1125,8 @@ loadModel();
   var base = "";
   var p;
   try {
-    if (img && customModel()) {
+    var cur = currentModel();
+    if (img && cur) {
       // 自定义模式下不支持图片 —— 先说清楚，不要把图当文字发过去。
       box.className = "m e";
       box.textContent = (lang === "en")
@@ -1109,8 +1139,8 @@ loadModel();
       // 图片走 chatImage。注意它的签名是 (text, dataUrl, mime) --
       // 一条文本，不是消息数组，所以这一次请求不带历史、也没有流式增量。
       p = bridge.chatImage(full, img.data, img.mime);
-    } else if (customModel()) {
-      p = sendExternal(msgs, box);
+    } else if (cur) {
+      p = sendExternal(msgs, box, cur);
     } else {
     p = bridge.chat(msgs, {
       onDelta: function (s) {
