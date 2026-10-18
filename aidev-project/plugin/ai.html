@@ -6,12 +6,14 @@
 <style>
   :root{
     --bg:#f7f7f8; --panel:#ffffff; --line:#d8d8dc; --fg:#22242a; --muted:#6b6f76;
+    --hover:rgba(0,0,0,.055);
     --accent:#1f6feb; --user:#e8f0fe; --ai:#f2f3f5; --err:#b3261e; --ok:#1a7f37; --warn:#9a6700;
     --code:#eff0f2;
     --mono:Consolas,"Courier New",monospace;
   }
   body.theme-dark{
     --bg:#1e1e22; --panel:#26262b; --line:#3a3a42; --fg:#e6e6ea; --muted:#9aa0a6;
+    --hover:rgba(255,255,255,.10);
     --accent:#4c8dff; --user:#2a3a55; --ai:#2c2c33; --err:#ff8a80; --ok:#7ee787; --warn:#e3b341;
     --code:#17171b;
   }
@@ -44,6 +46,8 @@
   }
 
   #diag{flex:none}
+  #log .empty{display:flex;align-items:center;justify-content:center;height:100%;
+    padding:0 26px;color:var(--muted);font-size:12px;text-align:center;line-height:1.8}
   #log{flex:1;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:8px}
 
   .m{max-width:100%;padding:7px 10px;border-radius:8px;overflow-wrap:anywhere}
@@ -97,33 +101,71 @@
   /* 图标按钮：方一点，不抢视线 */
   button.icon{padding:6px 9px;font-size:13px;line-height:1}
   button:disabled{opacity:.5;cursor:default}
+  /* 键盘 Tab 过去时要能看出焦点在哪 —— 鼠标点不挂这个规则 */
+  .pill:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  /* 模型配置：放在面板里，不再藏在设置窗口后面 */
+  .link{background:none;border:0;padding:0;font:inherit;color:var(--accent);cursor:pointer}
+  .mcfg{border:1px solid var(--line);border-radius:8px;padding:8px;margin-top:6px;font-size:11px}
+  .mcfg[hidden]{display:none}
+  .mcfg-h{font-weight:600;margin-bottom:6px;color:var(--fg)}
+  .mcfg select,.mcfg input{width:100%;box-sizing:border-box;font-size:11px;padding:4px 6px;
+    margin:3px 0;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg)}
+  .mcfg-f{display:flex;align-items:center;gap:8px;margin-top:4px}
+  .mcfg-f button{font-size:11px;padding:3px 10px;border:1px solid var(--line);border-radius:6px;
+    background:var(--panel);color:var(--fg);cursor:pointer}
+  .mcfg-note{color:var(--muted)}
+/* 模型胶囊：输入框右下，点开在上面弹列表 */
+  /* 箭头用 CSS 画 —— 字符箭头在行里偏高，flex 居中才靠谱 */
+  /* 箭头用 SVG —— 字符箭头坐在字上沿，旋转的方框也不会真的居中。 */
+  .pill-a{width:10px;height:10px;flex:none;transition:transform .15s}
+  .pill-a.open{transform:rotate(180deg)}  /* 展开时指向下 */
+  .pill{position:absolute;right:50px;bottom:9px;height:26px;padding:0 6px;
+    display:flex;align-items:center;gap:4px;
+    border:0;background:transparent;color:var(--muted);font-size:11px;cursor:pointer;
+    white-space:nowrap;font-family:inherit}
+  .pill:hover{color:var(--ink)}
+  .pop{position:absolute;right:50px;bottom:40px;min-width:190px;max-height:220px;overflow:auto;
+    background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:4px;
+    box-shadow:0 6px 20px rgba(0,0,0,.18);font-size:12px;z-index:20}
+  .pop[hidden]{display:none}
+  .pop-item{display:flex;align-items:center;gap:7px;padding:6px 8px;border-radius:7px;cursor:pointer}
+  .pop-item:hover{background:var(--hover, rgba(128,128,128,.16))}
+  .pop-item .dot{width:7px;height:7px;border-radius:50%;background:#9a9a9a;flex:none}
+  .pop-item .dot.ok{background:#2ea043}
+  .pop-item .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .pop-item.now{background:var(--hover, rgba(128,128,128,.16));font-weight:600}
   .bar{display:flex;justify-content:space-between;align-items:center;margin-top:6px;font-size:11px;color:var(--muted)}
 /* 发送按钮进输入框：外层相对定位，按钮压右下角；文字给它让出一条。 */
-#askWrap{position:relative;flex:1;display:flex}
-#askWrap #ask{flex:1;width:100%;padding-right:52px}
+#askWrap{position:relative;flex:1;display:flex;padding-bottom:44px;
+    border:1px solid var(--line);border-radius:8px;background:var(--bg)}
+  /* 输入框本身不再有框 —— 框在外层容器上，所以看起来是一个整框 */
+  #askWrap #ask{border:0;border-radius:0;background:transparent;box-shadow:none;outline:none}
+  /* 聚焦时让框本身变色 —— 而不是在 textarea 上面套一圈黑框 */
+  #askWrap:focus-within{border-color:var(--accent)}
+#askWrap #ask{flex:1;width:100%;padding-left:10px;padding-right:14px}
 #askWrap #go{position:absolute;right:7px;bottom:7px;width:38px;height:28px;
              min-width:0;padding:0;font-size:13px;line-height:1}
 /* 会话名占满那一行：它是这一栏里唯一需要宽度看全的东西。 */
 #sessSel{flex:1;min-width:0}
 /* + 在输入框左下角，发送在右下角。 */
-#askWrap{padding:0}
-#askWrap #ask{padding-left:34px;padding-right:52px}
+#askWrap{padding:0 0 44px 0}
+#askWrap #ask{padding-left:10px;padding-right:14px}
 #askWrap #pick{position:absolute;left:7px;bottom:7px;width:28px;height:28px;
                min-width:0;padding:0;font-size:15px;line-height:1;font-weight:600}
 #atts{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 6px}
 #atts .att{display:flex;align-items:center;gap:4px;font-size:11px;
-           background:var(--panel);border:1px solid var(--line);border-radius:10px;
-           padding:2px 8px;max-width:100%}
+           background:var(--panel);border:1px solid var(--line);border-radius:6px;
+\1padding:2px 8px;max-width:100%}
 #atts .att span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:190px}
 #atts .att b{cursor:pointer;font-weight:400;opacity:.6;padding:0 2px}
 #atts .att b:hover{opacity:1}
 #explain{display:none;width:100%;margin:0 0 6px;font-size:12px;text-align:left}
 /* 输入框高一些。原来一行高，+ 和 ▶ 挤在里面，字还没打几个就到边了。 */
-#askWrap #ask{min-height:104px;line-height:1.55;resize:none;padding-top:9px;padding-bottom:38px}
+#askWrap #ask{min-height:76px;line-height:1.55;resize:none;padding-top:9px;padding-bottom:0}
 /* 加号：不要外框，就是一个符号。它是个辅助入口，不该和发送那个主按钮一样重。 */
-#askWrap #pick{left:9px;bottom:9px;width:30px;height:30px;padding:0;
+#askWrap #pick{left:9px;bottom:9px;width:32px;height:32px;padding:0;
                border:none;background:transparent;box-shadow:none;
-               font-size:21px;font-weight:400;line-height:1;color:var(--muted)}
+               font-size:26px;font-weight:300;line-height:1;color:var(--muted)}
 #askWrap #pick:hover{color:var(--ink);background:transparent}
 /* 发送：蓝色圆形，里面一个白箭头。字号图标在这个尺寸下不好看，用 SVG。 */
 #askWrap #go{right:9px;bottom:9px;width:32px;height:32px;padding:0;
@@ -177,8 +219,10 @@ pre .cp:hover{opacity:1}
     <textarea id="ask" rows="4"></textarea>
     <!-- 一个按钮，两种状态：不忙是发送（▶），忙了是停止（■）。
          本来就是同一件事的两面，分成两个按钮只会让人犹豫按哪个。 -->
-    <button id="pick" class="icon" title="添加文件或图片">＋</button>
-    <button id="go" class="primary" title="发送"><svg class="ic send" viewBox="0 0 24 24"
+    <button id="pick" class="icon" title="添加文件或图片">+</button>
+    <button id="modelPill" class="pill" title="切换模型"></button>
+   <div id="modelPop" class="pop" hidden></div>
+   <button id="go" class="primary" title="发送"><svg class="ic send" viewBox="0 0 24 24"
       aria-hidden="true"><path d="M12 5v13M6 11l6-6 6 6" fill="none" stroke="currentColor"
       stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg><svg
       class="ic stop" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10"
@@ -187,7 +231,6 @@ pre .cp:hover{opacity:1}
   </div>
   <div class="bar">
     <span id="budget"></span>
-    <span id="model"></span>
   </div>
 </footer>
 
@@ -330,7 +373,121 @@ function why(code) {
 }
 
 /* ---------------- 状态 ---------------- */
-var bridge = null;           // window.tbtools.ai，没有就是 null
+var bridge = null;           // window.tbtools.ai
+
+  /**
+   * 模型列表由 Java（设置窗口）推过来；页面只存“选中哪一个”。
+   *
+   * <p>两个不相交的集合：列表只能在设置里改，选中只能在这里改。
+   * 上一版两边都能改同一份配置，结果面板里改了不生效。
+   *
+   * <p><b>API key 不进这里的任何文本。</b> 列表里带 key（发请求要用），
+   * 但界面只渲染 label；key 不入 DOM、不入 title、不入提示。
+   */
+  var models = [];              // [{id,label,baseUrl,apiKey,model,ok}]
+  var SELKEY = "tbv.ai.sel";
+  var lastPromptTok = 0;        // 上一次发出去的提示估算 token
+  var selId = null;
+  var popOpen = false;   // 列表是否展开（箭头朝向跟它走）             // null = 内置
+
+  function loadSel() {
+    try {
+      var raw = localStorage.getItem(SELKEY);
+      selId = (raw === null || raw === "") ? null : raw;
+    } catch (e) {
+      // file:// 下 localStorage 可能抛 —— 退成“这次运行内有效”。
+    }
+  }
+
+  function saveSel() {
+    try { localStorage.setItem(SELKEY, selId === null ? "" : selId); } catch (e) {}
+  }
+
+  /** 当前选中的模型；null = 内置。 */
+  function currentModel() {
+    if (selId === null) { return null; }
+    for (var i = 0; i < models.length; i++) {
+      if (String(models[i].id) === String(selId)) {
+        return models[i].ok ? models[i] : null;
+      }
+    }
+    return null;
+  }
+
+  function modelLabel() {
+    var m = currentModel();
+    return m ? (m.label || m.model) : "内置模型";
+  }
+
+  /** 3860 → 3.9k。底部那一行不该占太多字。 */
+  function compactN(n) {
+    return n >= 1000 ? (n / 1000).toFixed(1) + "k" : String(n);
+  }
+
+  function renderPill() {
+    var b = el("modelPill");
+    b.innerHTML = "";
+    var txt = document.createElement("span");
+    txt.textContent = modelLabel();
+    b.appendChild(txt);
+    var NS = "http://www.w3.org/2000/svg";
+    var ar = document.createElementNS(NS, "svg");
+    ar.setAttribute("viewBox", "0 0 24 24");
+    ar.setAttribute("class", "pill-a" + (popOpen ? " open" : ""));
+    var pth = document.createElementNS(NS, "path");
+    pth.setAttribute("d", "M6 15l6-6 6 6");
+    pth.setAttribute("fill", "none");
+    pth.setAttribute("stroke", "currentColor");
+    pth.setAttribute("stroke-width", "2.6");
+    pth.setAttribute("stroke-linecap", "round");
+    pth.setAttribute("stroke-linejoin", "round");
+    ar.appendChild(pth);
+    b.appendChild(ar);
+    b.title = (lang === "en") ? "Switch model" : "\u5207\u6362\u6a21\u578b";
+  }
+
+  function renderPop() {
+    var pop = el("modelPop");
+    pop.innerHTML = "";
+    pop.appendChild(popItem(null));
+    for (var i = 0; i < models.length; i++) {
+      pop.appendChild(popItem(models[i]));
+    }
+  }
+
+  /** 一行。只拿 label 和 ok，绝不碰 key。 */
+  function popItem(m) {
+    var d = document.createElement("div");
+    d.className = "pop-item";
+    if ((m ? String(m.id) : null) === (selId === null ? null : String(selId))) {
+      d.className += " now";
+    }
+    var dot = document.createElement("span");
+    dot.className = "dot" + (m === null ? " ok" : (m.ok ? " ok" : ""));
+    d.appendChild(dot);
+    var nm = document.createElement("span");
+    nm.className = "nm";
+    nm.textContent = m === null ? "内置模型" : (m.label || m.model);
+    d.appendChild(nm);
+    d.onclick = function () {
+      selId = (m === null) ? null : String(m.id);
+      saveSel();
+      renderPill();
+      openPop(false);
+    };
+    return d;
+  }
+
+  function openPop(open) {
+    var pop = el("modelPop");
+    if (open === undefined) { open = pop.hasAttribute("hidden"); }
+    popOpen = !!open;
+    if (popOpen) { renderPop(); pop.removeAttribute("hidden"); }
+    else { pop.setAttribute("hidden", ""); }
+    renderPill();
+  }
+
+           // window.tbtools.ai，没有就是 null
 var context = null;          // Java 推过来的上下文
 var busy = false;
 var abortFn = null;
@@ -610,7 +767,13 @@ function renderLog() {
       wireCopy(bb);
     }
   }
-  if (!turns.length) { bubble("s", t("empty")); }
+  if (!turns.length) {
+      // 面板那么大，一行字飘在顶上会显得空。居中放。
+      var e = document.createElement("div");
+      e.className = "empty";
+      e.textContent = t("empty");
+      el("log").appendChild(e);
+    }
 }
 
 /**
@@ -748,6 +911,22 @@ window.tbvAi = {
     lang = (String(name).toLowerCase() === "en") ? "en" : "zh";
     applyLang();
   },
+  /**
+   * Java 推过来的模型列表。
+   *
+   * <p>这里只拿来渲染 label 和状态点 —— <b>key 不进 DOM</b>。
+   * 请求要用的时候再从对象里取，不渲染、不记录。
+   */
+  setModels: function (json) {
+    try {
+      models = (typeof json === "string") ? JSON.parse(json) : (json || []);
+    } catch (e) {
+      models = [];
+    }
+    if (!(models instanceof Array)) { models = []; }
+    renderPill();
+    if (el("modelPop") && !el("modelPop").hasAttribute("hidden")) { renderPop(); }
+  },
   ask: function (text) {
     el("ask").value = text || "";
     send();
@@ -800,10 +979,28 @@ function refreshCtx() {
   if (context && context.tool) { bits.push(context.tool + " 的帮助"); }
   if (context && context.workdir) { bits.push("工作目录"); }
   if (context && context.lastRun) { bits.push("上次运行"); }
-  el("budget").textContent = txt
-    ? ((bits.length ? "已带上：" + bits.join(" · ") + " · " : "")
-       + txt.length + " 字符（上限约 32000）")
-    : "";
+  updateStats(bits);
+}
+
+/**
+ * 底部那一行：上下文用量 / 上限 / 百分比 · 轮数。
+ *
+ * <p>token 是估的：字符数 ÷ 2。和 trimToBudget 用的是同一个口径 ——
+ * 两处口径不一样的话，用户会看到互相矛盾的两个数字。
+ */
+function updateStats(bits) {
+  var m = currentModel();
+  var lim = (m && m.maxIn > 0) ? m.maxIn : 0;
+  var out = [];
+  if (lastPromptTok > 0) {
+    out.push("\u4e0a\u4e0b\u6587 " + compactN(lastPromptTok)
+             + (lim > 0 ? " / " + compactN(lim) + " \u00b7 "
+                 + Math.min(999, Math.round(lastPromptTok / lim * 100)) + "%" : " token"));
+  }
+  var rounds = Math.floor(turns.length / 2);
+  if (rounds > 0) { out.push(rounds + " \u8f6e"); }
+  if (bits && bits.length) { out.push("\u5df2\u5e26\u4e0a " + bits.length + " \u9879"); }
+  el("budget").textContent = out.join(" \u00b7 ");
 }
 
 function applyLang() {
@@ -829,9 +1026,138 @@ function sysPrompt() {
       + "绝对不要编造参数名。给出命令时请放进代码块。回答要简短、可操作。";
 }
 
-function send() {
+/**
+ * 用用户自己的 OpenAI 兼容接口发一次请求。
+ *
+ * <p>为什么在页面里发：页面→Java 没有通道，Java →页面只有注入。
+ * 通道只有一个方向能用，那就只能在这一边发。
+ *
+ * <p>流式解析：SSE 的事件之间用空行分隔，而分片不保证落在边界上 ——
+ * 所以必须把它当流处理，不能假设每一块就是一个完整事件。
+ */
+function trimToBudget(msgs, maxIn) {
+    // 不发给服务端 —— 只在本地决定发多少上下文。
+    // 字符数当两个 token 粗估；宁可保守，也不要被截断。
+    if (!maxIn || maxIn <= 0 || msgs.length <= 2) { return msgs; }
+    var budget = maxIn * 2;
+    var total = 0;
+    for (var i = 0; i < msgs.length; i++) {
+      total += String(msgs[i].content || "").length;
+    }
+    var out = msgs.slice();
+    while (total > budget && out.length > 2) {
+      var dropped = out.splice(1, 1)[0];      // 第 0 条是 system，不动
+      total -= String(dropped.content || "").length;
+    }
+    return out;
+  }
+
+  function sendExternal(msgs, box, cfg) {
+  var ctrl = new AbortController();
+  var acc = "";
+
+  function onEvent(chunk) {
+    var lines = chunk.split("\n");
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i].replace(/\r$/, "");
+      if (line.indexOf("data:") !== 0) { continue; }
+      var payload = line.slice(5).trim();
+      if (!payload || payload === "[DONE]") { continue; }
+      try {
+        var j = JSON.parse(payload);
+        var ch = j.choices && j.choices[0];
+        var d = ch && (ch.delta || ch.message);
+        if (d && d.content) {
+          acc += d.content;
+          box.textContent = acc;
+          el("log").scrollTop = el("log").scrollHeight;
+        }
+      } catch (e) {
+        // 一个坏帧不能把整次回答带歪。
+      }
+    }
+  }
+
+  // 输出上限：填了才发，否则用服务端默认。
+  var body = { model: cfg.model, messages: trimToBudget(msgs, cfg.maxIn), stream: true };
+  if (cfg.maxOut > 0) { body.max_tokens = cfg.maxOut; }
+  var url = String(cfg.baseUrl).replace(/\/+$/, "") + "/chat/completions";
+  var p = fetch(url, {
+    method: "POST",
+    signal: ctrl.signal,
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer " + (cfg.apiKey || "")
+    },
+    body: JSON.stringify(body)
+  }).then(function (res) {
+    if (!res.ok) {
+      return res.text().then(function (body) {
+        var tail = String(body || "").slice(0, 300);
+        // 服务端万一回显了 key，就打码 —— 错误文字会被用户看到、被截图。
+        if (cfg.apiKey) { tail = tail.split(cfg.apiKey).join("***"); }
+        throw (lang === "en" ? "HTTP " : "接口返回 ") + res.status + "  " + tail;
+      });
+    }
+    if (!res.body || !res.body.getReader) {
+      return res.text().then(function (txt) {
+        try {
+          var j = JSON.parse(txt);
+          var m = j.choices && j.choices[0] && j.choices[0].message;
+          acc = (m && m.content) ? m.content : txt;
+        } catch (e) { acc = txt; }
+        box.textContent = acc;
+        return acc;
+      });
+    }
+    var reader = res.body.getReader();
+    var dec = new TextDecoder("utf-8");
+    var buf = "";
+    function pump() {
+      return reader.read().then(function (r) {
+        if (r.done) {
+          if (buf.trim().length) { onEvent(buf); }
+          return acc;
+        }
+        buf += dec.decode(r.value, { stream: true });
+        var idx;
+        while ((idx = buf.indexOf("\n\n")) >= 0) {
+          onEvent(buf.slice(0, idx));
+          buf = buf.slice(idx + 2);
+        }
+        return pump();
+      });
+    }
+    return pump();
+  }).then(function (text) {
+    return (typeof text === "string" && text) ? text : acc;
+  }, function (e) {
+    if (e && e.name === "AbortError") { return acc; }
+    throw e;
+  });
+
+  // abortFn 靠这个下手。
+  p.abort = function () { try { ctrl.abort(); } catch (e) {} };
+  return p;
+}
+
+loadSel();
+  renderPill();
+  el("modelPill").onclick = function (ev) {
+    ev.stopPropagation();
+    openPop();
+  };
+  document.addEventListener("click", function (ev) {
+    var pop = el("modelPop");
+    if (!pop || pop.hasAttribute("hidden")) { return; }
+    if (pop.contains(ev.target) || ev.target === el("modelPill")) { return; }
+    openPop(false);
+  });
+
+  function send() {
   if (busy) { stop(); return; }
-  if (!bridge) { return; }
+  // 自定义模式下不需要桥 —— 请求是页面自己发的。
+  if (!bridge && !currentModel()) { return; }
 
   var q = el("ask").value.trim();
   // 只带附件、不写字也得能发 —— 否则传个文件问它是什么这件事就做不了。
@@ -875,6 +1201,14 @@ function send() {
   }
   msgs.push({ role: "user", content: full });
 
+  // 发之前算一次，用来在底部显示上下文用量。
+  var promptChars = 0;
+  for (var pi = 0; pi < msgs.length; pi++) {
+    promptChars += String(msgs[pi].content || "").length;
+  }
+  lastPromptTok = Math.ceil(promptChars / 2);
+  updateStats([]);
+
   var box = bubble("a", "");
   busy = true;
   goUI();
@@ -883,10 +1217,22 @@ function send() {
   var base = "";
   var p;
   try {
+    var cur = currentModel();
+    if (img && cur) {
+      // 自定义模式下不支持图片 —— 先说清楚，不要把图当文字发过去。
+      box.className = "m e";
+      box.textContent = (lang === "en")
+        ? "Images are not supported on a custom model."
+        : "自定义模型暂不支持图片。";
+      finish();
+      return;
+    }
     if (img) {
       // 图片走 chatImage。注意它的签名是 (text, dataUrl, mime) --
       // 一条文本，不是消息数组，所以这一次请求不带历史、也没有流式增量。
       p = bridge.chatImage(full, img.data, img.mime);
+    } else if (cur) {
+      p = sendExternal(msgs, box, cur);
     } else {
     p = bridge.chat(msgs, {
       onDelta: function (s) {
@@ -929,7 +1275,13 @@ function send() {
     return;
   }
 
-  abortFn = function () { try { if (p && p.requestId) { bridge.abort(p.requestId); } } catch (e) {} };
+  abortFn = function () {
+    try {
+      // 自定义模型走 AbortController；内置走桥的 requestId。
+      if (p && typeof p.abort === "function") { p.abort(); }
+      else if (p && p.requestId) { bridge.abort(p.requestId); }
+    } catch (e) {}
+  };
 
   Promise.resolve(p).then(function (r) {
     var text = (typeof r === "string" && r) ? r : base;

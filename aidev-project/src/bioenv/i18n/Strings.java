@@ -223,6 +223,27 @@ public final class Strings {
     /** 设置卡（原来顶栏那一条）。 */
     public static final String SETTINGS_TITLE = "settings.title";
     /** 设置里“连接”那一块的标题。 */
+    /** 设置里“模型”那一块。 */
+    public static final String AI_MODEL_SECTION = "ai.model.section";
+    public static final String AI_MODEL_BUILTIN = "ai.model.builtin";
+    public static final String AI_MODEL_CUSTOM = "ai.model.custom";
+    public static final String AI_MODEL_URL = "ai.model.url";
+    public static final String AI_MODEL_KEY = "ai.model.key";
+    public static final String AI_MODEL_NAME = "ai.model.name";
+    public static final String AI_MODEL_SAVE = "ai.model.save";
+    public static final String AI_MODEL_HINT = "ai.model.hint";
+    public static final String AI_MODEL_ADD = "ai.model.add";
+    public static final String AI_MODEL_EDIT = "ai.model.edit";
+    public static final String AI_MODEL_DELETE = "ai.model.delete";
+    public static final String AI_MODEL_NAME_FIELD = "ai.model.namefield";
+    public static final String AI_MODEL_EMPTY = "ai.model.empty";
+    public static final String AI_MODEL_INCOMPLETE = "ai.model.incomplete";
+    public static final String AI_MODEL_SHOW_KEY = "ai.model.showkey";
+    public static final String AI_MODEL_KEY_NOTE = "ai.model.keynote";
+    public static final String AI_MODEL_MAX_OUT = "ai.model.maxout";
+    public static final String AI_MODEL_MAX_IN = "ai.model.maxin";
+    public static final String AI_MODEL_LEN_NOTE = "ai.model.lennote";
+    public static final String AI_MODEL_LEN_BAD = "ai.model.lenbad";
     public static final String SETTINGS_CONN = "settings.conn";
     public static final String SETTINGS_LOOK = "settings.look";
     public static final String SETTINGS_LANGUAGE = "settings.language";
@@ -1183,6 +1204,48 @@ public final class Strings {
                 "Collapse the AI assistant and go back to the tool tree");
         put(ZH_TEXT, EN_TEXT, AI_COLLAPSE_SHORT, "收起", "Hide");
         put(ZH_TEXT, EN_TEXT, SETTINGS_TITLE, "设置", "Settings");
+        put(ZH_TEXT, EN_TEXT, AI_MODEL_SECTION, "模型", "Model");
+        put(ZH_TEXT, EN_TEXT, AI_MODEL_BUILTIN, "内置模型", "Built-in");
+        put(ZH_TEXT, EN_TEXT, AI_MODEL_CUSTOM, "自定义（OpenAI 兼容）",
+                "Custom (OpenAI-compatible)");
+        put(ZH_TEXT, EN_TEXT, AI_MODEL_URL, "接口地址", "Endpoint");
+        put(ZH_TEXT, EN_TEXT, AI_MODEL_KEY,
+                "API key（明文保存在本机）", "API key (plain text, local)");
+        put(ZH_TEXT, EN_TEXT, AI_MODEL_NAME, "模型名称", "Model name");
+        put(ZH_TEXT, EN_TEXT, AI_MODEL_SAVE, "保存", "Save");
+        put(ZH_TEXT, EN_TEXT, AI_MODEL_HINT,
+                "自定义模式下请求由页面直接发出。"
+                + "连不上多半是跨域(CORS)被拦：本地 Ollama 需设 OLLAMA_ORIGINS=*",
+                "In custom mode the page sends the request itself. If it cannot connect, "
+                + "it is usually CORS: local Ollama needs OLLAMA_ORIGINS=* set.");
+        put(ZH_TEXT, EN_TEXT, AI_MODEL_ADD, "＋ 添加模型", "Add model");
+        put(ZH_TEXT, EN_TEXT, AI_MODEL_EDIT, "编辑", "Edit");
+        put(ZH_TEXT, EN_TEXT, AI_MODEL_DELETE, "删除", "Delete");
+        put(ZH_TEXT, EN_TEXT, AI_MODEL_NAME_FIELD, "显示名称", "Display name");
+        put(ZH_TEXT, EN_TEXT, AI_MODEL_EMPTY,
+                "还没有配置模型，现在用的是内置模型。",
+                "No models configured yet; the built-in one is in use.");
+        put(ZH_TEXT, EN_TEXT, AI_MODEL_INCOMPLETE, "配置不完整", "Incomplete");
+        put(ZH_TEXT, EN_TEXT, AI_MODEL_MAX_IN,
+                "最大输入长度（token，可写 1024K / 1M）",
+                "Max input (tokens; 1024K / 1M accepted)");
+        put(ZH_TEXT, EN_TEXT, AI_MODEL_MAX_OUT,
+                "最大输出长度（token，max_tokens）",
+                "Max output (tokens; max_tokens)");
+        put(ZH_TEXT, EN_TEXT, AI_MODEL_LEN_NOTE,
+                "\u4e0b\u9762\u4e24\u9879\u53ea\u5bf9\u300c\u81ea\u5b9a\u4e49\u300d\u6a21\u578b\u751f\u6548\uff1b"
+                + "\u5185\u7f6e\u6a21\u578b\u7684\u8bf7\u6c42\u7531 TBtools \u53d1\u51fa\uff0c\u65e0\u6cd5\u6307\u5b9a\u3002",
+                "The two below apply to custom models only - built-in requests are sent by "
+                + "TBtools and their length cannot be set here.");
+        put(ZH_TEXT, EN_TEXT, AI_MODEL_LEN_BAD,
+                "\u8bf7\u586b token \u6570\uff0c\u5982 4096\u30011024K\u30011M\uff1b\u7559\u7a7a\u8868\u793a\u4e0d\u9650\u3002",
+                "Length must be a number. Leave it blank for no limit.");
+        put(ZH_TEXT, EN_TEXT, AI_MODEL_SHOW_KEY, "显示", "Show");
+        put(ZH_TEXT, EN_TEXT, AI_MODEL_KEY_NOTE,
+                "API key 不会写入日志、提示或错误文字；"
+                + "但请求由页面发出，所以请求期间它存在页面内存里。",
+                "The API key never goes into logs, hints or error text. "
+                + "The request is sent from the page, so the key is in page memory while it runs.");
         put(ZH_TEXT, EN_TEXT, SETTINGS_CONN, "连接", "Connection");
         put(ZH_TEXT, EN_TEXT, SETTINGS_LOOK, "界面风格", "Theme");
         put(ZH_TEXT, EN_TEXT, SETTINGS_LANGUAGE, "语言", "Language");

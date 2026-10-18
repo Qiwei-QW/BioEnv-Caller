@@ -53,6 +53,7 @@ const documentStub = {
   body: makeEl("body"),
   getElementById: get,
   createElement: (tag) => makeEl("<" + tag + ">"),
+    createElementNS: (ns, tag) => makeEl("<" + tag + ">"),
   addEventListener() {},
   querySelector() { return null; },
   querySelectorAll() { return []; },

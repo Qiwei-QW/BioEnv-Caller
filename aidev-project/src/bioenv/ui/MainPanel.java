@@ -1968,14 +1968,19 @@ public final class MainPanel extends JPanel {
         // —— 语言 ——
         pages.add(settingsSection(I18n.t(Strings.SETTINGS_LANGUAGE), langToggle), "lang");
 
+        // —— 模型：一份列表，可增删改 ——
+        pages.add(settingsSection(I18n.t(Strings.AI_MODEL_SECTION), buildModelSection()), "model");
+
+
         // 导航。三个按钮互斥，点哪个右边就切到哪块。
         JPanel nav = new JPanel();
         nav.setLayout(new javax.swing.BoxLayout(nav, javax.swing.BoxLayout.Y_AXIS));
         nav.setOpaque(false);
         nav.setPreferredSize(new Dimension(120, 0));
-        final String[] cards = {"conn", "look", "lang"};
+        final String[] cards = {"conn", "look", "lang", "model"};
         final String[] names = {I18n.t(Strings.SETTINGS_CONN),
-                I18n.t(Strings.SETTINGS_LOOK), I18n.t(Strings.SETTINGS_LANGUAGE)};
+                I18n.t(Strings.SETTINGS_LOOK), I18n.t(Strings.SETTINGS_LANGUAGE),
+                I18n.t(Strings.AI_MODEL_SECTION)};
         javax.swing.ButtonGroup group = new javax.swing.ButtonGroup();
         for (int k = 0; k < cards.length; k++) {
             final javax.swing.JToggleButton b = new javax.swing.JToggleButton(names[k], k == 0);
@@ -2002,6 +2007,266 @@ public final class MainPanel extends JPanel {
         root.add(pages, java.awt.BorderLayout.CENTER);
         ((java.awt.CardLayout) pages.getLayout()).show(pages, "conn");
         return root;
+    }
+
+    /**
+     * “模型”那一块：用户配好的若干个接口，可增删改。
+     *
+     * <p>列表只能在这里改，存 Java 盘上；AI 面板只存“选中哪一个”。
+     * 两个不相交的集合，所以不会出现“改了不生效”。
+     */
+    private JPanel buildModelSection() {
+        final bioenv.ai.AiModelStore store = bioenv.ai.AiModelStore.load();
+        final JPanel box = new JPanel();
+        box.setOpaque(false);
+        box.setLayout(new javax.swing.BoxLayout(box, javax.swing.BoxLayout.Y_AXIS));
+        final JPanel rows = new JPanel();
+        rows.setOpaque(false);
+        rows.setLayout(new javax.swing.BoxLayout(rows, javax.swing.BoxLayout.Y_AXIS));
+        rows.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+
+        javax.swing.JButton add = new javax.swing.JButton(I18n.t(Strings.AI_MODEL_ADD));
+        add.setName("bioenv.model.add");
+        add.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+        add.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                bioenv.ai.AiModelStore.Model m = new bioenv.ai.AiModelStore.Model();
+                if (editModelDialog(m)) {
+                    store.models.add(m);
+                    store.save();
+                    aiAssist.setModels(store.toJson());
+                    fillModelRows(store, rows, box);
+                }
+            }
+        });
+
+        fillModelRows(store, rows, box);
+        box.add(rows);
+        box.add(javax.swing.Box.createVerticalStrut(8));
+        box.add(add);
+        return box;
+    }
+
+    /** 按 store 重画列表。改完必须重画 —— 否则界面还是旧的。 */
+    private void fillModelRows(final bioenv.ai.AiModelStore store, final JPanel rows,
+                               final JPanel box) {
+        rows.removeAll();
+        if (store.models.isEmpty()) {
+            rows.add(mutedLabel(I18n.t(Strings.AI_MODEL_EMPTY)));
+        }
+        for (int i = 0; i < store.models.size(); i++) {
+            final int idx = i;
+            final bioenv.ai.AiModelStore.Model m = store.models.get(i);
+            JPanel row = new JPanel(new java.awt.BorderLayout(6, 0));
+            row.setOpaque(false);
+            row.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+            row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 30));
+
+            JPanel left = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 6, 2));
+            left.setOpaque(false);
+            JLabel dot = new JLabel("\u25cf");
+            // 绿点 = 配置完整（地址和模型名都有）。
+            // 不这里 ping 接口：每次开设置都连一遍很慢，没网时全灰反而误导。
+            dot.setForeground(m.complete() ? new java.awt.Color(0x2E, 0xA0, 0x43)
+                                           : new java.awt.Color(0x9A, 0x9A, 0x9A));
+            if (!m.complete()) {
+                dot.setToolTipText(I18n.t(Strings.AI_MODEL_INCOMPLETE));
+            }
+            left.add(dot);
+            JLabel nameL = new JLabel(m.label());
+            nameL.setName("bioenv.model.row." + idx);
+            left.add(nameL);
+            row.add(left, java.awt.BorderLayout.WEST);
+
+            JPanel right = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.RIGHT, 4, 0));
+            right.setOpaque(false);
+            javax.swing.JButton edit = smallButton(I18n.t(Strings.AI_MODEL_EDIT));
+            edit.addActionListener(new ActionListener() {
+                @Override
+                public void actionPerformed(ActionEvent e) {
+                    bioenv.ai.AiModelStore.Model copy = m.copy();
+                    if (editModelDialog(copy)) {
+                        store.models.set(idx, copy);
+                        store.save();
+                        aiAssist.setModels(store.toJson());
+                        fillModelRows(store, rows, box);
+                    }
+                }
+            });
+            javax.swing.JButton del = smallButton(I18n.t(Strings.AI_MODEL_DELETE));
+            del.addActionListener(new ActionListener() {
+                @Override
+                public void actionPerformed(ActionEvent e) {
+                    if (idx >= 0 && idx < store.models.size()) {
+                        store.models.remove(idx);
+                        store.save();
+                        aiAssist.setModels(store.toJson());
+                        fillModelRows(store, rows, box);
+                    }
+                }
+            });
+            right.add(edit);
+            right.add(del);
+            row.add(right, java.awt.BorderLayout.EAST);
+
+            rows.add(row);
+        }
+        rows.revalidate();
+        rows.repaint();
+        box.revalidate();
+        box.repaint();
+    }
+
+    /**
+     * 编辑一条模型配置。点保存返回 true。
+     *
+     * <p><b>API key 用 JPasswordField，默认遮挡。</b> 这个字段不写日志、
+     * 不进 tooltip、不进任何提示文字 —— 只有点“保存”时被读一次。
+     */
+    private boolean editModelDialog(final bioenv.ai.AiModelStore.Model m) {
+        java.awt.Window owner = javax.swing.SwingUtilities.getWindowAncestor(this);
+        final javax.swing.JDialog dlg = new javax.swing.JDialog(
+                (owner instanceof java.awt.Frame) ? (java.awt.Frame) owner : null,
+                I18n.t(Strings.AI_MODEL_SECTION), true);
+        dlg.setName("bioenv.model.dialog");
+
+        final javax.swing.JTextField nameF = new javax.swing.JTextField(m.name, 24);
+        final javax.swing.JTextField urlF = new javax.swing.JTextField(m.baseUrl, 24);
+        final javax.swing.JPasswordField keyF = new javax.swing.JPasswordField(m.apiKey, 24);
+        final javax.swing.JTextField modelF = new javax.swing.JTextField(m.model, 18);
+        final javax.swing.JTextField maxInF = new javax.swing.JTextField(
+                m.maxIn > 0 ? String.valueOf(m.maxIn) : "", 10);
+        final javax.swing.JTextField maxOutF = new javax.swing.JTextField(
+                m.maxOut > 0 ? String.valueOf(m.maxOut) : "", 10);
+        final boolean[] ok = {false};
+
+        JPanel form = new JPanel();
+        form.setLayout(new javax.swing.BoxLayout(form, javax.swing.BoxLayout.Y_AXIS));
+        form.setBorder(javax.swing.BorderFactory.createEmptyBorder(12, 14, 8, 14));
+        form.add(mutedLabel(I18n.t(Strings.AI_MODEL_NAME)));
+        form.add(modelF);
+        form.add(javax.swing.Box.createVerticalStrut(6));
+        form.add(mutedLabel(I18n.t(Strings.AI_MODEL_URL)));
+        form.add(urlF);
+        form.add(javax.swing.Box.createVerticalStrut(6));
+        form.add(mutedLabel(I18n.t(Strings.AI_MODEL_KEY)));
+        form.add(keyF);
+        final javax.swing.JCheckBox show = new javax.swing.JCheckBox(I18n.t(Strings.AI_MODEL_SHOW_KEY));
+        show.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                keyF.setEchoChar(show.isSelected() ? (char) 0 : '\u2022');
+            }
+        });
+        form.add(show);
+        form.add(javax.swing.Box.createVerticalStrut(6));
+        // 下面两项只在自定义模式下生效 —— 内置模型的请求由 TBtools 发。
+        form.add(mutedLabel("<html><body style='width:300px'>"
+                + I18n.t(Strings.AI_MODEL_LEN_NOTE) + "</body></html>"));
+        form.add(mutedLabel(I18n.t(Strings.AI_MODEL_MAX_IN)));
+        form.add(maxInF);
+        form.add(javax.swing.Box.createVerticalStrut(6));
+        form.add(mutedLabel(I18n.t(Strings.AI_MODEL_MAX_OUT)));
+        form.add(maxOutF);
+        form.add(javax.swing.Box.createVerticalStrut(6));
+        form.add(mutedLabel(I18n.t(Strings.AI_MODEL_NAME_FIELD)));
+        form.add(nameF);
+        form.add(javax.swing.Box.createVerticalStrut(8));
+        form.add(mutedLabel("<html><body style='width:300px'>"
+                + I18n.t(Strings.AI_MODEL_KEY_NOTE) + "</body></html>"));
+
+        JPanel btns = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.RIGHT, 6, 0));
+        javax.swing.JButton save = new javax.swing.JButton(I18n.t(Strings.AI_MODEL_SAVE));
+        javax.swing.JButton cancel = new javax.swing.JButton("\u53d6\u6d88");
+        save.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                m.name = nameF.getText().trim();
+                m.baseUrl = urlF.getText().trim();
+                m.apiKey = new String(keyF.getPassword()).trim();
+                m.model = modelF.getText().trim();
+                int inVal = parseLenOrNeg(maxInF.getText());
+                int outVal = parseLenOrNeg(maxOutF.getText());
+                if (inVal < 0 || outVal < 0) {
+                    // 填了非数字就停在这里。原来是静默当 0，
+                    // 于是下次打开显示空白 —— 用户只能得出“我填的东西没了”。
+                    javax.swing.JOptionPane.showMessageDialog(dlg,
+                            I18n.t(Strings.AI_MODEL_LEN_BAD));
+                    return;
+                }
+                m.maxIn = inVal;
+                m.maxOut = outVal;
+                ok[0] = true;
+                dlg.dispose();
+            }
+        });
+        cancel.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                dlg.dispose();
+            }
+        });
+        btns.add(save);
+        btns.add(cancel);
+
+        dlg.getContentPane().setLayout(new java.awt.BorderLayout());
+        dlg.getContentPane().add(form, java.awt.BorderLayout.CENTER);
+        dlg.getContentPane().add(btns, java.awt.BorderLayout.SOUTH);
+        dlg.pack();
+        dlg.setLocationRelativeTo(this);
+        dlg.setVisible(true);
+        return ok[0];
+    }
+
+
+    /**
+     * 长度输入框→int。空字串 = 0（不限）；<b>非数字返回 -1</b>。
+     *
+     * <p>-1 是为了让调用方能区分“没填”和“填错了”。以前两种情况都返回 0，
+     * 于是填错了也照样保存，下次打开就是空的 —— “为什么我填的没了”就是这么来的。
+     */
+    private static int parseLenOrNeg(String s) {
+        String v = (s == null) ? "" : s.trim().toLowerCase();
+        if (v.length() == 0) {
+            return 0;
+        }
+        // K 按 1024、M 按 1024² —— 用户写 1024K 和 1M 应该是同一个量级，
+        // 那就只能是二进制的 K。十进制的话 1024K 会比 1M 大 2.4%，
+        // 这个不一致会让人以为自己算错了。
+        long mult = 1L;
+        if (v.endsWith("k")) {
+            mult = 1024L;
+            v = v.substring(0, v.length() - 1).trim();
+        } else if (v.endsWith("m")) {
+            mult = 1024L * 1024L;
+            v = v.substring(0, v.length() - 1).trim();
+        }
+        if (v.length() == 0) {
+            return -1;
+        }
+        try {
+            long n = Long.parseLong(v) * mult;
+            return (int) Math.min(Integer.MAX_VALUE, Math.max(0L, n));
+        } catch (Exception e) {
+            return -1;
+        }
+    }
+
+    /** 一行灰字。 */
+    private JLabel mutedLabel(String text) {
+        JLabel l = new JLabel(text);
+        UiTheme.role(l, "muted");
+        l.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+        return l;
+    }
+
+    /** 列表里用的小按钮。 */
+    private javax.swing.JButton smallButton(String text) {
+        javax.swing.JButton b = new javax.swing.JButton(text);
+        b.setMargin(new java.awt.Insets(0, 6, 0, 6));
+        b.setFocusable(false);
+        return b;
     }
 
     /**
