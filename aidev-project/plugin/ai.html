@@ -98,6 +98,12 @@
     color:var(--fg);cursor:pointer;font-size:12px;white-space:nowrap;
   }
   button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  /* 回答下面那行小动作（重试 / 编辑 / 继续 / 复制）：轻到几乎没存在感，
+     但需要的时候就在眼前。 */
+  .acts{display:flex;gap:6px;margin:2px 0 10px 0}
+  .acts button{font-size:11px;padding:2px 9px;border:1px solid var(--line);border-radius:6px;
+    background:var(--panel);color:var(--muted);cursor:pointer}
+  .acts button:hover{color:var(--ink);border-color:var(--accent)}
   /* 图标按钮：方一点，不抢视线 */
   button.icon{padding:6px 9px;font-size:13px;line-height:1}
   button:disabled{opacity:.5;cursor:default}
@@ -387,6 +393,9 @@ var bridge = null;           // window.tbtools.ai
   var models = [];              // [{id,label,baseUrl,apiKey,model,ok}]
   var SELKEY = "tbv.ai.sel";
   var lastPromptTok = 0;        // 上一次发出去的提示估算 token
+  var lastRate = 0;             // 上一次回答的速度（tok/s）
+  var totalOutTok = 0;          // 本会话累计输出 token
+  var streamT0 = 0, streamChars = 0;        // 上一次发出去的提示估算 token
   var selId = null;
   var popOpen = false;   // 列表是否展开（箭头朝向跟它走）             // null = 内置
 
@@ -999,6 +1008,8 @@ function updateStats(bits) {
   }
   var rounds = Math.floor(turns.length / 2);
   if (rounds > 0) { out.push(rounds + " \u8f6e"); }
+  if (lastRate > 0) { out.push(Math.round(lastRate) + " tok/s"); }
+  if (totalOutTok > 0) { out.push("\u7d2f\u8ba1 " + compactN(totalOutTok) + " tok"); }
   if (bits && bits.length) { out.push("\u5df2\u5e26\u4e0a " + bits.length + " \u9879"); }
   el("budget").textContent = out.join(" \u00b7 ");
 }
@@ -1069,6 +1080,10 @@ function trimToBudget(msgs, maxIn) {
         var d = ch && (ch.delta || ch.message);
         if (d && d.content) {
           acc += d.content;
+          streamChars += d.content.length;
+          // 每次都算会拖慢渲染；每 400ms 算一次就够了。
+          var el2 = (Date.now() - streamT0) / 1000;
+          if (el2 > 0.4) { lastRate = (streamChars / 2) / el2; updateStats([]); }
           box.textContent = acc;
           el("log").scrollTop = el("log").scrollHeight;
         }
@@ -1207,6 +1222,7 @@ loadSel();
     promptChars += String(msgs[pi].content || "").length;
   }
   lastPromptTok = Math.ceil(promptChars / 2);
+  streamT0 = Date.now(); streamChars = 0; lastRate = 0;
   updateStats([]);
 
   var box = bubble("a", "");
@@ -1287,6 +1303,9 @@ loadSel();
     var text = (typeof r === "string" && r) ? r : base;
     box.innerHTML = md(text);
       wireCopy(box);
+    totalOutTok += Math.ceil(text.length / 2);
+    // 回答下面给一行小动作：重试 / 编辑 / 继续 / 复制。
+    addActions(box, q, text);
     turns.push({ role: "user", content: full });
     turns.push({ role: "assistant", content: text });
     // 历史太长会挤爆请求预算，留最近若干轮就够。
@@ -1297,7 +1316,7 @@ loadSel();
     var code = (typeof e === "string") ? e : (e && (e.code || e.reason));
     box.className = "m e";
     box.textContent = describe(e);
-    if (code === "denied") { addRetry(q); }
+    if (code === "denied") { addRetry(q); } else { addActions(box, q, null); }
   }).then(finish);
 
   function finish() {
@@ -1314,6 +1333,56 @@ function stop() {
 }
 
 /** denied 之后给一个"脱敏后重试" —— 去掉绝对路径和明显的文件名。 */
+/**
+ * 回答下面那一行小按钮。
+ *
+ * <p>重试和编辑是最常用的两个：限流、超时、断网都会让一次回答作废，
+ * 而问错了只能重打一遍也很烦。
+ */
+function addActions(box, question, text) {
+  var row = document.createElement("div");
+  row.className = "acts";
+  function act(label, fn) {
+    var b = document.createElement("button");
+    b.textContent = label;
+    b.onclick = fn;
+    row.appendChild(b);
+  }
+  if (question) {
+    act(lang === "en" ? "Retry" : "\u91cd\u8bd5", function () {
+      el("ask").value = question;
+      send();
+    });
+    act(lang === "en" ? "Edit" : "\u7f16\u8f91", function () {
+      el("ask").value = question;
+      el("ask").focus();
+    });
+    if (text) {
+      act(lang === "en" ? "Continue" : "\u7ee7\u7eed", function () {
+        el("ask").value = lang === "en" ? "Continue." : "\u7ee7\u7eed\u3002";
+        send();
+      });
+    }
+  }
+  if (text) {
+    act(lang === "en" ? "Copy" : "\u590d\u5236", function () { copyText(text); });
+  }
+  box.parentNode.insertBefore(row, box.nextSibling);
+  el("log").scrollTop = el("log").scrollHeight;
+}
+
+/** 靠 execCommand 复制 —— JxBrowser 拒绝 navigator.clipboard。 */
+function copyText(text) {
+  var ta = document.createElement("textarea");
+  ta.value = text;
+  ta.style.position = "fixed";
+  ta.style.opacity = "0";
+  document.body.appendChild(ta);
+  ta.select();
+  try { document.execCommand("copy"); } catch (e) {}
+  document.body.removeChild(ta);
+}
+
 function addRetry(original) {
   var d = document.createElement("div");
   d.className = "m";
@@ -1352,6 +1421,7 @@ el("explain").onclick = function () {
   send();
 };
 el("ask").addEventListener("keydown", function (e) {
+  if (e.key === "Escape") { e.preventDefault(); if (busy) { stop(); } return; }
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
 });
 el("sessNew").onclick = newSession;
