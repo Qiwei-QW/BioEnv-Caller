@@ -196,11 +196,58 @@ public final class AiAssistPanel extends JPanel {
         pushLang(lang);
         if (!pendingContext.isEmpty()) {
             pushContext(pendingContext);
+        startAdoptWatch();
         pushModels(pendingModels);
         }
     }
 
     /** 把当前工具 / 命令 / 上次运行等推给页面（JSON 字符串）。 */
+    /** 采用回调：页面写了一条命令，交给外面填进预览框。 */
+    private java.util.function.Consumer<String> adoptSink;
+
+    /**
+     * 设置「采用 AI 命令」的去处。
+     *
+     * <p>为什么是拉而不是推：页面→Java 没有通道，只能 Java 过去问。
+     * 每 700ms 问一次，仅在面板看得见的时候问 —— 看不见的时候问也没人用。
+     */
+    public void setAdoptSink(java.util.function.Consumer<String> sink) {
+        adoptSink = sink;
+    }
+
+    /** 循环问页面：有没有待采用的命令。 */
+    private void startAdoptWatch() {
+        if (adoptTimer != null || view == null) {
+            return;
+        }
+        adoptTimer = new javax.swing.Timer(700, new java.awt.event.ActionListener() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent e) {
+                if (adoptSink == null || !isShowing()) {
+                    return;
+                }
+                String raw = view.evalString("localStorage.getItem('tbv.adopt') || ''");
+                if (raw == null || raw.trim().length() == 0) {
+                    return;
+                }
+                String cmd;
+                try {
+                    cmd = java.net.URLDecoder.decode(raw, "UTF-8");
+                } catch (Exception bad) {
+                    cmd = raw;
+                }
+                // 读完就清掉 —— 不清的话下一次又会被当成新命令重复填。
+                view.run("try{localStorage.removeItem('tbv.adopt')}catch(e){}");
+                if (cmd.trim().length() > 0) {
+                    adoptSink.accept(cmd);
+                }
+            }
+        });
+        adoptTimer.start();
+    }
+
+    private javax.swing.Timer adoptTimer;
+
     /** 模型列表；网页还没建的时候先放这里。 */
     private String pendingModels = "[]";
 

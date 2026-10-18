@@ -1365,6 +1365,12 @@ function addActions(box, question, text) {
     }
   }
   if (text) {
+    var cmd = extractCode(text);
+    if (cmd) {
+      // 采用：写进 localStorage，Java 定时过来取。
+      // 页面→Java 没有通道，这是免费能用的唯一一条。
+      act(lang === "en" ? "Use" : "\u91c7\u7528", function () { adoptCmd(cmd); });
+    }
     act(lang === "en" ? "Copy" : "\u590d\u5236", function () { copyText(text); });
   }
   box.parentNode.insertBefore(row, box.nextSibling);
@@ -1372,6 +1378,23 @@ function addActions(box, question, text) {
 }
 
 /** 靠 execCommand 复制 —— JxBrowser 拒绝 navigator.clipboard。 */
+/** 第一个代码块里的内容；没有就返回空。 */
+function extractCode(md) {
+  if (!md) { return ""; }
+  var m = /```[a-zA-Z0-9_-]*\n([\s\S]*?)```/.exec(String(md));
+  return m ? m[1].replace(/\s+$/, "") : "";
+}
+
+/** 把命令交给 Java —— encodeURIComponent 避开所有引号和换行的麻烦。 */
+function adoptCmd(cmd) {
+  try {
+    localStorage.setItem("tbv.adopt", encodeURIComponent(cmd));
+    setStatus(lang === "en" ? "Sent to the command box" : "\u5df2\u9001\u5230\u547d\u4ee4\u6846");
+  } catch (e) {
+    setStatus("\u5199\u4e0d\u8fdb localStorage");
+  }
+}
+
 function copyText(text) {
   var ta = document.createElement("textarea");
   ta.value = text;

@@ -2617,6 +2617,21 @@ public final class MainPanel extends JPanel {
 
         // 最外层再包一层：AI 助手在最左，默认收起。
         aiAssist = new AiAssistPanel();
+        // 页面→Java 没有通道，所以面板定时问页面要不要采用某条命令。
+
+        // 这里就是那条命令的去处。
+
+        aiAssist.setAdoptSink(new java.util.function.Consumer<String>() {
+
+            @Override
+
+            public void accept(String cmd) {
+
+                setPreviewText(cmd);
+
+            }
+
+        });
 
         // 最左那条图标栏，而且是<b>唯一的开关</b>：
         //     点一个图标   -> 那一列展开成这张卡

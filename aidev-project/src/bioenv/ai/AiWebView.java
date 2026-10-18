@@ -304,6 +304,46 @@ public final class AiWebView {
      *
      * @return 成功返回 true；失败返回 false 并把原因记进 {@link #problem}
      */
+    /**
+     * 执行 JS 并把返回值当字符串取回来。
+     *
+     * <p>页面→Java 没有通道，所以 Java 想知道页面里有什么，只能这么问一次。
+     * 现在用在「采用 AI 命令」上：页面把命令写进 localStorage，
+     * 这边定时问一下。
+     *
+     * <p>返回值是 {@code JSValue.toString()} —— JxBrowser 各小版本延伸可能
+     * 带不带引号，所以这里把外层引号剁了，调用方不用关心。
+     *
+     * @return 没有页面、没有主框架、或执行失败时返回 null
+     */
+    public String evalString(String js) {
+        if (browser == null) {
+            return null;
+        }
+        try {
+            if (frame == null) {
+                Object opt = browser.getClass().getMethod("mainFrame").invoke(browser);
+                frame = unwrapOptional(opt);
+            }
+            if (frame == null) {
+                return null;
+            }
+            Method ex = frame.getClass().getMethod("executeJavaScript", String.class);
+            Object v = ex.invoke(frame, js);
+            if (v == null) {
+                return null;
+            }
+            String s = String.valueOf(v);
+            if (s.length() >= 2 && s.startsWith("\"") && s.endsWith("\"")) {
+                s = s.substring(1, s.length() - 1);
+            }
+            return s;
+        } catch (Throwable t) {
+            problem = "执行 JS 失败：" + t;
+            return null;
+        }
+    }
+
     public boolean run(String js) {
         if (browser == null) {
             return false;
