@@ -48,14 +48,15 @@ public final class AiAssistPanel extends JPanel {
 
     private final JPanel body = new JPanel(new BorderLayout());
 
-    private AiWebView view;
+    /** 网页视图。轮询线程也会碰它，所以是 volatile（写它的只有事件线程）。 */
+    private volatile AiWebView view;
     private boolean loaded;
     private boolean collapsed;
 
-    /** 最后一次要推给页面的东西；页面加载完之前先存着，加载后补推。 */
-    private String pendingContext = "";
-    private String theme = "classic";
-    private String lang = "zh";
+    /** 最后一次要推给页面的东西；页面加载完之前先存着，加载后补推。轮询线程会读。 */
+    private volatile String pendingContext = "";
+    private volatile String theme = "classic";
+    private volatile String lang = "zh";
 
     public AiAssistPanel() {
         setLayout(new BorderLayout());
@@ -190,66 +191,210 @@ public final class AiAssistPanel extends JPanel {
         body.revalidate();
         body.repaint();
 
+        // 文件对话框：JxBrowser 不会自己弹，插件不装就永远弹不出来。
+        // 装不上就把页面上的 ⊕ 藏掉 —— 一个点了没反应的按钮比没有更糟。
+        attachOk = view.installFileDialogs();
 
-        // 补推：主题、语言、以及期间攒下来的上下文。
-        pushTheme(theme);
-        pushLang(lang);
-        if (!pendingContext.isEmpty()) {
-            pushContext(pendingContext);
-        startAdoptWatch();
-        pushModels(pendingModels);
-        }
+
+        // 补推一次。此时页面多半还没跑完脚本，所以这次多半是石沉大海 ——
+        // 真正的重推在下面的轮询里：它先探 window.tbvAi 有没有出现。
+        deliverPending();
+        startWatch();
     }
 
-    /** 把当前工具 / 命令 / 上次运行等推给页面（JSON 字符串）。 */
-    /** 采用回调：页面写了一条命令，交给外面填进预览框。 */
-    private java.util.function.Consumer<String> adoptSink;
+    /** 导出回调：会话名 + Markdown 正文，交给外面去弹保存对话框。 */
+    private java.util.function.BiConsumer<String, String> exportSink;
+
+    /** 附件按钮能不能用；见 {@link AiWebView#installFileDialogs()}。 */
+    private volatile boolean attachOk = true;
+
+    /** 页面请求打开设置窗口时的去处（模型菜单最后一行"管理模型…"）。 */
+    private Runnable settingsSink;
 
     /**
-     * 设置「采用 AI 命令」的去处。
+     * 设置「从面板里打开设置窗口」的去处。
      *
-     * <p>为什么是拉而不是推：页面→Java 没有通道，只能 Java 过去问。
-     * 每 700ms 问一次，仅在面板看得见的时候问 —— 看不见的时候问也没人用。
+     * <p>模型列表是<b>在设置里</b>改的，而页面上原本没有任何入口通到那里：
+     * 列表为空时用户只看到一个"内置模型"，不知道下一步该干什么。
      */
-    public void setAdoptSink(java.util.function.Consumer<String> sink) {
-        adoptSink = sink;
+    public void setSettingsSink(Runnable sink) {
+        settingsSink = sink;
     }
 
-    /** 循环问页面：有没有待采用的命令。 */
-    private void startAdoptWatch() {
-        if (adoptTimer != null || view == null) {
+    /**
+     * 设置「导出对话」的去处。
+     *
+     * <p>页面把整篇 Markdown 写进 localStorage，这边轮询取走。存文件这件事
+     * 留给外面（它才知道该弹哪个对话框、上一次导到哪）。
+     */
+    public void setExportSink(java.util.function.BiConsumer<String, String> sink) {
+        exportSink = sink;
+    }
+
+    /**
+     * 页面里的 {@code window.tbvAi} 出现了没有。
+     *
+     * <p>★ 这是这一整块最容易出错的地方。网页是<b>异步</b>加载的：插件刚启动、
+     * 面板第一次显示的时候，{@link #ensureLoaded()} 立刻就把模型列表、上下文、
+     * 主题、语言推过去 —— 而那时页面的脚本一行都还没跑，{@code window.tbvAi}
+     * 还不存在，每一次 {@code run()} 都是静默的空操作。
+     *
+     * <p>症状不是"不工作"，而是"**要先进一次设置、随便编辑保存一下才好**"：
+     * 唯一还会再推一次模型列表的地方就是设置里的保存。别的地方（切工具会重推
+     * 上下文）刚好掩盖了这个问题。
+     */
+    private volatile boolean pageReady;
+
+    /** 有东西要补推。页面就绪前推过的、以及刚就绪的，都算。 */
+    private volatile boolean dirty;
+
+    /** 轮询定时器（在事件线程上跳，只负责派活）。 */
+    private javax.swing.Timer watchTimer;
+
+    /**
+     * 真正干活的那条线程。
+     *
+     * <p>★ 轮询<b>不能</b>在 Swing 事件线程上跑。
+     *
+     * <p>{@code executeJavaScript} 是<b>阻塞</b>的：它等网页把 JS 跑完。而网页有
+     * 好几种时候会停在那里不动 —— 最典型的是 {@code <input type=file>} 点了之后，
+     * 渲染线程在等文件选择框的结果。只要那一趟轮询还压着事件线程，整个界面就跟着
+     * 冻住，连文件框本身都弹不出来（它要在事件线程上弹）。
+     *
+     * <p>放到这条线程上之后，网页再怎么卡，卡的也只是它自己；事件线程一直能响应用户。
+     * 连续失败/卡住时 {@code polling} 会一直为真，所以也不会越堆越多。
+     */
+    private final java.util.concurrent.ExecutorService poller =
+            java.util.concurrent.Executors.newSingleThreadExecutor(
+                    new java.util.concurrent.ThreadFactory() {
+                        @Override
+                        public Thread newThread(Runnable r) {
+                            Thread t = new Thread(r, "bioenv-ai-poll");
+                            t.setDaemon(true);
+                            return t;
+                        }
+                    });
+
+    /** 上一次派出去的活还没回来。 */
+    private volatile boolean polling;
+
+    private void startWatch() {
+        if (watchTimer != null || view == null) {
             return;
         }
-        adoptTimer = new javax.swing.Timer(700, new java.awt.event.ActionListener() {
+        watchTimer = new javax.swing.Timer(700, new java.awt.event.ActionListener() {
             @Override
             public void actionPerformed(java.awt.event.ActionEvent e) {
-                if (adoptSink == null || !isShowing()) {
+                if (view == null || !isShowing() || polling) {
                     return;
                 }
-                String raw = view.evalString("localStorage.getItem('tbv.adopt') || ''");
-                if (raw == null || raw.trim().length() == 0) {
-                    return;
-                }
-                String cmd;
+                polling = true;
                 try {
-                    cmd = java.net.URLDecoder.decode(raw, "UTF-8");
-                } catch (Exception bad) {
-                    cmd = raw;
-                }
-                // 读完就清掉 —— 不清的话下一次又会被当成新命令重复填。
-                view.run("try{localStorage.removeItem('tbv.adopt')}catch(e){}");
-                if (cmd.trim().length() > 0) {
-                    adoptSink.accept(cmd);
+                    poller.execute(new Runnable() {
+                        @Override
+                        public void run() {
+                            try {
+                                pollPage();
+                            } catch (Throwable t) {
+                                // 轮询失败不能影响界面：下一跳再试。
+                            } finally {
+                                polling = false;
+                            }
+                        }
+                    });
+                } catch (Throwable t) {
+                    polling = false;
                 }
             }
         });
-        adoptTimer.start();
+        watchTimer.start();
     }
 
-    private javax.swing.Timer adoptTimer;
+    /**
+     * 每 700ms 问一次页面：脚本起来了没有、有没有东西要交出来。
+     *
+     * <p><b>跑在 {@code poller} 线程上</b>（见那里）。所以：
+     * <ul>
+     *   <li>碰 JxBrowser 的调用可以直接做（它是线程安全的）；</li>
+     *   <li>碰 Swing 的一律 {@code EventQueue.invokeLater} 回事件线程。</li>
+     * </ul>
+     *
+     * <p>干三件事，顺序有讲究：
+     * <ol>
+     *   <li>页面没就绪就只探一下，别的都不做（推过去也是白推）；</li>
+     *   <li>刚就绪时<b>把所有待推的东西重推一遍</b> —— 页面加载期间攒下的模型列表、
+     *       上下文、主题、语言都在这一步补上；</li>
+     *   <li>取走页面写下的导出载荷、以及"打开设置"的请求。</li>
+     * </ol>
+     */
+    void pollPage() {
+        AiWebView v = view;
+        if (v == null) {
+            return;
+        }
+        // 文件框开着的时候网页停在那里等结果，什么都推不进去 ——
+        // 这一跳整个跳过，**不要**把 dirty 清掉，等框关了再推。
+        if (v.dialogOpen()) {
+            return;
+        }
+        if (!pageReady) {
+            if (!"object".equals(v.evalString("typeof window.tbvAi"))) {
+                return;
+            }
+            pageReady = true;
+            dirty = true;
+        }
+        if (dirty) {
+            deliverPending();
+            dirty = false;
+        }
+        final java.util.function.BiConsumer<String, String> ex = exportSink;
+        if (ex != null) {
+            final String[] part = bioenv.ai.AiExport.decode(take(v, "tbv.export"));
+            if (part != null) {
+                // 存文件要弹对话框 —— 那是 Swing，回事件线程。
+                java.awt.EventQueue.invokeLater(new Runnable() {
+                    @Override
+                    public void run() {
+                        ex.accept(part[0], part[1]);
+                    }
+                });
+            }
+        }
+        final Runnable st = settingsSink;
+        if (st != null && take(v, "tbv.openSettings") != null) {
+            java.awt.EventQueue.invokeLater(st);
+        }
+        // 页面里删了字，请我们把浏览器组件重画一遍（见 AiWebView.repaintView）。
+        if (take(v, "tbv.repaint") != null) {
+            java.awt.EventQueue.invokeLater(new Runnable() {
+                @Override
+                public void run() {
+                    AiWebView w = view;
+                    if (w != null) {
+                        w.repaintView();
+                    }
+                }
+            });
+        }
+    }
+
+    /**
+     * 读一个 key，<b>读到就立刻清掉</b>。
+     *
+     * <p>不清的话下一轮会把同一份数据再处理一遍 —— 导出会第二次弹出保存对话框。
+     */
+    private String take(AiWebView v, String key) {
+        String raw = v.evalString("localStorage.getItem('" + key + "') || ''");
+        if (raw == null || raw.trim().length() == 0) {
+            return null;
+        }
+        v.run("try{localStorage.removeItem('" + key + "')}catch(e){}");
+        return raw;
+    }
 
     /** 模型列表；网页还没建的时候先放这里。 */
-    private String pendingModels = "[]";
+    private volatile String pendingModels = "[]";
 
     /**
      * 把模型列表推给页面。
@@ -260,26 +405,62 @@ public final class AiAssistPanel extends JPanel {
      */
     public void setModels(String json) {
         pendingModels = (json == null || json.trim().length() == 0) ? "[]" : json;
-        pushModels(pendingModels);
+        dirty = true;
+        sendModels();
     }
 
-    private void pushModels(String json) {
-        if (view == null) {
-            return;
+    /**
+     * 把待推的东西全部再推一遍。轮询判定"页面刚就绪"时调。
+     *
+     * <p>只用已经存下的 pending 值，不动标记 —— 调用方负责清 dirty。
+     */
+    private void deliverPending() {
+        sendTheme();
+        sendLang();
+        sendContext();
+        sendModels();
+        sendAttach();
+    }
+
+    /**
+     * 告诉页面附件按钮能不能用。
+     *
+     * <p>页面默认以为能用；Java 装文件对话框失败时把它藏掉。
+     */
+    private void sendAttach() {
+        if (view != null) {
+            view.run("window.tbvAi && window.tbvAi.setAttach("
+                    + (attachOk ? "true" : "false") + ")");
         }
-        view.run("window.tbvAi && window.tbvAi.setModels(" + jsString(json) + ")");
+    }
+
+    private void sendModels() {
+        if (view != null) {
+            view.run("window.tbvAi && window.tbvAi.setModels(" + jsString(pendingModels) + ")");
+        }
     }
 
     public void pushContext(String json) {
         pendingContext = json == null ? "" : json;
+        dirty = true;
+        sendContext();
+    }
+
+    private void sendContext() {
         if (view != null) {
-            view.run("window.tbvAi && window.tbvAi.setContext(" + jsString(pendingContext) + ")");
+            view.run("window.tbvAi && window.tbvAi.setContext("
+                    + jsString(pendingContext) + ")");
         }
     }
 
     /** 跟着插件的界面风格走（classic / light / dark）。 */
     public void pushTheme(String name) {
         theme = name == null ? "classic" : name;
+        dirty = true;
+        sendTheme();
+    }
+
+    private void sendTheme() {
         if (view != null) {
             view.run("window.tbvAi && window.tbvAi.setTheme(" + jsString(theme) + ")");
         }
@@ -288,6 +469,11 @@ public final class AiAssistPanel extends JPanel {
     /** 跟着插件的语言走（zh / en）。 */
     public void pushLang(String code) {
         lang = "en".equalsIgnoreCase(code) ? "en" : "zh";
+        dirty = true;
+        sendLang();
+    }
+
+    private void sendLang() {
         if (view != null) {
             view.run("window.tbvAi && window.tbvAi.setLang(" + jsString(lang) + ")");
         }
@@ -320,11 +506,27 @@ public final class AiAssistPanel extends JPanel {
         repaint();
     }
 
-    /** 让 Java 侧主动问一句（留给以后的"一键解释报错"）。 */
-    public void ask(String text) {
-        ensureLoaded();
-        if (view != null) {
-            view.run("window.tbvAi && window.tbvAi.ask(" + jsString(text == null ? "" : text) + ")");
+    /**
+     * 面板被移出界面时停掉轮询。
+     *
+     * <p>定时器会把面板一直吊住（Swing Timer 持有监听器），插件关掉之后
+     * 它还会每 700ms 醒一次。页面的按钮和它没关系，别让它在后台空转。
+     */
+    @Override
+    public void removeNotify() {
+        if (watchTimer != null) {
+            watchTimer.stop();
+            watchTimer = null;
+        }
+        super.removeNotify();
+    }
+
+    /** 重新挂回界面时把轮询接回去（见 removeNotify）。 */
+    @Override
+    public void addNotify() {
+        super.addNotify();
+        if (loaded) {
+            startWatch();
         }
     }
 

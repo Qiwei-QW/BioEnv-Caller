@@ -38,6 +38,20 @@
   #status{font-size:11px;color:var(--muted);margin-left:8px;text-align:right}
   #status.ok{color:var(--ok)} #status.bad{color:var(--err)} #status.warn{color:var(--warn)}
 
+  /* 页内确认条。
+     ★ 页面里绝对不要用 window.confirm / alert / prompt：TBtools 的网页面板
+     没有给 JxBrowser 注册 DialogHandler，浏览器弹框会让渲染进程停在"等一个
+     永远不会有人点的对话框"上；而 Java 每 700ms 要读一次页面（导出对话、
+     补推模型列表都靠这条通道），于是 Swing 的事件线程被一起堵死 —— 用户看到的是
+     "点了没反应，而且整个面板都收不起来"。 */
+  .confirm{flex:none;display:flex;align-items:center;gap:8px;
+    padding:6px 10px;font-size:12px;background:var(--panel);
+    border-bottom:1px solid var(--line)}
+  .confirm[hidden]{display:none}
+  .confirm span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .confirm button{font-size:11px;padding:3px 10px}
+  .confirm .yes{border-color:var(--err);color:var(--err)}
+
   /* 会话下拉放在表头：它是"切换"而不是"操作"，和状态栏放一起更顺 */
   #sessSel{
     flex:1;min-width:0;max-width:220px;margin-left:6px;
@@ -68,6 +82,12 @@
             padding:0 3px;border-radius:3px}
   .m.a pre code{background:none;padding:0}
   .m.a ul{margin:4px 0;padding-left:18px}
+  /* Markdown 表格：面板窄，宽表格要在自己的壳里横向滚，别把整个气泡撑破 */
+  .m.a .tbl{overflow-x:auto;margin:6px 0}
+  .m.a table{border-collapse:collapse;font-size:12px}
+  .m.a th,.m.a td{border:1px solid var(--line);padding:3px 8px;text-align:left;
+    white-space:nowrap;vertical-align:top}
+  .m.a th{background:var(--panel);font-weight:600}
 
   /* 诊断卡：折叠成一行，不占地方；它不属于对话，清空会话不会被清掉 */
   details.diag{
@@ -104,8 +124,11 @@
   .acts button{font-size:11px;padding:2px 9px;border:1px solid var(--line);border-radius:6px;
     background:var(--panel);color:var(--muted);cursor:pointer}
   .acts button:hover{color:var(--ink);border-color:var(--accent)}
-  /* 图标按钮：方一点，不抢视线 */
-  button.icon{padding:6px 9px;font-size:13px;line-height:1}
+  /* 图标按钮：方一点，不抢视线。svg 图标和文字图标（＋ / 🗑）都要能居中 ——
+     flex 负责这件事，否则 svg 会按基线对齐，看上去偏高一点。 */
+  button.icon{padding:6px 9px;font-size:13px;line-height:1;
+    display:flex;align-items:center;justify-content:center}
+  button.icon svg{width:14px;height:14px;display:block}
   button:disabled{opacity:.5;cursor:default}
   /* 键盘 Tab 过去时要能看出焦点在哪 —— 鼠标点不挂这个规则 */
   .pill:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
@@ -140,14 +163,23 @@
   .pop-item .dot.ok{background:#2ea043}
   .pop-item .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .pop-item.now{background:var(--hover, rgba(128,128,128,.16));font-weight:600}
+  .pop-sep{height:1px;background:var(--line);margin:4px 2px}
+  .pop-item.mng{color:var(--accent);font-size:11px}
   .bar{display:flex;justify-content:space-between;align-items:center;margin-top:6px;font-size:11px;color:var(--muted)}
 /* 发送按钮进输入框：外层相对定位，按钮压右下角；文字给它让出一条。 */
 #askWrap{position:relative;flex:1;display:flex;padding-bottom:44px;
     border:1px solid var(--line);border-radius:8px;background:var(--bg)}
-  /* 输入框本身不再有框 —— 框在外层容器上，所以看起来是一个整框 */
+  /* 输入框本身不再有框 —— 框在外层容器上，所以看起来是一个整框。
+     ★ 背景必须透明：外层 #askWrap 是圆角 + 1px 边框，而 textarea 是一个直角矩形、
+     又铺满外层的上方。一旦它自己画底色，就会从圆角**外面**漏出去，把两个上角的
+     圆角盖成方角（实测踩过）。透明背景让外层的那一圈圆角原样留着。 */
   #askWrap #ask{border:0;border-radius:0;background:transparent;box-shadow:none;outline:none}
-  /* 聚焦时让框本身变色 —— 而不是在 textarea 上面套一圈黑框 */
-  #askWrap:focus-within{border-color:var(--accent)}
+  /* 聚焦时不做任何强调。
+   *
+   * 以前这里有一条 #askWrap:focus-within{border-color:var(--accent)}，点进来整个框
+   * 变蓝。用户明确要求去掉：一是这圈蓝边在离屏渲染下容易画出缺口，二是这个面板
+   * 的焦点经常"粘"在输入框上（点旁边的 Swing 组件不会让网页失焦），蓝框就一直亮着，
+   * 看着像有东西没弄完。光标本身在闪，已经足够指示当前在哪。 */
 #askWrap #ask{flex:1;width:100%;padding-left:10px;padding-right:14px}
 #askWrap #go{position:absolute;right:7px;bottom:7px;width:38px;height:28px;
              min-width:0;padding:0;font-size:13px;line-height:1}
@@ -161,7 +193,7 @@
 #atts{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 6px}
 #atts .att{display:flex;align-items:center;gap:4px;font-size:11px;
            background:var(--panel);border:1px solid var(--line);border-radius:6px;
-\1padding:2px 8px;max-width:100%}
+           padding:2px 8px;max-width:100%}
 #atts .att span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:190px}
 #atts .att b{cursor:pointer;font-weight:400;opacity:.6;padding:0 2px}
 #atts .att b:hover{opacity:1}
@@ -207,9 +239,22 @@ pre .cp:hover{opacity:1}
   <select id="sessSel" title="会话"></select>
   <button id="sessNew" class="icon" title="新建会话">＋</button>
   <button id="sessDel" class="icon" title="删除这个会话">🗑</button>
+  <!-- 导出：整段对话已经是 Markdown 了，导出去就能直接看/存档/贴进 issue。
+       图标用 SVG 而不是字符 —— 字符箭头坐在字上沿，居中要靠猜。 -->
+  <button id="sessExp" class="icon" title="导出为 Markdown"><svg viewBox="0 0 16 16"
+      aria-hidden="true"><path d="M8 2v7.5M5 6.5 8 9.5l3-3M3 11v1.6A1.4 1.4 0 0 0 4.4 14h7.2A1.4
+      1.4 0 0 0 13 12.6V11" fill="none" stroke="currentColor" stroke-width="1.6"
+      stroke-linecap="round" stroke-linejoin="round"/></svg></button>
   <!-- status 只在出错时才有字。平时空白，"就绪"那两个字没有信息量。 -->
   <span id="status"></span>
 </header>
+
+<!-- 确认条：不可撤销的操作（删会话）走这里。不要用 window.confirm —— 见上面 CSS 里那段注释。 -->
+<div id="confirm" class="confirm" hidden>
+  <span id="confirmText"></span>
+  <button id="confirmYes" class="yes" type="button"></button>
+  <button id="confirmNo" type="button"></button>
+</div>
 
 <input type="file" id="file" multiple style="display:none">
 
@@ -279,17 +324,20 @@ pre .cp:hover{opacity:1}
   if (b && b.parentNode) { b.parentNode.removeChild(b); }
 })();
 
-/* 未捕获的错误也要看得见：没有控制台，只能靠页面自己说。 */
+/* 未捕获的错误也要看得见：没有控制台，只能靠页面自己说。
+ *
+ * 这里<b>不能</b>走 t()：这段代码在文案表初始化之前就可能被调用，
+ * 而在错误处理器里再抛一个错，就什么都看不见了。所以中英各写一份。 */
 window.onerror = function (msg, src, line, col) {
   var box = document.getElementById("log");
   if (box) {
     var d = document.createElement("div");
     d.className = "m e";
-    d.textContent = "脚本错误：" + msg + "  @" + line + ":" + col;
+    d.textContent = "脚本错误 / Script error: " + msg + "  @" + line + ":" + col;
     box.appendChild(d);
   }
   var s = document.getElementById("status");
-  if (s) { s.textContent = "脚本错误"; s.className = "bad"; }
+  if (s) { s.textContent = "脚本错误 / Script error"; s.className = "bad"; }
   return false;
 };
 
@@ -310,6 +358,24 @@ var T = {
   bigImg: "图片太大，没有加进来（上限 4 MB，这张 ",
   cutNote: "（只取了开头一部分，全文 ",
   imgNoStream: "（图片请求不带历史，也不流式返回）",
+    exp: "导出为 Markdown", expMe: "我", expAi: "AI",
+    expAt: "导出时间", expModel: "模型", expRounds: "轮",
+    expEmpty: "还没有对话，没有可导出的内容。",
+    expHand: "正在打开保存对话框…", expOff: "网页存储不可用，导不出去。",
+    statCtx: "上下文", statApprox: "≈", statRound: "轮",
+    statTotal: "累计", statBits: "已带上", statItems: "项",
+    yes: "删除", no: "取消",
+    busyHint: "正在回答…按 Esc 停止",
+    storeDrop: "存储满了，丢掉了 %n 个旧会话",
+    storeFull: "存储写不进去了：之后的对话不会再保存",
+    popManage: "管理模型…（在设置里）",
+    popAdd: "＋ 在设置里添加模型",
+    noErrInfo: "（没有错误信息）",
+    cutTail: " 字符）",
+    chatNotFn: "ai.chat 不是函数 —— 接口形状和预期不同",
+    scriptErr: "脚本错误：",
+    builtin: "内置模型",
+    noAttach: "这个环境没有文件对话框，附件不可用",
     untitled: "新会话",
     confirmDel: "删除这个会话？它的对话记录会一起删掉。",
     storeOff: "（本次运行内有效：网页存储不可用）",
@@ -336,6 +402,24 @@ var T = {
   bigImg: "Image too large, not attached (4 MB limit; this one is ",
   cutNote: "(only the beginning is included; the whole file is ",
   imgNoStream: "(image requests carry no history and do not stream)",
+    exp: "Export as Markdown", expMe: "Me", expAi: "AI",
+    expAt: "Exported", expModel: "Model", expRounds: "rounds",
+    expEmpty: "Nothing to export yet.",
+    expHand: "Opening the save dialog…", expOff: "Web storage is unavailable - cannot export.",
+    statCtx: "Context", statApprox: "≈", statRound: "rounds",
+    statTotal: "total", statBits: "carried", statItems: "items",
+    yes: "Delete", no: "Cancel",
+    busyHint: "Answering… press Esc to stop",
+    storeDrop: "Storage was full - dropped %n old conversation(s)",
+    storeFull: "Storage is full: conversations will no longer be saved",
+    popManage: "Manage models… (in Settings)",
+    popAdd: "+ Add a model in Settings",
+    noErrInfo: "(no error information)",
+    cutTail: " chars)",
+    chatNotFn: "ai.chat is not a function - the interface is not what was expected",
+    scriptErr: "Script error: ",
+    builtin: "Built-in",
+    noAttach: "No file dialog in this environment - attachments are unavailable",
     untitled: "New conversation",
     confirmDel: "Delete this conversation? Its messages go with it.",
     storeOff: "(kept for this run only: web storage is unavailable)",
@@ -392,10 +476,16 @@ var bridge = null;           // window.tbtools.ai
    */
   var models = [];              // [{id,label,baseUrl,apiKey,model,ok}]
   var SELKEY = "tbv.ai.sel";
-  var lastPromptTok = 0;        // 上一次发出去的提示估算 token
+  var lastPromptTok = 0;        // 上一次发出去的提示：估算 token
+  var lastPromptReal = 0;       // 同上，但来自服务端 usage（0 = 这次没拿到）
   var lastRate = 0;             // 上一次回答的速度（tok/s）
+  /** 算速度用的采样点 [{t, n}]，只留最近 2 秒。 */
+  var rateMarks = [];
+  /** 上一次刷新速度的时间：每 300ms 才刷一次，不然每来一小段就重排一次页脚。 */
+  var lastNoteAt = 0;
+  var lastOutReal = 0;          // 服务端返回的真实 completion_tokens（0 = 没拿到）
   var totalOutTok = 0;          // 本会话累计输出 token
-  var streamT0 = 0, streamChars = 0;        // 上一次发出去的提示估算 token
+  var streamT0 = 0;             // 这次回答开始的时间
   var selId = null;
   var popOpen = false;   // 列表是否展开（箭头朝向跟它走）             // null = 内置
 
@@ -412,6 +502,36 @@ var bridge = null;           // window.tbtools.ai
     try { localStorage.setItem(SELKEY, selId === null ? "" : selId); } catch (e) {}
   }
 
+  /**
+   * 哪些接口地址拒绝过 stream_options（也就是拿不到真实用量）。
+   *
+   * <p>记住它们，之后不再带这个字段：命中一次就够了，不该每次请求都白跑一次。
+   * 存在 localStorage 里，所以重开插件也记得。
+   */
+  var NOUSAGE = "tbv.ai.nousage";
+
+  function usageRefused(baseUrl) {
+    try {
+      var raw = String(localStorage.getItem(NOUSAGE) || "");
+      var key = String(baseUrl || "");
+      if (!raw || !key) { return false; }
+      return ("\n" + raw + "\n").indexOf("\n" + key + "\n") >= 0;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function usageRefuse(baseUrl) {
+    try {
+      var key = String(baseUrl || "");
+      if (!key || usageRefused(key)) { return; }
+      var raw = String(localStorage.getItem(NOUSAGE) || "");
+      localStorage.setItem(NOUSAGE, raw ? raw + "\n" + key : key);
+    } catch (e) {
+      // 存不进去就下次再试，不影响请求。
+    }
+  }
+
   /** 当前选中的模型；null = 内置。 */
   function currentModel() {
     if (selId === null) { return null; }
@@ -425,12 +545,25 @@ var bridge = null;           // window.tbtools.ai
 
   function modelLabel() {
     var m = currentModel();
-    return m ? (m.label || m.model) : "内置模型";
+    return m ? (m.label || m.model) : t("builtin");
   }
 
-  /** 3860 → 3.9k。底部那一行不该占太多字。 */
+  /**
+   * 3860 → 3.9k，1048576 → 1M。底部那一行不该占太多字。
+   *
+   * <p>以前只到 k：填了 1M 的输入上限会显示成 "1048.6k" —— 看着像算错了。
+   * 换算是二进制的（K = 1024，M = 1024²），和设置里那两个输入框一致。
+   */
   function compactN(n) {
-    return n >= 1000 ? (n / 1000).toFixed(1) + "k" : String(n);
+    if (n >= 1048576) {
+      var m = n / 1048576;
+      return (m >= 10 ? Math.round(m) : Math.round(m * 10) / 10) + "M";
+    }
+    if (n >= 1000) {
+      var k = n / 1000;
+      return (k >= 100 ? Math.round(k) : Math.round(k * 10) / 10) + "k";
+    }
+    return String(n);
   }
 
   function renderPill() {
@@ -462,6 +595,35 @@ var bridge = null;           // window.tbtools.ai
     for (var i = 0; i < models.length; i++) {
       pop.appendChild(popItem(models[i]));
     }
+    // 最后一格：去设置里管理模型。
+    //
+    // 以前列表为空时这里只有"内置模型"一行，用户不知道下一步该去哪儿；
+    // 而这个列表是**在设置里**改的，页面上没有任何入口通到那里。
+    var sep = document.createElement("div");
+    sep.className = "pop-sep";
+    pop.appendChild(sep);
+    var mng = document.createElement("div");
+    mng.className = "pop-item mng";
+    mng.textContent = models.length ? t("popManage") : t("popAdd");
+    mng.onclick = function () {
+      openPop(false);
+      openSettings();
+    };
+    pop.appendChild(mng);
+  }
+
+  /**
+   * 请 Java 打开设置窗口。
+   *
+   * <p>还是那条老通道：页面写 localStorage，Java 的轮询来取。
+   * 同一时刻只可能有一个人点，所以不需要排队。
+   */
+  function openSettings() {
+    try {
+      localStorage.setItem("tbv.openSettings", "1");
+    } catch (e) {
+      setStatus(t("storeOff"), "bad");
+    }
   }
 
   /** 一行。只拿 label 和 ok，绝不碰 key。 */
@@ -476,7 +638,7 @@ var bridge = null;           // window.tbtools.ai
     d.appendChild(dot);
     var nm = document.createElement("span");
     nm.className = "nm";
-    nm.textContent = m === null ? "内置模型" : (m.label || m.model);
+    nm.textContent = m === null ? t("builtin") : (m.label || m.model);
     d.appendChild(nm);
     d.onclick = function () {
       selId = (m === null) ? null : String(m.id);
@@ -535,6 +697,37 @@ function md(src) {
 
   var out = esc(text);
 
+  // 表格：一行行 | a | b |，第二行必须是 |---|---| 这种分隔行。
+  //
+  // 放在 `<code>` / `**粗体**` 那些行内规则之前：表格结构先钉死，
+  // 免得被列表、标题的规则拆坏；单元格里的行内格式后面照样会处理。
+  out = out.replace(/(?:^[ \t]*\|.*\|[ \t]*$(?:\n|$))+/gm, function (chunk) {
+    var rows = chunk.replace(/[ \t\n]+$/, "").split("\n").filter(function (l) {
+      return l.trim();
+    });
+    if (rows.length < 2) { return chunk; }
+    function cells(line) {
+      var s = line.trim().replace(/^\|/, "").replace(/\|$/, "");
+      return s.split("|").map(function (c) { return c.trim(); });
+    }
+    var sep = cells(rows[1]);
+    var isSep = sep.length > 0;
+    for (var k = 0; k < sep.length; k++) {
+      if (!/^:?-{2,}:?$/.test(sep[k])) { isSep = false; break; }
+    }
+    // 第二行不是分隔行 -> 这不是表格，原样还回去。
+    if (!isSep) { return chunk; }
+    var tbl = "<div class='tbl'><table><thead><tr>";
+    cells(rows[0]).forEach(function (c) { tbl += "<th>" + c + "</th>"; });
+    tbl += "</tr></thead><tbody>";
+    for (var r = 2; r < rows.length; r++) {
+      tbl += "<tr>";
+      cells(rows[r]).forEach(function (c) { tbl += "<td>" + c + "</td>"; });
+      tbl += "</tr>";
+    }
+    return tbl + "</tbody></table></div>";
+  });
+
   out = out.replace(/`([^`\n]+)`/g, "<code>$1</code>");
   out = out.replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>");
   out = out.replace(/(^|[^*\w])\*([^*\n]+)\*/g, "$1<i>$2</i>");
@@ -555,7 +748,7 @@ function md(src) {
   for (var i = 0; i < parts.length; i++) {
     var p = parts[i].replace(/^\n+|\n+$/g, "");
     if (!p) { continue; }
-    if (/^<(ul|pre)/.test(p)) { html += p; } else { html += "<p>" + p.replace(/\n/g, "<br>") + "</p>"; }
+    if (/^<(ul|pre|div|table)/.test(p)) { html += p; } else { html += "<p>" + p.replace(/\n/g, "<br>") + "</p>"; }
   }
 
   html = html.replace(/\u0000B(\d+)\u0000/g, function (m, i) {
@@ -564,6 +757,7 @@ function md(src) {
   // 代码块占位符在分段时被当成普通段落包进了 <p>，而 <pre> 不能放在 <p> 里。
   // 判据必须放在"占位符还原之后"才看得见它 —— 放在前面是查不到的，自检就是这么发现的。
   html = html.replace(/<p>(<pre>[\s\S]*?<\/pre>)<\/p>/g, "$1");
+  html = html.replace(/<p>(<div class='tbl'>[\s\S]*?<\/div>)<\/p>/g, "$1");
   return html;
 }
 
@@ -599,19 +793,31 @@ function loadStore() {
 function saveStore() {
   try {
     localStorage.setItem(SKEY, JSON.stringify(sessions));
+    storeOk = true;
+    return;
   } catch (e) {
-    storeOk = false;
-  }
-}
-
-function titleOf(list) {
-  for (var i = 0; i < list.length; i++) {
-    if (list[i].role === "user") {
-      var s = String(list[i].content || "").replace(/\s+/g, " ").trim();
-      return s.length > 28 ? s.slice(0, 28) + "…" : s;
+    // 配额满了。以前这里只是 storeOk=false —— 之后一切照常，只是什么都不再保存，
+    // 而唯一的提示是下拉框的 tooltip（要悬停才看得到）。那等于悄悄丢数据。
+    //
+    // 现在：从<b>最老的</b>会话开始丢（绝不动当前这条），丢到能写为止，并说出来。
+    var dropped = 0;
+    for (var i = sessions.length - 1; i >= 0 && sessions.length > 1; i--) {
+      if (sessions[i].id === currentId) { continue; }
+      sessions.splice(i, 1);
+      dropped++;
+      try {
+        localStorage.setItem(SKEY, JSON.stringify(sessions));
+        storeOk = true;
+        renderSessions();
+        flash(t("storeDrop").replace("%n", dropped));
+        return;
+      } catch (e2) {
+        // 还不够，继续丢。
+      }
     }
+    storeOk = false;
+    setStatus(t("storeFull"), "bad");
   }
-  return "";
 }
 
 function renderSessions() {
@@ -622,29 +828,86 @@ function renderSessions() {
     var s = sessions[i];
     var o = document.createElement("option");
     o.value = s.id;
-    o.textContent = (s.title || t("untitled")) + "  (" + s.turns.length + ")";
+    // 不带 "(3)" 这种条数：会话名本来就该认出是哪一次，条数只是噪音。
+    o.textContent = (s.title || t("untitled"));
     sel.appendChild(o);
   }
   if (currentId) { sel.value = currentId; }
   sel.title = storeOk ? "" : t("storeOff");
 }
 
+/** 当前选中的工具名；没有就返回空串。 */
+function toolName() {
+  return (context && context.tool) ? String(context.tool).trim() : "";
+}
+
+/**
+ * 清掉页脚那几个数。
+ *
+ * <p>它们是"上一次请求"的，不是"这条会话"的 —— 换会话时必须一起清，
+ * 否则切过去看到的是**上一条会话**的用量和累计，越看越糊涂。
+ */
+function resetUsage() {
+  lastPromptTok = 0;
+  lastPromptReal = 0;
+  lastOutReal = 0;
+  lastRate = 0;
+  totalOutTok = 0;
+  rateMarks.length = 0;
+  lastNoteAt = 0;
+  updateStats([]);
+}
+
+/**
+ * 记一个"到目前为止已经输出多少 token"的采样点，算<b>最近 2 秒</b>的速度。
+ *
+ * <p>以前这里是"累计 token ÷ 累计秒数"。那个数在开头一定是小的，然后一路往上爬
+ * 到真实值 —— 看起来就像一个从 0 开始爬的计数器，而不是"现在多快"。
+ * 滑动窗口才能反映当下的速度，而且两秒内就稳定下来。
+ */
+function noteRate(tokens) {
+  var now = Date.now();
+  // 流式回答一秒能来上百小段，每次都重算+重排只会让界面发卡。
+  if (now - lastNoteAt < 300) { return false; }
+  lastNoteAt = now;
+  rateMarks.push({ t: now, n: tokens });
+  while (rateMarks.length > 2 && now - rateMarks[0].t > 2000) {
+    rateMarks.shift();
+  }
+  if (rateMarks.length < 2) { return false; }
+  var dt = (now - rateMarks[0].t) / 1000;
+  var dn = tokens - rateMarks[0].n;
+  if (dt >= 0.2 && dn >= 0) {
+    lastRate = dn / dt;
+    return true;
+  }
+  return false;
+}
+
 function newSession() {
+  closeConfirm();
+  // 会话名先挂当前工具名。一个会话基本就是围绕一个工具展开的，
+  // 而"新会话"三个字在一列会话里认不出任何东西（用户明确要求换掉）。
+  // auto 记着"这个名字是自动起的"，等第一句问题进来时换成问题的描述。
+  var tool = toolName();
   var s = { id: String(Date.now()) + "-" + Math.floor(Math.random() * 1000),
-            title: "", at: Date.now(), turns: [] };
+            title: tool, auto: !!tool, at: Date.now(), turns: [] };
   sessions.unshift(s);
   currentId = s.id;
   turns = s.turns;
+  resetUsage();
   saveStore();
   renderSessions();
   renderLog();
 }
 
 function selectSession(id) {
+  closeConfirm();
   for (var i = 0; i < sessions.length; i++) {
     if (sessions[i].id === id) {
       currentId = id;
       turns = sessions[i].turns;
+      resetUsage();
       renderSessions();
       renderLog();
       return;
@@ -659,17 +922,59 @@ function findCurrent() {
   return null;
 }
 
+/* ---------- 删除会话：页面内确认 ----------
+ *
+ * ★ 页面里绝对不要用 window.confirm / alert / prompt。
+ *
+ * TBtools 的网页面板没有给 JxBrowser 注册 DialogHandler，浏览器弹框等的是一个
+ * 永远不会有人点的对话框 —— 渲染进程停在这里；而 Java 每 700ms 要读一次页面
+ * （采用命令、导出对话都靠这条通道），于是 Swing 的事件线程跟着堵死。
+ * 用户看到的是"点了没反应，面板也收不起来，只能重启 TBtools"。
+ *
+ * 这个坑已经踩过一次：删会话点了没反应，而且整个界面冻住。不要再踩。
+ */
+var confirmAction = null;
+
+/** 出一行确认。onYes 只在用户真的点「删除」之后才执行。 */
+function askConfirm(text, onYes) {
+  var box = el("confirm");
+  if (!box) { return; }
+  el("confirmText").textContent = text;
+  el("confirmYes").textContent = t("yes");
+  el("confirmNo").textContent = t("no");
+  confirmAction = onYes;
+  box.hidden = false;
+}
+
+function closeConfirm() {
+  var box = el("confirm");
+  if (box) { box.hidden = true; }
+  confirmAction = null;
+}
+
 /**
  * 删除当前会话。
  *
  * <p>原来"清空"和"删除"是两个按钮，但用户想要的结果是同一个：<b>眼前清干净</b>。
  * 合成一个之后，只剩一条会话时就地清空（总得留着一条，否则下拉是空的），
  * 还有别的就直接删掉、切到上一条。
+ *
+ * <p>有内容时先出确认条（见上面那段）—— 空会话没什么可丢的，直接删。
  */
 function deleteCurrent() {
   var s = findCurrent();
   if (!s) { return; }
-  if (s.turns.length && !window.confirm(t("confirmDel"))) { return; }
+  if (!s.turns.length) {
+    doDelete();
+    return;
+  }
+  askConfirm(t("confirmDel"), doDelete);
+}
+
+/** 真正删掉当前会话（已经确认过）。 */
+function doDelete() {
+  var s = findCurrent();
+  if (!s) { return; }
   if (sessions.length <= 1) {
     s.turns.length = 0;
     s.title = "";
@@ -687,10 +992,7 @@ function deleteCurrent() {
 }
 
 /**
- * 会话标题：工具名 + 时间。
- *
- * 以前取第一条消息的头几个字 -- 于是发一句“你好”，下拉框里就只显示一个“你”。
- * 一个字什么也说不明，还白白占着刚给会话名让出来的宽度。
+ * 兜底标题：工具名 + 时间。只在拿不到问题文字时用（比如只发了附件）。
  */
 function titleStamp() {
   var d = new Date();
@@ -699,11 +1001,140 @@ function titleStamp() {
   return (tool ? tool + " · " : "") + hm;
 }
 
+/**
+ * 会话名：第一句问题的开头，压成一行、截到 20 字。
+ *
+ * <p>用过两种别的写法，都不行：
+ * <ul>
+ *   <li><b>"工具 · 时间"</b> —— 同一个工具开两次，名字长得一样，认不出是哪一次；</li>
+ *   <li><b>content 的头几个字</b> —— content 是"整段上下文 + 问题"，于是标题变成
+ *       "以下是当前状态：…"。所以要取的是 {@link questionOf} 挑出来的那一句。</li>
+ * </ul>
+ */
+function questionTitle(list) {
+  for (var i = 0; i < list.length; i++) {
+    if (list[i].role !== "user") { continue; }
+    var s = String(questionOf(list[i]) || "");
+    s = s.replace(/```[\s\S]*$/, " ");        // 代码块不进标题
+    s = s.replace(/[`*_#>]/g, " ");           // markdown 记号不留
+    s = s.replace(/\s+/g, " ").trim();
+    if (!s) { continue; }
+    return s.length > 20 ? s.slice(0, 20) + "…" : s;
+  }
+  return "";
+}
+
 function touchTitle() {
   var s = findCurrent();
-  if (s && !s.title) { s.title = titleStamp(); }
+  if (s) {
+    var q = questionTitle(s.turns);
+    // 自动起的名字（工具名 / 空）在第一句问题进来之后换成问题的描述；
+    // 用户自己改过的名字不碰。
+    if (q && (!s.title || s.auto)) {
+      s.title = q;
+      s.auto = false;
+    } else if (!s.title) {
+      s.title = titleStamp();
+      s.auto = false;
+    }
+  }
   saveStore();
   renderSessions();
+}
+
+/**
+ * 会话还挂着自动名时跟着上下文走。
+ *
+ * <p>先开会话、后选工具的顺序很常见（面板一直开着）。这时那个会话名应该
+ * 从"新会话"变成工具名 —— 不然一列会话里全是"新会话"。
+ */
+function nameIfUntitled() {
+  var s = findCurrent();
+  var tool = toolName();
+  if (!s || !tool || s.title) { return; }
+  s.title = tool;
+  s.auto = true;
+  saveStore();
+  renderSessions();
+}
+
+/* ================================================================
+ * 导出这个会话
+ *
+ * 正文在<b>页面里</b>拼：Java 那边只知道工具和命令，不知道会话里有哪些轮 ——
+ * 对话只存在这一侧的 localStorage 里。所以这里拼好，Java 只负责问一句存哪、写文件。
+ * ================================================================ */
+/* send() 把"上下文 + 问题"整段存进历史。导出是给人看的记录，不是重放请求，
+   所以要从这段里把问题挑出来。 */
+var MARK = "\n\n---\n\n问题：";
+
+function questionOf(m) {
+  // 新会话的轮次自带干净的问题；老会话没有，只能从整段里切出来。
+  if (m && typeof m.q === "string" && m.q) { return m.q; }
+  var c = String((m && m.content) || "");
+  var k = c.indexOf(MARK);
+  return k >= 0 ? c.slice(k + MARK.length) : c;
+}
+
+function p2(n) { return ("0" + n).slice(-2); }
+
+function stamp() {
+  var d = new Date();
+  return d.getFullYear() + "-" + p2(d.getMonth() + 1) + "-" + p2(d.getDate())
+    + " " + p2(d.getHours()) + ":" + p2(d.getMinutes());
+}
+
+function fileNameStamp() {
+  var d = new Date();
+  return "" + d.getFullYear() + p2(d.getMonth() + 1) + p2(d.getDate())
+    + "-" + p2(d.getHours()) + p2(d.getMinutes());
+}
+
+function buildMarkdown() {
+  var s = findCurrent();
+  if (!s || !s.turns.length) { return null; }
+  var title = String(s.title || "").trim() || t("untitled");
+  var rows = [];
+  rows.push("# " + title);
+  rows.push("");
+  rows.push("> " + t("expAt") + " " + stamp()
+            + " \u00b7 " + t("expModel") + " " + modelLabel()
+            + " \u00b7 " + Math.ceil(s.turns.length / 2) + " " + t("expRounds"));
+  rows.push("");
+  for (var i = 0; i < s.turns.length; i++) {
+    var x = s.turns[i];
+    // 失败过的那一轮不进导出：记录里只有问题和错误，没有回答。
+    if (x.failed) { continue; }
+    if (x.role !== "user" && x.role !== "assistant") { continue; }
+    rows.push(x.role === "user" ? "## " + t("expMe") : "## " + t("expAi"));
+    rows.push("");
+    rows.push(questionOf(x));
+    rows.push("");
+  }
+  return { name: title + " " + fileNameStamp(), text: rows.join("\n") };
+}
+
+/**
+ * 导出：把名字和正文写成一条 localStorage 载荷，Java 定时来取。
+ *
+ * <p>载荷是 {@code encodeURIComponent(名字) + "|" + encodeURIComponent(正文)}。
+ * 编码之后整条里不可能有引号、反斜杠、换行 —— 而 {@code |} 本身会被编成 %7C，
+ * 所以第一个竖线必然是分隔符。这样它穿过 executeJavaScript 的返回值也不会变形。
+ *
+ * @return 导出的正文（给自检用）；没有可导出的内容时返回空串
+ */
+function exportNow() {
+  var doc = buildMarkdown();
+  if (!doc) { flash(t("expEmpty")); return ""; }
+  try {
+    localStorage.setItem("tbv.export",
+      encodeURIComponent(doc.name) + "|" + encodeURIComponent(doc.text));
+    flash(t("expHand"));
+    return doc.text;
+  } catch (e) {
+    setStatus(t("expOff"), "bad");
+    return "";
+  }
 }
 
 /* ================================================================
@@ -715,6 +1146,15 @@ function touchTitle() {
  * 文本不限会直接顶爆 32000 字符的预算。
  */
 var atts = [];
+
+/**
+ * 附件按钮能不能用。
+ *
+ * <p>JxBrowser 不会自己弹文件框 —— 插件必须注册 OpenFileCallback / OpenFilesCallback
+ * （TBtools 不给插件装）。Java 那边装成功了才会把这里置 true；装不上就把 ⊕ 藏掉，
+ * 免得又是一个"点了没反应"的按钮。
+ */
+var attachOn = true;
 
 function renderAtts() {
   var box = el("atts");
@@ -766,14 +1206,24 @@ function addFiles(list) {
 
 function renderLog() {
   el("log").innerHTML = "";
+  var ask = "";
   for (var i = 0; i < turns.length; i++) {
     var m = turns[i];
     if (m.role === "user") {
-      bubble("u", m.content);
+      // ★ 用户那一轮存的是"整段上下文 + 问题"（发给模型的就是它）。
+      // 这里必须只显示问题 —— 否则每次重绘（切语言、收起再展开）都会把
+      // 整份工具帮助原文糊到对话区上。
+      ask = questionOf(m);
+      bubble("u", ask);
+      // 失败过的那一轮：问题和错误一起画出来，重绘之后也还在。
+      if (m.failed) { bubble("e", m.err || ""); }
     } else {
       var bb = bubble("a", "");
       bb.innerHTML = md(m.content);
       wireCopy(bb);
+      // 动作按钮只挂在最新那条回答下面。重绘（切语言、收起再展开）之后
+      // 它们不该凭空消失 —— 复制/重试正是这时候最需要。
+      if (i === turns.length - 1) { addActions(bb, ask, m.content); }
     }
   }
   if (!turns.length) {
@@ -841,6 +1291,24 @@ function setStatus(text, cls) {
   s.className = cls || "";
 }
 
+var flashT = 0;
+
+/**
+ * 说一句就收回去的提示。
+ *
+ * <p>setStatus("…","ok") 是不写字的（那是给"就绪"用的）。可"已送到命令框"这种反馈
+ * <b>必须看得见</b> —— 用户点了按钮，两三秒后才发现另一边变了，中间那几秒会以为
+ * 点空了。所以凡是"某个动作成了"，都走这里。
+ */
+function flash(text) {
+  var s = el("status");
+  if (!s) { return; }
+  s.textContent = text;
+  s.className = "";
+  clearTimeout(flashT);
+  flashT = setTimeout(function () { s.textContent = ""; }, 2200);
+}
+
 /** 发送/停止那一个按钮的样子：不忙是 ▶，忙了是 ■。 */
 function goUI() {
   var b = el("go");
@@ -861,7 +1329,7 @@ function boot() {
   // 桥不在、或者形状不对，就走 status 那一行报出来 —— 那种时候必须有话说。
   if (bridge) {
     if (typeof bridge.chat !== "function") {
-      setStatus("ai.chat 不是函数 —— 接口形状和预期不同", "bad");
+      setStatus(t("chatNotFn"), "bad");
     }
   } else {
     setStatus(t("noBridge"), "bad");
@@ -895,7 +1363,7 @@ function ping() {
 
 /** 把 reject 出来的东西变成一句人话。 */
 function describe(e) {
-  if (!e) { return "（没有错误信息）"; }
+  if (!e) { return t("noErrInfo"); }
   var code = (typeof e === "string") ? e : (e.code || e.reason || e.message || "");
   if (code && why(code) !== String(code)) { return why(code); }
   return String(code || e);
@@ -909,6 +1377,7 @@ window.tbvAi = {
     } catch (e) {
       context = null;
     }
+    nameIfUntitled();
     refreshCtx();
   },
   setTheme: function (name) {
@@ -936,10 +1405,21 @@ window.tbvAi = {
     renderPill();
     if (el("modelPop") && !el("modelPop").hasAttribute("hidden")) { renderPop(); }
   },
-  ask: function (text) {
-    el("ask").value = text || "";
-    send();
-  }
+  /**
+   * 附件按钮的开关 —— 由 Java 决定（它才知道文件对话框装没装上）。
+   */
+  setAttach: function (on) {
+    attachOn = !!on;
+    var b = el("pick");
+    if (b) { b.style.display = attachOn ? "" : "none"; }
+  },
+  /** 给自检用：拼一段 Markdown 但不保存；以及走完整的导出路径。 */
+  markdown: buildMarkdown,
+  exportNow: exportNow,
+  /** 给自检用：Markdown 渲染函数本身（表格/代码块这些要看输出）。 */
+  render: md,
+  /** 给自检用：估算函数本身。 */
+  estTokens: estTokens
 };
 
 /* ---------------- 上下文 ---------------- */
@@ -991,26 +1471,71 @@ function refreshCtx() {
   updateStats(bits);
 }
 
+/* ================================================================
+ * token 估算
+ *
+ * 页面里没有分词器，也没有模型的词表 —— 所以只能估。估的时候要满足两条：
+ *   1. 尽量贴近真实分词器：中文/日文/韩文/全角标点 1 字 ≈ 1 token，
+ *      其它（英文、代码、路径）4 字符 ≈ 1 token；
+ *   2. 宁高不低：估多了只是早一点丢历史，估少了会被服务端当场拒。
+ *
+ * 以前这里是"字符数 ÷ 2"。中文上勉强（真实约 0.6/字），但工具帮助、命令、
+ * 报错几乎全是英文，而英文约 4 字符 1 token —— 那部分被高估了整整一倍。
+ * 页脚那行数字看着很精确，实际上可能差一倍。
+ * ================================================================ */
+function estTokens(s) {
+  var t = String(s == null ? "" : s);
+  var cjk = 0;
+  var other = 0;
+  for (var i = 0; i < t.length; i++) {
+    var c = t.charCodeAt(i);
+    if ((c >= 0x3000 && c <= 0x303F) ||      // 中日韩标点
+        (c >= 0x3040 && c <= 0x30FF) ||      // 平假名 / 片假名
+        (c >= 0x3400 && c <= 0x4DBF) ||      // 扩展 A
+        (c >= 0x4E00 && c <= 0x9FFF) ||      // 基本汉字
+        (c >= 0xAC00 && c <= 0xD7AF) ||      // 谚文
+        (c >= 0xF900 && c <= 0xFAFF) ||      // 兼容汉字
+        (c >= 0xFF00 && c <= 0xFFEF)) {      // 全角
+      cjk++;
+    } else {
+      other++;
+    }
+  }
+  return cjk + Math.ceil(other / 4);
+}
+
+/** 这一次请求的提示有多少 token：服务端给过真值就用真值。 */
+function usedTokens() {
+  return lastPromptReal > 0 ? lastPromptReal : lastPromptTok;
+}
+
 /**
  * 底部那一行：上下文用量 / 上限 / 百分比 · 轮数。
  *
- * <p>token 是估的：字符数 ÷ 2。和 trimToBudget 用的是同一个口径 ——
- * 两处口径不一样的话，用户会看到互相矛盾的两个数字。
+ * <p>服务端返回了 usage 就是真数；没有时是估算，估算前面带一个 ≈ ——
+ * 别让人把一个猜出来的数字当成账单。
  */
 function updateStats(bits) {
   var m = currentModel();
   var lim = (m && m.maxIn > 0) ? m.maxIn : 0;
   var out = [];
-  if (lastPromptTok > 0) {
-    out.push("\u4e0a\u4e0b\u6587 " + compactN(lastPromptTok)
+  var used = usedTokens();
+  if (used > 0) {
+    var exact = lastPromptReal > 0;
+    out.push(t("statCtx") + " " + (exact ? "" : t("statApprox")) + compactN(used)
              + (lim > 0 ? " / " + compactN(lim) + " \u00b7 "
-                 + Math.min(999, Math.round(lastPromptTok / lim * 100)) + "%" : " token"));
+                 + Math.min(999, Math.round(used / lim * 100)) + "%" : " tok"));
   }
-  var rounds = Math.floor(turns.length / 2);
-  if (rounds > 0) { out.push(rounds + " \u8f6e"); }
+  // 轮数按"回答了几次"数，不按消息条数 ÷ 2 —— 失败的那一轮只有一条消息，
+  // 条数除以二会算错。
+  var rounds = 0;
+  for (var ri = 0; ri < turns.length; ri++) {
+    if (turns[ri].role === "assistant") { rounds++; }
+  }
+  if (rounds > 0) { out.push(rounds + " " + t("statRound")); }
   if (lastRate > 0) { out.push(Math.round(lastRate) + " tok/s"); }
-  if (totalOutTok > 0) { out.push("\u7d2f\u8ba1 " + compactN(totalOutTok) + " tok"); }
-  if (bits && bits.length) { out.push("\u5df2\u5e26\u4e0a " + bits.length + " \u9879"); }
+  if (totalOutTok > 0) { out.push(t("statTotal") + " " + compactN(totalOutTok) + " tok"); }
+  if (bits && bits.length) { out.push(t("statBits") + " " + bits.length + " " + t("statItems")); }
   el("budget").textContent = out.join(" \u00b7 ");
 }
 
@@ -1019,6 +1544,11 @@ function applyLang() {
   goUI();
   el("sessNew").title = t("sessNew");
   el("sessDel").title = t("sessDel");
+  if (el("sessExp")) { el("sessExp").title = t("exp"); }
+  if (el("pick")) {
+    el("pick").title = attachOn ? t("pick") : t("noAttach");
+    el("pick").style.display = attachOn ? "" : "none";
+  }
   boot();
   renderSessions();
   renderLog();
@@ -1048,17 +1578,17 @@ function sysPrompt() {
  */
 function trimToBudget(msgs, maxIn) {
     // 不发给服务端 —— 只在本地决定发多少上下文。
-    // 字符数当两个 token 粗估；宁可保守，也不要被截断。
+    // 单位是 token（估算），和页脚那一行用同一个口径：两处口径不一样的话，
+    // 用户会看到"明明没到上限，历史却被截了"。
     if (!maxIn || maxIn <= 0 || msgs.length <= 2) { return msgs; }
-    var budget = maxIn * 2;
-    var total = 0;
-    for (var i = 0; i < msgs.length; i++) {
-      total += String(msgs[i].content || "").length;
-    }
     var out = msgs.slice();
-    while (total > budget && out.length > 2) {
+    var total = 0;
+    for (var i = 0; i < out.length; i++) {
+      total += estTokens(out[i].content);
+    }
+    while (total > maxIn && out.length > 2) {
       var dropped = out.splice(1, 1)[0];      // 第 0 条是 system，不动
-      total -= String(dropped.content || "").length;
+      total -= estTokens(dropped.content);
     }
     return out;
   }
@@ -1066,6 +1596,26 @@ function trimToBudget(msgs, maxIn) {
   function sendExternal(msgs, box, cfg) {
   var ctrl = new AbortController();
   var acc = "";
+  var trimmed = trimToBudget(msgs, cfg.maxIn);
+
+  /**
+   * 服务端回来的真实用量。
+   *
+   * <p>流式请求要 {@code stream_options.include_usage} 才会带 usage，
+   * 它可能在最后一帧（choices 为空），也可能挂在最后那一小段上。
+   * 拿到了就用真值显示 —— 这是唯一能"和 Harness 一样准"的办法，
+   * 因为页面里没有分词器。
+   */
+  function takeUsage(u) {
+    if (!u) { return; }
+    if (typeof u.prompt_tokens === "number" && u.prompt_tokens > 0) {
+      lastPromptReal = u.prompt_tokens;
+    }
+    if (typeof u.completion_tokens === "number" && u.completion_tokens > 0) {
+      lastOutReal = u.completion_tokens;
+    }
+    updateStats([]);
+  }
 
   function onEvent(chunk) {
     var lines = chunk.split("\n");
@@ -1076,14 +1626,13 @@ function trimToBudget(msgs, maxIn) {
       if (!payload || payload === "[DONE]") { continue; }
       try {
         var j = JSON.parse(payload);
+        if (j && j.usage) { takeUsage(j.usage); }
         var ch = j.choices && j.choices[0];
         var d = ch && (ch.delta || ch.message);
         if (d && d.content) {
           acc += d.content;
-          streamChars += d.content.length;
-          // 每次都算会拖慢渲染；每 400ms 算一次就够了。
-          var el2 = (Date.now() - streamT0) / 1000;
-          if (el2 > 0.4) { lastRate = (streamChars / 2) / el2; updateStats([]); }
+          // 每 300ms 刷一次速度就够（见 noteRate）。
+          if (noteRate(estTokens(acc))) { updateStats([]); }
           box.textContent = acc;
           el("log").scrollTop = el("log").scrollHeight;
         }
@@ -1093,31 +1642,46 @@ function trimToBudget(msgs, maxIn) {
     }
   }
 
-  // 输出上限：填了才发，否则用服务端默认。
-  var body = { model: cfg.model, messages: trimToBudget(msgs, cfg.maxIn), stream: true };
-  if (cfg.maxOut > 0) { body.max_tokens = cfg.maxOut; }
   var url = String(cfg.baseUrl).replace(/\/+$/, "") + "/chat/completions";
-  var p = fetch(url, {
-    method: "POST",
-    signal: ctrl.signal,
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": "Bearer " + (cfg.apiKey || "")
-    },
-    body: JSON.stringify(body)
-  }).then(function (res) {
-    if (!res.ok) {
-      return res.text().then(function (body) {
-        var tail = String(body || "").slice(0, 300);
-        // 服务端万一回显了 key，就打码 —— 错误文字会被用户看到、被截图。
-        if (cfg.apiKey) { tail = tail.split(cfg.apiKey).join("***"); }
-        throw (lang === "en" ? "HTTP " : "接口返回 ") + res.status + "  " + tail;
-      });
-    }
+
+  /* 请求体：输出上限填了才发（否则用服务端默认）。
+     真实用量要服务端带 usage，这由 stream_options 打开 —— 但它不是所有
+     OpenAI 兼容实现都认，所以放在第一次尝试里，被拒就去掉重发。 */
+  function body(withUsage) {
+    var b = { model: cfg.model, messages: trimmed, stream: true };
+    if (cfg.maxOut > 0) { b.max_tokens = cfg.maxOut; }
+    if (withUsage) { b.stream_options = { include_usage: true }; }
+    return b;
+  }
+
+  function post(withUsage) {
+    return fetch(url, {
+      method: "POST",
+      signal: ctrl.signal,
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + (cfg.apiKey || "")
+      },
+      body: JSON.stringify(body(withUsage))
+    });
+  }
+
+  function httpError(res) {
+    return res.text().then(function (raw) {
+      var tail = String(raw || "").slice(0, 300);
+      // 服务端万一回显了 key，就打码 —— 错误文字会被用户看到、被截图。
+      if (cfg.apiKey) { tail = tail.split(cfg.apiKey).join("***"); }
+      throw (lang === "en" ? "HTTP " : "接口返回 ") + res.status + "  " + tail;
+    });
+  }
+
+  /* 读响应：非流式 JSON 和 SSE 两条路都接。 */
+  function consume(res) {
     if (!res.body || !res.body.getReader) {
       return res.text().then(function (txt) {
         try {
           var j = JSON.parse(txt);
+          if (j && j.usage) { takeUsage(j.usage); }
           var m = j.choices && j.choices[0] && j.choices[0].message;
           acc = (m && m.content) ? m.content : txt;
         } catch (e) { acc = txt; }
@@ -1144,6 +1708,25 @@ function trimToBudget(msgs, maxIn) {
       });
     }
     return pump();
+  }
+
+  // 第一次带上 stream_options；服务端不认这个参数（400/422/501）就去掉重发。
+  // ★ 只有"去掉之后成功了"才记住这家服务器 —— 否则一次别的原因导致的 400
+  //   （模型名写错、额度用完）会被当成"它不支持用量"，之后永远拿不到真数，
+  //   而且界面上看不出来。这类静默降级在这个项目里已经出现过好几次了。
+  var wantUsage = !usageRefused(cfg.baseUrl);
+  var p = post(wantUsage).then(function (res) {
+    if (!res.ok && wantUsage
+            && (res.status === 400 || res.status === 422 || res.status === 501)) {
+      return post(false).then(function (again) {
+        if (again.ok) {
+          usageRefuse(cfg.baseUrl);
+          return consume(again);
+        }
+        return httpError(again);
+      });
+    }
+    return res.ok ? consume(res) : httpError(res);
   }).then(function (text) {
     return (typeof text === "string" && text) ? text : acc;
   }, function (e) {
@@ -1199,7 +1782,7 @@ loadSel();
       // 而用户看不出来它只看了一半。
       full += "\n\n[附件 " + atts[i].name + "]\n" + part
             + (whole.length > part.length
-               ? "\n" + t("cutNote") + whole.length + " 字符）" : "");
+               ? "\n" + t("cutNote") + whole.length + t("cutTail") : "");
     }
   }
   atts.length = 0;
@@ -1210,19 +1793,34 @@ loadSel();
   bubble("u", names.length ? (q + "\n\n\u{1F4CE} " + names.join("、")) : q);
 
   // 发给模型的历史：只带 user/assistant，不带 system（system 单独放最前）。
+  //
+  // ★ 用户那些轮只发<b>问题</b>。历史里的 content 是"整段上下文 + 问题"
+  //   （老会话）或问题（新会话），而上下文只需要在<b>这一次</b>请求里带一遍 ——
+  //   不然 12 轮就等于把整份帮助原文和整个工具清单重发 12 遍，token 直接十倍。
   var msgs = [{ role: "system", content: sysPrompt() }];
   for (var i = 0; i < turns.length; i++) {
-    if (turns[i].role === "user" || turns[i].role === "assistant") { msgs.push(turns[i]); }
+    var tr = turns[i];
+    if (tr.failed) { continue; }      // 失败的那一轮不算对话，不进模型历史
+    if (tr.role === "user") {
+      msgs.push({ role: "user", content: questionOf(tr) });
+    } else if (tr.role === "assistant") {
+      msgs.push({ role: "assistant", content: tr.content });
+    }
   }
   msgs.push({ role: "user", content: full });
 
-  // 发之前算一次，用来在底部显示上下文用量。
-  var promptChars = 0;
+  // 发之前估一次，用来在底部显示上下文用量。服务端要是回了 usage，
+  // 下面会把它换成真值 —— 页脚那时会把 ≈ 去掉。
+  var promptTok = 0;
   for (var pi = 0; pi < msgs.length; pi++) {
-    promptChars += String(msgs[pi].content || "").length;
+    promptTok += estTokens(msgs[pi].content);
   }
-  lastPromptTok = Math.ceil(promptChars / 2);
-  streamT0 = Date.now(); streamChars = 0; lastRate = 0;
+  lastPromptTok = promptTok;
+  lastPromptReal = 0;
+  lastOutReal = 0;
+  streamT0 = Date.now(); lastRate = 0;
+  rateMarks.length = 0;
+  lastNoteAt = 0;
   updateStats([]);
 
   var box = bubble("a", "");
@@ -1280,6 +1878,7 @@ loadSel();
           base += s;
         }
         box.textContent = base;
+        if (noteRate(estTokens(base))) { updateStats([]); }
         el("log").scrollTop = el("log").scrollHeight;
       }
     });
@@ -1303,19 +1902,28 @@ loadSel();
     var text = (typeof r === "string" && r) ? r : base;
     box.innerHTML = md(text);
       wireCopy(box);
-    totalOutTok += Math.ceil(text.length / 2);
+    // 结束时用<b>整段平均</b>收尾：窗口里最后一小段常常偏低，收尾的数字会难看。
+    var secs = (Date.now() - streamT0) / 1000;
+    if (secs >= 0.3) { lastRate = estTokens(text) / secs; }
+    totalOutTok += (lastOutReal > 0 ? lastOutReal : estTokens(text));
     // 回答下面给一行小动作：重试 / 编辑 / 继续 / 复制。
     addActions(box, q, text);
-    turns.push({ role: "user", content: full });
+    // 历史里只存<b>问题</b>：上下文在发送时单独带一次（见上面 msgs 那段），
+    // 存进历史只会让它跟着每一条记录一起重发。
+    turns.push({ role: "user", content: q, q: q });
     turns.push({ role: "assistant", content: text });
     // 历史太长会挤爆请求预算，留最近若干轮就够。
     if (turns.length > 24) { turns.splice(0, turns.length - 24); }
     touchTitle();
   }).catch(function (e) {
-    // 失败的那一轮不进历史 —— 否则下次会把它当上下文再发一遍。
+    // 失败的那一轮要留在<b>对话里</b> —— 以前什么都不存，于是一收起面板，
+    // 这个问题和错误提示就一起消失了。但标成 failed：它不会被当成上下文
+    // 再发给模型（见 msgs 那段），"失败的问题"对模型没有意义。
     var code = (typeof e === "string") ? e : (e && (e.code || e.reason));
+    var why = describe(e);
     box.className = "m e";
-    box.textContent = describe(e);
+    box.textContent = why;
+    turns.push({ role: "user", content: q, q: q, failed: true, err: why });
     if (code === "denied") { addRetry(q); } else { addActions(box, q, null); }
   }).then(finish);
 
@@ -1365,36 +1973,20 @@ function addActions(box, question, text) {
     }
   }
   if (text) {
-    var cmd = extractCode(text);
-    if (cmd) {
-      // 采用：写进 localStorage，Java 定时过来取。
-      // 页面→Java 没有通道，这是免费能用的唯一一条。
-      act(lang === "en" ? "Use" : "\u91c7\u7528", function () { adoptCmd(cmd); });
-    }
     act(lang === "en" ? "Copy" : "\u590d\u5236", function () { copyText(text); });
   }
   box.parentNode.insertBefore(row, box.nextSibling);
   el("log").scrollTop = el("log").scrollHeight;
 }
 
-/** 靠 execCommand 复制 —— JxBrowser 拒绝 navigator.clipboard。 */
-/** 第一个代码块里的内容；没有就返回空。 */
-function extractCode(md) {
-  if (!md) { return ""; }
-  var m = /```[a-zA-Z0-9_-]*\n([\s\S]*?)```/.exec(String(md));
-  return m ? m[1].replace(/\s+$/, "") : "";
-}
-
-/** 把命令交给 Java —— encodeURIComponent 避开所有引号和换行的麻烦。 */
-function adoptCmd(cmd) {
-  try {
-    localStorage.setItem("tbv.adopt", encodeURIComponent(cmd));
-    setStatus(lang === "en" ? "Sent to the command box" : "\u5df2\u9001\u5230\u547d\u4ee4\u6846");
-  } catch (e) {
-    setStatus("\u5199\u4e0d\u8fdb localStorage");
-  }
-}
-
+/**
+ * 靠 execCommand 复制 —— JxBrowser 拒绝 navigator.clipboard。
+ *
+ * <p>原来这里还有一个「采用」按钮，把回答里的命令直接塞进命令预览框。去掉了：
+ * 一次回答里可能给好几条命令（该用哪条它也不说），而插件这边命令框还牵涉
+ * 路径转换和参数重置 —— 塞进去往往是个半对的状态，比让用户复制走更糟。
+ * 每个代码块右上角本来就有复制按钮，那才是该走的路。
+ */
 function copyText(text) {
   var ta = document.createElement("textarea");
   ta.value = text;
@@ -1436,20 +2028,152 @@ function addRetry(original) {
 /* ---------------- 事件 ---------------- */
 // 一个按钮：忙的时候 send() 自己会转去 stop()（见它第一行）。
 el("go").onclick = send;
-el("pick").onclick = function () { el("file").click(); };
+el("pick").onclick = function () { if (attachOn) { el("file").click(); } };
 el("file").onchange = function () { addFiles(el("file").files); el("file").value = ""; };
 el("explain").onclick = function () {
   if (busy) { return; }
   el("ask").value = t("explainQ");
   send();
 };
-el("ask").addEventListener("keydown", function (e) {
-  if (e.key === "Escape") { e.preventDefault(); if (busy) { stop(); } return; }
-  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
-});
+/**
+ * 退格删字之后，输入框那一块偶尔没被重绘干净，留下几道竖线
+ * （删除前那些中文的竖笔画，不是输入框里的内容）。
+ *
+ * <p>画面是两段组成的：网页 → Chromium 的离屏位图 → Swing 组件把位图贴上来。
+ * 哪一段脏了都会留下残影，所以两边都要推：
+ *   <ul>
+ *     <li>这里：用 {@code display} 开关强制整块重新布局+重新栅格化。
+ *         上次只改 {@code transform}，那通常只是复用缓存好的图层，白推。</li>
+ *     <li>Java 侧：看到 {@code tbv.repaint} 就把浏览器组件整个重画一遍
+ *         （见 AiAssistPanel 的轮询）。</li>
+ *   </ul>
+ *
+ * <p>另外顺手清掉落单的代理字符（半个 emoji 之类，本身也会画成小方块/竖条）。
+ */
+function stripLoneSurrogates(s) {
+  var out = "";
+  for (var i = 0; i < s.length; i++) {
+    var c = s.charCodeAt(i);
+    if (c >= 0xD800 && c <= 0xDBFF) {
+      var n = s.charCodeAt(i + 1);
+      if (n >= 0xDC00 && n <= 0xDFFF) {
+        out += s.charAt(i) + s.charAt(i + 1);
+        i++;
+      }
+      continue;                       // 落单的高位代理：丢掉
+    }
+    if (c >= 0xDC00 && c <= 0xDFFF) { continue; }   // 落单的低位代理：丢掉
+    out += s.charAt(i);
+  }
+  return out;
+}
+
+/**
+ * 删字的时候临时把光标藏起来。
+ *
+ * <p>★ 这是"一串竖线"的真正原因（用户自己看出来的）：
+ *
+ * <p>删得快的时候，光标每退一格都会在**旧位置**画一次；离屏渲染这条路上，
+ * 旧位置来不及被擦掉，于是留下**一串竖线** —— 那是删到过的每一个光标位置，
+ * 不是字符，也不是字影。所以治它的办法不是"重绘"（重绘只是把旧画面再贴一次），
+ * 而是**让它在删的时候别画光标**：不画，就没有旧位置可残留。
+ *
+ * <p>停手 400ms 之后再把光标放回来 —— 那会儿早就不在删了，看不见它消失。
+ */
+var caretTimer = 0;
+
+function hideCaret() {
+  var box = el("ask");
+  if (!box || !box.style) { return; }
+  box.style.caretColor = "transparent";
+  clearTimeout(caretTimer);
+  caretTimer = setTimeout(showCaret, 400);
+}
+
+function showCaret() {
+  var box = el("ask");
+  if (box && box.style) { box.style.caretColor = ""; }
+}
+
+var deletedByKey = false;
+var composing = false;
+
+/**
+ * 把输入框这个元素整个重建一个。
+ *
+ * <p>删空之后那一块有时候会留下残影 —— 可能是像素没被清掉，也可能是输入法留了
+ * 几个看不见的字符。重建元素两种情况都能清干净：旧元素连同它的绘制缓存一起扔掉，
+ * 新元素从头画一次；而且新元素有实底（见 CSS），会先把那块区域涂一遍。
+ */
+function rebuildAsk() {
+  var old = el("ask");
+  if (!old || typeof old.cloneNode !== "function") { return; }   // 自检桩里没有
+  var parent = old.parentNode;
+  if (!parent || typeof parent.replaceChild !== "function") { return; }
+  var fresh = old.cloneNode(false);      // 只复制标签和属性，不带内容
+  fresh.id = "ask";
+  fresh.value = "";
+  parent.replaceChild(fresh, old);
+  wireAsk(fresh);
+  if (typeof fresh.focus === "function") { fresh.focus(); }
+  hideCaret();
+}
+
+/** 输入框上的那几个监听。重建元素之后要重新挂一遍。 */
+function wireAsk(box) {
+  box.addEventListener("keydown", function (e) {
+    if (e.key === "Backspace" || e.key === "Delete") {
+      deletedByKey = true;
+      hideCaret();
+    }
+  });
+  // 中文输入法组字期间绝对不能去动 value / 元素本身 —— 那会把组字状态弄坏。
+  box.addEventListener("compositionstart", function () { composing = true; });
+  box.addEventListener("compositionend", function () { composing = false; });
+  box.addEventListener("input", function () {
+    if (composing) { deletedByKey = false; return; }
+    var v = box.value;
+    var clean = stripLoneSurrogates(v);
+    if (clean !== v) { v = clean; box.value = clean; }
+    if (!deletedByKey) { return; }
+    deletedByKey = false;
+    // 删空之后重建元素：这是唯一能同时清掉"残留像素"和"看不见的残留字符"的办法。
+    if (v.length === 0) {
+      rebuildAsk();
+      return;
+    }
+    // 删了一部分：请 Java 把浏览器组件重画一遍（只重画，不动几何 —— 之前用
+    // applySize 重摆，把画面和组件的尺寸关系搞错位，结果输入框边框都残缺了）。
+    try { localStorage.setItem("tbv.repaint", "1"); } catch (e) {}
+  });
+  box.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") { e.preventDefault(); if (busy) { stop(); } return; }
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      // ★ 回答中按 Enter <b>不该</b>把回答掐掉。
+      //
+      // send() 的第一行是"忙就停"（那个 ▶/■ 按钮靠它切换），于是以前边看回答
+      // 边打下一个问题、一回车，当前回答就没了。停只有两个入口：Esc 和 ■。
+      if (busy) { flash(t("busyHint")); return; }
+      send();
+    }
+  });
+}
+
+wireAsk(el("ask"));
+
+
 el("sessNew").onclick = newSession;
 el("sessDel").onclick = deleteCurrent;
+el("sessExp").onclick = exportNow;
 el("sessSel").onchange = function () { selectSession(el("sessSel").value); };
+// 确认条的两个按钮。先关条再执行 —— 回调里可能会切会话/重绘。
+el("confirmYes").onclick = function () {
+  var fn = confirmAction;
+  closeConfirm();
+  if (fn) { fn(); }
+};
+el("confirmNo").onclick = closeConfirm;
 
 /* ---------------- 启动 ---------------- */
 loadStore();

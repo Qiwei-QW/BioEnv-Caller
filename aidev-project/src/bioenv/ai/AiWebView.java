@@ -71,6 +71,26 @@ public final class AiWebView {
     private Object frame;
     private String problem = "";
 
+    /**
+     * 文件选择框正开着。
+     *
+     * <p>这期间网页的渲染线程停在"等用户选文件"上，任何 {@code executeJavaScript}
+     * 都会一直等下去 —— 所以这里直接短路：不进去，也就不卡任何人。
+     * （Java 侧的轮询在自己的线程上跑，它卡了也只是空转；但事件线程上的推送上
+     * 万一撞上这个窗口，就会把界面冻住，所以必须挡掉。）
+     */
+    private volatile boolean dialogOpen;
+
+    /**
+     * 现在是不是有个文件框挡在网页前面。
+     *
+     * <p>这期间推给页面的东西全部进不去 —— 调用方必须<b>保留</b>待推状态，
+     * 等框关掉了再推，而不是当成推成功。
+     */
+    public boolean dialogOpen() {
+        return dialogOpen;
+    }
+
     private AiWebView(JPanel panel, Object browser) {
         this.panel = panel;
         this.browser = browser;
@@ -317,7 +337,7 @@ public final class AiWebView {
      * @return 没有页面、没有主框架、或执行失败时返回 null
      */
     public String evalString(String js) {
-        if (browser == null) {
+        if (browser == null || dialogOpen) {
             return null;
         }
         try {
@@ -345,7 +365,7 @@ public final class AiWebView {
     }
 
     public boolean run(String js) {
-        if (browser == null) {
+        if (browser == null || dialogOpen) {
             return false;
         }
         try {
@@ -363,6 +383,33 @@ public final class AiWebView {
         } catch (Throwable t) {
             problem = "执行 JS 失败：" + t;
             return false;
+        }
+    }
+
+    /**
+     * 把整个网页视图重画一遍。
+     *
+     * <p>为什么需要这个：TBtools 的 {@code WebGuiJPanel} 用
+     * {@code RenderingMode.OFF_SCREEN}，画面是"Chromium 渲染到离屏位图 → Swing
+     * 组件把位图贴上来"两段。网页里删字之后，位图上偶尔会留下被删那些字的残影，
+     * 而脏的是"位图 → 组件"这一段时，网页里怎么重绘都没用 —— 只能让 Java 把
+     * 组件整棵子树重画一次。
+     *
+     * <p>在事件线程上调用。
+     */
+    public void repaintView() {
+        if (panel != null) {
+            repaintTree(panel);
+        }
+    }
+
+    private static void repaintTree(java.awt.Component c) {
+        c.repaint();
+        if (c instanceof java.awt.Container) {
+            java.awt.Component[] kids = ((java.awt.Container) c).getComponents();
+            for (int i = 0; i < kids.length; i++) {
+                repaintTree(kids[i]);
+            }
         }
     }
 
@@ -402,6 +449,173 @@ public final class AiWebView {
             for (int i = 0; i < kids.length; i++) {
                 applySize(kids[i], w, h);
             }
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // 文件对话框
+    // ------------------------------------------------------------------
+
+    /**
+     * 给页面里的 {@code <input type=file>} 装上文件对话框。
+     *
+     * <p>JxBrowser <b>不会</b>自己弹文件框：插件必须注册
+     * {@code OpenFileCallback}（单选）和 {@code OpenFilesCallback}（多选，
+     * 页面里那个 input 带 multiple）。TBtools 的网页面板不给插件装，
+     * 所以不装的话，页面里点"添加附件"什么都不会发生 —— 又是个死按钮。
+     *
+     * <p>版本已核对（TBtools 自带 JxBrowser 7.37.1）：
+     * <pre>
+     *   interface OpenFileCallback extends BrowserAsyncCallback&lt;Params, Action&gt;
+     *   Action: open(java.nio.file.Path) / cancel()
+     *   interface OpenFilesCallback ... Action: open(Path...) / cancel()
+     *   注册：Browser.set(Class&lt;C&gt;, C)     // 来自 Advisable
+     * </pre>
+     *
+     * @return 至少装上一个时 true；拿不到类或方法时 false（调用方把按钮藏掉）
+     */
+    public boolean installFileDialogs() {
+        if (browser == null) {
+            return false;
+        }
+        boolean one = installCallback("com.teamdev.jxbrowser.browser.callback.OpenFileCallback", false);
+        boolean many = installCallback("com.teamdev.jxbrowser.browser.callback.OpenFilesCallback", true);
+        return one || many;
+    }
+
+    private boolean installCallback(String className, boolean multiple) {
+        try {
+            Class<?> iface = Class.forName(className, false, AiWebView.class.getClassLoader());
+            Object proxy = java.lang.reflect.Proxy.newProxyInstance(iface.getClassLoader(),
+                    new Class<?>[] {iface}, new FileDialogHandler(multiple));
+            // Advisable.set(Class<C> callbackClass, C callback) —— 擦除后是
+            // set(Class, BrowserCallback)，参数顺序和名字照这个认。
+            Method set = null;
+            Method[] methods = browser.getClass().getMethods();
+            for (int i = 0; i < methods.length; i++) {
+                Class<?>[] ps = methods[i].getParameterTypes();
+                if ("set".equals(methods[i].getName()) && ps.length == 2
+                        && ps[0] == Class.class && ps[1].isAssignableFrom(iface)) {
+                    set = methods[i];
+                    break;
+                }
+            }
+            if (set == null) {
+                return false;
+            }
+            set.invoke(browser, iface, proxy);
+            return true;
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    /** 回调里弹一个原生文件对话框，把选中的路径交回去。 */
+    private final class FileDialogHandler implements java.lang.reflect.InvocationHandler {
+
+        private final boolean multiple;
+
+        FileDialogHandler(boolean multiple) {
+            this.multiple = multiple;
+        }
+
+        @Override
+        public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+            if (method.getDeclaringClass() == Object.class) {
+                return objectMethod(proxy, method, args);
+            }
+            if (!"on".equals(method.getName()) || args == null || args.length != 2) {
+                return null;
+            }
+            Object action = args[1];
+            try {
+                java.util.List<java.io.File> picked = choose();
+                if (picked.isEmpty()) {
+                    callAction(action, "cancel");
+                } else if (multiple) {
+                    java.nio.file.Path[] paths = new java.nio.file.Path[picked.size()];
+                    for (int i = 0; i < picked.size(); i++) {
+                        paths[i] = picked.get(i).toPath();
+                    }
+                    callAction(action, "open", (Object) paths);
+                } else {
+                    callAction(action, "open", picked.get(0).toPath());
+                }
+            } catch (Throwable t) {
+                // 对话框都开不了就取消 —— 绝不能让浏览器那头一直等一个答复。
+                try {
+                    callAction(action, "cancel");
+                } catch (Throwable ignored) {
+                    // 已经关了。
+                }
+            }
+            return null;
+        }
+
+        /** 在事件线程上弹原生文件框（回调线程不一定是 EDT）。 */
+        private java.util.List<java.io.File> choose() throws Exception {
+            final java.util.List<java.io.File> out = new java.util.ArrayList<java.io.File>();
+            final java.awt.Component host = panel;
+            final boolean many = multiple;
+            Runnable task = new Runnable() {
+                @Override
+                public void run() {
+                    java.awt.Window w = host == null ? null
+                            : javax.swing.SwingUtilities.getWindowAncestor(host);
+                    java.awt.Frame owner = (w instanceof java.awt.Frame) ? (java.awt.Frame) w : null;
+                    java.awt.FileDialog fd = new java.awt.FileDialog(owner,
+                            bioenv.i18n.I18n.t(bioenv.i18n.Strings.AI_ATTACH_PICK),
+                            java.awt.FileDialog.LOAD);
+                    fd.setMultipleMode(many);
+                    // 网页在等这个结果；这期间别让谁再去执行 JS（见 dialogOpen）。
+                    dialogOpen = true;
+                    try {
+                        fd.setVisible(true);
+                        java.io.File[] fs = fd.getFiles();
+                        if (fs != null) {
+                            for (int i = 0; i < fs.length; i++) {
+                                if (fs[i] != null) {
+                                    out.add(fs[i]);
+                                }
+                            }
+                        }
+                    } finally {
+                        dialogOpen = false;
+                    }
+                }
+            };
+            if (javax.swing.SwingUtilities.isEventDispatchThread()) {
+                task.run();
+            } else {
+                javax.swing.SwingUtilities.invokeAndWait(task);
+            }
+            return out;
+        }
+
+        /** 按名字调回调 Action 上的方法（open / cancel）。 */
+        private void callAction(Object target, String name, Object... args) throws Exception {
+            Method[] ms = target.getClass().getMethods();
+            for (int i = 0; i < ms.length; i++) {
+                if (name.equals(ms[i].getName()) && ms[i].getParameterCount() == args.length) {
+                    ms[i].invoke(target, args);
+                    return;
+                }
+            }
+            throw new NoSuchMethodException(name);
+        }
+
+        private Object objectMethod(Object proxy, Method method, Object[] args) {
+            String n = method.getName();
+            if ("toString".equals(n)) {
+                return "BioEnvCallerFileDialog";
+            }
+            if ("hashCode".equals(n)) {
+                return System.identityHashCode(proxy);
+            }
+            if ("equals".equals(n)) {
+                return args != null && args.length == 1 && proxy == args[0];
+            }
+            return null;
         }
     }
 

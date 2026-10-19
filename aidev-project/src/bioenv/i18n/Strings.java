@@ -234,6 +234,9 @@ public final class Strings {
     public static final String AI_MODEL_HINT = "ai.model.hint";
     public static final String AI_MODEL_ADD = "ai.model.add";
     public static final String AI_MODEL_EDIT = "ai.model.edit";
+    /** 编辑对话框的标题：这次是"加一条"还是"改一条"，标题上要看得出来。 */
+    public static final String AI_MODEL_ADD_TITLE = "ai.model.addTitle";
+    public static final String AI_MODEL_EDIT_TITLE = "ai.model.editTitle";
     public static final String AI_MODEL_DELETE = "ai.model.delete";
     public static final String AI_MODEL_NAME_FIELD = "ai.model.namefield";
     public static final String AI_MODEL_EMPTY = "ai.model.empty";
@@ -244,6 +247,11 @@ public final class Strings {
     public static final String AI_MODEL_MAX_IN = "ai.model.maxin";
     public static final String AI_MODEL_LEN_NOTE = "ai.model.lennote";
     public static final String AI_MODEL_LEN_BAD = "ai.model.lenbad";
+    /** 把对话导出成 Markdown：保存对话框的标题、文件类型，以及成功/失败两句话。 */
+    public static final String AI_EXPORT_TITLE = "ai.export.title";
+    public static final String AI_EXPORT_FILTER = "ai.export.filter";
+    public static final String AI_EXPORT_DONE = "ai.export.done";
+    public static final String AI_EXPORT_FAIL = "ai.export.fail";
     public static final String SETTINGS_CONN = "settings.conn";
     public static final String SETTINGS_LOOK = "settings.look";
     public static final String SETTINGS_LANGUAGE = "settings.language";
@@ -255,6 +263,8 @@ public final class Strings {
     public static final String STATUS_OPTIONS_HINT = "status.optionsHint";
     public static final String AI_EXPAND = "ai.expand";
     public static final String AI_LOADING = "ai.loading";
+    /** 附件按钮弹出来的原生文件对话框标题。 */
+    public static final String AI_ATTACH_PICK = "ai.attach.pick";
     public static final String AI_NO_PAGE = "ai.noPage";
     public static final String INTERACTIVE_PROMPT = "interactive.prompt";
     public static final String INTERACTIVE_TIP = "interactive.tip";
@@ -1219,9 +1229,13 @@ public final class Strings {
                 "In custom mode the page sends the request itself. If it cannot connect, "
                 + "it is usually CORS: local Ollama needs OLLAMA_ORIGINS=* set.");
         put(ZH_TEXT, EN_TEXT, AI_MODEL_ADD, "＋ 添加模型", "Add model");
+        put(ZH_TEXT, EN_TEXT, AI_MODEL_ADD_TITLE, "添加模型", "Add a model");
+        put(ZH_TEXT, EN_TEXT, AI_MODEL_EDIT_TITLE, "编辑模型", "Edit the model");
         put(ZH_TEXT, EN_TEXT, AI_MODEL_EDIT, "编辑", "Edit");
         put(ZH_TEXT, EN_TEXT, AI_MODEL_DELETE, "删除", "Delete");
-        put(ZH_TEXT, EN_TEXT, AI_MODEL_NAME_FIELD, "显示名称", "Display name");
+        put(ZH_TEXT, EN_TEXT, AI_MODEL_NAME_FIELD,
+                "显示名称（留空就用模型名称）",
+                "Display name (blank = the model name)");
         put(ZH_TEXT, EN_TEXT, AI_MODEL_EMPTY,
                 "还没有配置模型，现在用的是内置模型。",
                 "No models configured yet; the built-in one is in use.");
@@ -1233,10 +1247,11 @@ public final class Strings {
                 "最大输出长度（token，max_tokens）",
                 "Max output (tokens; max_tokens)");
         put(ZH_TEXT, EN_TEXT, AI_MODEL_LEN_NOTE,
-                "\u4e0b\u9762\u4e24\u9879\u53ea\u5bf9\u300c\u81ea\u5b9a\u4e49\u300d\u6a21\u578b\u751f\u6548\uff1b"
-                + "\u5185\u7f6e\u6a21\u578b\u7684\u8bf7\u6c42\u7531 TBtools \u53d1\u51fa\uff0c\u65e0\u6cd5\u6307\u5b9a\u3002",
-                "The two below apply to custom models only - built-in requests are sent by "
-                + "TBtools and their length cannot be set here.");
+                "输入长度只在本地决定丢多少历史（面板本来就只留最近 24 条消息），"
+                + "不发往服务端；输出长度原样作为 max_tokens 发出去。",
+                "Max input only decides locally how much history to drop (the panel "
+                + "keeps just the last 24 messages) and is never sent; max output goes "
+                + "out as max_tokens.");
         put(ZH_TEXT, EN_TEXT, AI_MODEL_LEN_BAD,
                 "\u8bf7\u586b token \u6570\uff0c\u5982 4096\u30011024K\u30011M\uff1b\u7559\u7a7a\u8868\u793a\u4e0d\u9650\u3002",
                 "Length must be a number. Leave it blank for no limit.");
@@ -1246,6 +1261,16 @@ public final class Strings {
                 + "但请求由页面发出，所以请求期间它存在页面内存里。",
                 "The API key never goes into logs, hints or error text. "
                 + "The request is sent from the page, so the key is in page memory while it runs.");
+        put(ZH_TEXT, EN_TEXT, AI_EXPORT_TITLE,
+                "\u5bfc\u51fa\u5bf9\u8bdd\u4e3a Markdown",
+                "Export the conversation as Markdown");
+        put(ZH_TEXT, EN_TEXT, AI_EXPORT_FILTER,
+                "Markdown \u6587\u4ef6",
+                "Markdown files");
+        put(ZH_TEXT, EN_TEXT, AI_EXPORT_DONE, "\u5df2\u5bfc\u51fa\uff1a", "Exported to ");
+        put(ZH_TEXT, EN_TEXT, AI_EXPORT_FAIL,
+                "\u5199\u4e0d\u4e86\u8fd9\u4e2a\u6587\u4ef6\uff1a",
+                "Could not write this file: ");
         put(ZH_TEXT, EN_TEXT, SETTINGS_CONN, "连接", "Connection");
         put(ZH_TEXT, EN_TEXT, SETTINGS_LOOK, "界面风格", "Theme");
         put(ZH_TEXT, EN_TEXT, SETTINGS_LANGUAGE, "语言", "Language");
@@ -1262,6 +1287,9 @@ public final class Strings {
                         + "the command preview is editable");
         put(ZH_TEXT, EN_TEXT, AI_EXPAND, "展开 AI 助手", "Expand the AI assistant");
         put(ZH_TEXT, EN_TEXT, AI_LOADING, "展开后加载。", "Expands to load.");
+        put(ZH_TEXT, EN_TEXT, AI_ATTACH_PICK,
+                "选择要发给 AI 的文件",
+                "Choose files to send to the AI");
         put(ZH_TEXT, EN_TEXT, AI_NO_PAGE,
                 "找不到 ai.html。它应该和插件的主 jar 放在同一层。",
                 "ai.html was not found. It belongs beside the plugin's main jar.");

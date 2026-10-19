@@ -183,6 +183,24 @@ try {
         'bioenv.test.ReinstallClassLossTest',
         'bioenv.test.HotPathClassLoadTest',
 
+        # --- exporting a conversation: three steps that fail silently ---------
+        # The page builds the Markdown and leaves it in localStorage; Java picks it
+        # up, asks where to save it, and writes the file. Each step can be wrong in
+        # a way nothing reports: a payload split at the wrong place exports a
+        # truncated file, an unsanitised name fails only after the user has already
+        # clicked Save, and a BOM turns into a stray glyph on line one. All three
+        # are checked here without a browser.
+        'bioenv.test.AiExportTest',
+
+        # --- the two length boxes in the model dialog -------------------------
+        # These have already lied once: an invalid entry was saved silently as 0
+        # ("no limit"), so the next time the dialog opened the field was blank and
+        # the user concluded their input had been lost. The three properties that
+        # matter are all pure functions now: bad input must be rejected (not turned
+        # into 0), K and M must both be binary, and what is stored must be shown
+        # back in the form the user typed it.
+        'bioenv.test.AiModelLenTest',
+
         # --- newly registered -------------------------------------------
         # These already lived in bioenv\test\ and already passed, but were
         # never listed here, so nothing ran them. They were found by running
