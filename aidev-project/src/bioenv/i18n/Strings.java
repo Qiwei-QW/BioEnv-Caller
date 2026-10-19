@@ -263,6 +263,8 @@ public final class Strings {
     public static final String STATUS_OPTIONS_HINT = "status.optionsHint";
     public static final String AI_EXPAND = "ai.expand";
     public static final String AI_LOADING = "ai.loading";
+    /** 附件按钮弹出来的原生文件对话框标题。 */
+    public static final String AI_ATTACH_PICK = "ai.attach.pick";
     public static final String AI_NO_PAGE = "ai.noPage";
     public static final String INTERACTIVE_PROMPT = "interactive.prompt";
     public static final String INTERACTIVE_TIP = "interactive.tip";
@@ -1285,6 +1287,9 @@ public final class Strings {
                         + "the command preview is editable");
         put(ZH_TEXT, EN_TEXT, AI_EXPAND, "展开 AI 助手", "Expand the AI assistant");
         put(ZH_TEXT, EN_TEXT, AI_LOADING, "展开后加载。", "Expands to load.");
+        put(ZH_TEXT, EN_TEXT, AI_ATTACH_PICK,
+                "选择要发给 AI 的文件",
+                "Choose files to send to the AI");
         put(ZH_TEXT, EN_TEXT, AI_NO_PAGE,
                 "找不到 ai.html。它应该和插件的主 jar 放在同一层。",
                 "ai.html was not found. It belongs beside the plugin's main jar.");

@@ -2679,6 +2679,15 @@ public final class MainPanel extends JPanel {
             }
         });
 
+        // 页面里模型菜单最后一行"管理模型…"要能打开这个设置窗口 ——
+        // 不然模型列表为空时，用户只看到一个"内置模型"，不知道下一步去哪配。
+        aiAssist.setSettingsSink(new Runnable() {
+            @Override
+            public void run() {
+                openSettingsWindow();
+            }
+        });
+
         // 最左那条图标栏，而且是<b>唯一的开关</b>：
         //     点一个图标   -> 那一列展开成这张卡
         //     再点同一个   -> 整列收起

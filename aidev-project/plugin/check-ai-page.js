@@ -419,6 +419,20 @@ function runNetwork() {
     var budget2 = String(byId["budget"].textContent || "");
     want("重发成功、页脚用上了第二次的真值", budget2.indexOf("777") >= 0, budget2);
     want("界面上没有报错气泡", !hasErrorBubble());
+
+    // ★ 上下文不能被每一轮都带一遍：历史里的用户消息只该是问题本身，
+    //   整份"以下是当前状态 + 帮助原文"只在最后一条里出现一次。
+    var fb = {};
+    try { fb = JSON.parse(requests[0].body); } catch (e) {}
+    var hist = fb.messages || [];
+    want("历史里的用户消息只有问题", hist.length > 1
+        && String(hist[1].content || "") === ASK,
+        hist.length > 1 ? String(hist[1].content).slice(0, 40) : "(没有)");
+    var ctxCount = 0;
+    for (var hi = 0; hi < hist.length; hi++) {
+      if (String(hist[hi].content || "").indexOf("以下是当前状态") >= 0) { ctxCount++; }
+    }
+    want("整份上下文只在最后一条消息里带一次", ctxCount === 1, "count=" + ctxCount);
   }).then(function () {
     /* 两次都失败：那就不该把这家服务器记成"不支持用量" —— 否则以后永远拿不到
        真数，而界面上一点提示都没有。这就是"静默降级"，在这个项目里出现过好几次。 */
@@ -443,6 +457,9 @@ function runNetwork() {
           String(store["tbv.ai.nousage"] || "").indexOf("example.invalid") < 0,
           store["tbv.ai.nousage"]);
       want("把真实错误显示了出来", !before && hasErrorBubble());
+      // 以前失败的那一轮什么都不存，一收起面板就全没了。现在它留在对话里。
+      windowStub.tbvAi.setLang("zh");          // 整块重绘
+      want("失败的那一轮重绘之后还在", hasErrorBubble());
     });
   }).then(function () {
     /* 删会话：点一次只出确认条，点「删除」才真删。
@@ -474,6 +491,11 @@ function runNetwork() {
     // 这里还有一条别的会话，所以删掉的是当前这条、然后切过去 —— 不是清空。
     want("会话真的少了一条", byId["sessSel"].children.length === sessionCount - 1,
         "before=" + sessionCount + " after=" + byId["sessSel"].children.length);
+    // 切过去之后，页脚不该还挂着上一条会话的用量。
+    want("换会话后页脚用量清零",
+        String(byId["budget"].textContent || "").indexOf("12.3k") < 0
+        && String(byId["budget"].textContent || "").indexOf("777") < 0,
+        String(byId["budget"].textContent || ""));
   });
 }
 
@@ -497,6 +519,33 @@ function hasErrorBubble() {
 function hasBrowserModal(src) {
   return /(^|[^.\w])(confirm|alert|prompt)\s*\(/.test(src);
 }
+
+console.log("");
+console.log("=== 模型菜单 / 附件开关 ===");
+windowStub.tbvAi.setAttach(false);
+want("关掉附件时 ⊕ 被藏起来", byId["pick"].style.display === "none");
+windowStub.tbvAi.setAttach(true);
+want("打开附件时 ⊕ 回来", byId["pick"].style.display !== "none");
+windowStub.tbvAi.setModels("[]");
+var popKids = byId["modelPop"].children;
+var popLast = popKids.length ? popKids[popKids.length - 1] : null;
+want("模型菜单最后一行是「去设置里管理」",
+    popLast && String(popLast.textContent).indexOf("设置") >= 0,
+    popLast ? String(popLast.textContent) : "(没有)");
+if (popLast && typeof popLast.onclick === "function") { popLast.onclick(); }
+want("点了会请求 Java 打开设置", store["tbv.openSettings"] === "1", store["tbv.openSettings"]);
+
+console.log("");
+console.log("=== Markdown 表格 ===");
+var tableSrc = "| 参数 | 含义 |\n|------|------|\n| -t | 线程数 |\n| -M | 建树方法 |";
+var tableHtml = String(windowStub.tbvAi.render(tableSrc));
+want("表格渲染成 <table>", tableHtml.indexOf("<table>") >= 0, tableHtml.slice(0, 80));
+want("表头是 <th>", tableHtml.indexOf("<th>参数</th>") >= 0);
+want("单元格是 <td>", tableHtml.indexOf("<td>-t</td>") >= 0);
+want("表格没被包进 <p>", tableHtml.indexOf("<p><div class='tbl'>") < 0);
+// 第二行不是分隔行 -> 不是表格，不能被吃掉
+var notTable = String(windowStub.tbvAi.render("| a | b |\n| 1 | 2 |"));
+want("没有分隔行就不当表格", notTable.indexOf("<table>") < 0, notTable.slice(0, 80));
 
 console.log("");
 runNetwork().then(function () {

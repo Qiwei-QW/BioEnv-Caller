@@ -82,6 +82,12 @@
             padding:0 3px;border-radius:3px}
   .m.a pre code{background:none;padding:0}
   .m.a ul{margin:4px 0;padding-left:18px}
+  /* Markdown 表格：面板窄，宽表格要在自己的壳里横向滚，别把整个气泡撑破 */
+  .m.a .tbl{overflow-x:auto;margin:6px 0}
+  .m.a table{border-collapse:collapse;font-size:12px}
+  .m.a th,.m.a td{border:1px solid var(--line);padding:3px 8px;text-align:left;
+    white-space:nowrap;vertical-align:top}
+  .m.a th{background:var(--panel);font-weight:600}
 
   /* 诊断卡：折叠成一行，不占地方；它不属于对话，清空会话不会被清掉 */
   details.diag{
@@ -157,6 +163,8 @@
   .pop-item .dot.ok{background:#2ea043}
   .pop-item .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .pop-item.now{background:var(--hover, rgba(128,128,128,.16));font-weight:600}
+  .pop-sep{height:1px;background:var(--line);margin:4px 2px}
+  .pop-item.mng{color:var(--accent);font-size:11px}
   .bar{display:flex;justify-content:space-between;align-items:center;margin-top:6px;font-size:11px;color:var(--muted)}
 /* 发送按钮进输入框：外层相对定位，按钮压右下角；文字给它让出一条。 */
 #askWrap{position:relative;flex:1;display:flex;padding-bottom:44px;
@@ -309,17 +317,20 @@ pre .cp:hover{opacity:1}
   if (b && b.parentNode) { b.parentNode.removeChild(b); }
 })();
 
-/* 未捕获的错误也要看得见：没有控制台，只能靠页面自己说。 */
+/* 未捕获的错误也要看得见：没有控制台，只能靠页面自己说。
+ *
+ * 这里<b>不能</b>走 t()：这段代码在文案表初始化之前就可能被调用，
+ * 而在错误处理器里再抛一个错，就什么都看不见了。所以中英各写一份。 */
 window.onerror = function (msg, src, line, col) {
   var box = document.getElementById("log");
   if (box) {
     var d = document.createElement("div");
     d.className = "m e";
-    d.textContent = "脚本错误：" + msg + "  @" + line + ":" + col;
+    d.textContent = "脚本错误 / Script error: " + msg + "  @" + line + ":" + col;
     box.appendChild(d);
   }
   var s = document.getElementById("status");
-  if (s) { s.textContent = "脚本错误"; s.className = "bad"; }
+  if (s) { s.textContent = "脚本错误 / Script error"; s.className = "bad"; }
   return false;
 };
 
@@ -347,6 +358,17 @@ var T = {
     statCtx: "上下文", statApprox: "≈", statRound: "轮",
     statTotal: "累计", statBits: "已带上", statItems: "项",
     yes: "删除", no: "取消",
+    busyHint: "正在回答…按 Esc 停止",
+    storeDrop: "存储满了，丢掉了 %n 个旧会话",
+    storeFull: "存储写不进去了：之后的对话不会再保存",
+    popManage: "管理模型…（在设置里）",
+    popAdd: "＋ 在设置里添加模型",
+    noErrInfo: "（没有错误信息）",
+    cutTail: " 字符）",
+    chatNotFn: "ai.chat 不是函数 —— 接口形状和预期不同",
+    scriptErr: "脚本错误：",
+    builtin: "内置模型",
+    noAttach: "这个环境没有文件对话框，附件不可用",
     untitled: "新会话",
     confirmDel: "删除这个会话？它的对话记录会一起删掉。",
     storeOff: "（本次运行内有效：网页存储不可用）",
@@ -380,6 +402,17 @@ var T = {
     statCtx: "Context", statApprox: "≈", statRound: "rounds",
     statTotal: "total", statBits: "carried", statItems: "items",
     yes: "Delete", no: "Cancel",
+    busyHint: "Answering… press Esc to stop",
+    storeDrop: "Storage was full - dropped %n old conversation(s)",
+    storeFull: "Storage is full: conversations will no longer be saved",
+    popManage: "Manage models… (in Settings)",
+    popAdd: "+ Add a model in Settings",
+    noErrInfo: "(no error information)",
+    cutTail: " chars)",
+    chatNotFn: "ai.chat is not a function - the interface is not what was expected",
+    scriptErr: "Script error: ",
+    builtin: "Built-in",
+    noAttach: "No file dialog in this environment - attachments are unavailable",
     untitled: "New conversation",
     confirmDel: "Delete this conversation? Its messages go with it.",
     storeOff: "(kept for this run only: web storage is unavailable)",
@@ -501,7 +534,7 @@ var bridge = null;           // window.tbtools.ai
 
   function modelLabel() {
     var m = currentModel();
-    return m ? (m.label || m.model) : "内置模型";
+    return m ? (m.label || m.model) : t("builtin");
   }
 
   /**
@@ -551,6 +584,35 @@ var bridge = null;           // window.tbtools.ai
     for (var i = 0; i < models.length; i++) {
       pop.appendChild(popItem(models[i]));
     }
+    // 最后一格：去设置里管理模型。
+    //
+    // 以前列表为空时这里只有"内置模型"一行，用户不知道下一步该去哪儿；
+    // 而这个列表是**在设置里**改的，页面上没有任何入口通到那里。
+    var sep = document.createElement("div");
+    sep.className = "pop-sep";
+    pop.appendChild(sep);
+    var mng = document.createElement("div");
+    mng.className = "pop-item mng";
+    mng.textContent = models.length ? t("popManage") : t("popAdd");
+    mng.onclick = function () {
+      openPop(false);
+      openSettings();
+    };
+    pop.appendChild(mng);
+  }
+
+  /**
+   * 请 Java 打开设置窗口。
+   *
+   * <p>还是那条老通道：页面写 localStorage，Java 的轮询来取。
+   * 同一时刻只可能有一个人点，所以不需要排队。
+   */
+  function openSettings() {
+    try {
+      localStorage.setItem("tbv.openSettings", "1");
+    } catch (e) {
+      setStatus(t("storeOff"), "bad");
+    }
   }
 
   /** 一行。只拿 label 和 ok，绝不碰 key。 */
@@ -565,7 +627,7 @@ var bridge = null;           // window.tbtools.ai
     d.appendChild(dot);
     var nm = document.createElement("span");
     nm.className = "nm";
-    nm.textContent = m === null ? "内置模型" : (m.label || m.model);
+    nm.textContent = m === null ? t("builtin") : (m.label || m.model);
     d.appendChild(nm);
     d.onclick = function () {
       selId = (m === null) ? null : String(m.id);
@@ -624,6 +686,37 @@ function md(src) {
 
   var out = esc(text);
 
+  // 表格：一行行 | a | b |，第二行必须是 |---|---| 这种分隔行。
+  //
+  // 放在 `<code>` / `**粗体**` 那些行内规则之前：表格结构先钉死，
+  // 免得被列表、标题的规则拆坏；单元格里的行内格式后面照样会处理。
+  out = out.replace(/(?:^[ \t]*\|.*\|[ \t]*$(?:\n|$))+/gm, function (chunk) {
+    var rows = chunk.replace(/[ \t\n]+$/, "").split("\n").filter(function (l) {
+      return l.trim();
+    });
+    if (rows.length < 2) { return chunk; }
+    function cells(line) {
+      var s = line.trim().replace(/^\|/, "").replace(/\|$/, "");
+      return s.split("|").map(function (c) { return c.trim(); });
+    }
+    var sep = cells(rows[1]);
+    var isSep = sep.length > 0;
+    for (var k = 0; k < sep.length; k++) {
+      if (!/^:?-{2,}:?$/.test(sep[k])) { isSep = false; break; }
+    }
+    // 第二行不是分隔行 -> 这不是表格，原样还回去。
+    if (!isSep) { return chunk; }
+    var tbl = "<div class='tbl'><table><thead><tr>";
+    cells(rows[0]).forEach(function (c) { tbl += "<th>" + c + "</th>"; });
+    tbl += "</tr></thead><tbody>";
+    for (var r = 2; r < rows.length; r++) {
+      tbl += "<tr>";
+      cells(rows[r]).forEach(function (c) { tbl += "<td>" + c + "</td>"; });
+      tbl += "</tr>";
+    }
+    return tbl + "</tbody></table></div>";
+  });
+
   out = out.replace(/`([^`\n]+)`/g, "<code>$1</code>");
   out = out.replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>");
   out = out.replace(/(^|[^*\w])\*([^*\n]+)\*/g, "$1<i>$2</i>");
@@ -644,7 +737,7 @@ function md(src) {
   for (var i = 0; i < parts.length; i++) {
     var p = parts[i].replace(/^\n+|\n+$/g, "");
     if (!p) { continue; }
-    if (/^<(ul|pre)/.test(p)) { html += p; } else { html += "<p>" + p.replace(/\n/g, "<br>") + "</p>"; }
+    if (/^<(ul|pre|div|table)/.test(p)) { html += p; } else { html += "<p>" + p.replace(/\n/g, "<br>") + "</p>"; }
   }
 
   html = html.replace(/\u0000B(\d+)\u0000/g, function (m, i) {
@@ -653,6 +746,7 @@ function md(src) {
   // 代码块占位符在分段时被当成普通段落包进了 <p>，而 <pre> 不能放在 <p> 里。
   // 判据必须放在"占位符还原之后"才看得见它 —— 放在前面是查不到的，自检就是这么发现的。
   html = html.replace(/<p>(<pre>[\s\S]*?<\/pre>)<\/p>/g, "$1");
+  html = html.replace(/<p>(<div class='tbl'>[\s\S]*?<\/div>)<\/p>/g, "$1");
   return html;
 }
 
@@ -688,8 +782,30 @@ function loadStore() {
 function saveStore() {
   try {
     localStorage.setItem(SKEY, JSON.stringify(sessions));
+    storeOk = true;
+    return;
   } catch (e) {
+    // 配额满了。以前这里只是 storeOk=false —— 之后一切照常，只是什么都不再保存，
+    // 而唯一的提示是下拉框的 tooltip（要悬停才看得到）。那等于悄悄丢数据。
+    //
+    // 现在：从<b>最老的</b>会话开始丢（绝不动当前这条），丢到能写为止，并说出来。
+    var dropped = 0;
+    for (var i = sessions.length - 1; i >= 0 && sessions.length > 1; i--) {
+      if (sessions[i].id === currentId) { continue; }
+      sessions.splice(i, 1);
+      dropped++;
+      try {
+        localStorage.setItem(SKEY, JSON.stringify(sessions));
+        storeOk = true;
+        renderSessions();
+        flash(t("storeDrop").replace("%n", dropped));
+        return;
+      } catch (e2) {
+        // 还不够，继续丢。
+      }
+    }
     storeOk = false;
+    setStatus(t("storeFull"), "bad");
   }
 }
 
@@ -714,6 +830,21 @@ function toolName() {
   return (context && context.tool) ? String(context.tool).trim() : "";
 }
 
+/**
+ * 清掉页脚那几个数。
+ *
+ * <p>它们是"上一次请求"的，不是"这条会话"的 —— 换会话时必须一起清，
+ * 否则切过去看到的是**上一条会话**的用量和累计，越看越糊涂。
+ */
+function resetUsage() {
+  lastPromptTok = 0;
+  lastPromptReal = 0;
+  lastOutReal = 0;
+  lastRate = 0;
+  totalOutTok = 0;
+  updateStats([]);
+}
+
 function newSession() {
   closeConfirm();
   // 会话名先挂当前工具名。一个会话基本就是围绕一个工具展开的，
@@ -725,6 +856,7 @@ function newSession() {
   sessions.unshift(s);
   currentId = s.id;
   turns = s.turns;
+  resetUsage();
   saveStore();
   renderSessions();
   renderLog();
@@ -736,6 +868,7 @@ function selectSession(id) {
     if (sessions[i].id === id) {
       currentId = id;
       turns = sessions[i].turns;
+      resetUsage();
       renderSessions();
       renderLog();
       return;
@@ -931,6 +1064,8 @@ function buildMarkdown() {
   rows.push("");
   for (var i = 0; i < s.turns.length; i++) {
     var x = s.turns[i];
+    // 失败过的那一轮不进导出：记录里只有问题和错误，没有回答。
+    if (x.failed) { continue; }
     if (x.role !== "user" && x.role !== "assistant") { continue; }
     rows.push(x.role === "user" ? "## " + t("expMe") : "## " + t("expAi"));
     rows.push("");
@@ -972,6 +1107,15 @@ function exportNow() {
  * 文本不限会直接顶爆 32000 字符的预算。
  */
 var atts = [];
+
+/**
+ * 附件按钮能不能用。
+ *
+ * <p>JxBrowser 不会自己弹文件框 —— 插件必须注册 OpenFileCallback / OpenFilesCallback
+ * （TBtools 不给插件装）。Java 那边装成功了才会把这里置 true；装不上就把 ⊕ 藏掉，
+ * 免得又是一个"点了没反应"的按钮。
+ */
+var attachOn = true;
 
 function renderAtts() {
   var box = el("atts");
@@ -1032,6 +1176,8 @@ function renderLog() {
       // 整份工具帮助原文糊到对话区上。
       ask = questionOf(m);
       bubble("u", ask);
+      // 失败过的那一轮：问题和错误一起画出来，重绘之后也还在。
+      if (m.failed) { bubble("e", m.err || ""); }
     } else {
       var bb = bubble("a", "");
       bb.innerHTML = md(m.content);
@@ -1144,7 +1290,7 @@ function boot() {
   // 桥不在、或者形状不对，就走 status 那一行报出来 —— 那种时候必须有话说。
   if (bridge) {
     if (typeof bridge.chat !== "function") {
-      setStatus("ai.chat 不是函数 —— 接口形状和预期不同", "bad");
+      setStatus(t("chatNotFn"), "bad");
     }
   } else {
     setStatus(t("noBridge"), "bad");
@@ -1178,7 +1324,7 @@ function ping() {
 
 /** 把 reject 出来的东西变成一句人话。 */
 function describe(e) {
-  if (!e) { return "（没有错误信息）"; }
+  if (!e) { return t("noErrInfo"); }
   var code = (typeof e === "string") ? e : (e.code || e.reason || e.message || "");
   if (code && why(code) !== String(code)) { return why(code); }
   return String(code || e);
@@ -1220,13 +1366,19 @@ window.tbvAi = {
     renderPill();
     if (el("modelPop") && !el("modelPop").hasAttribute("hidden")) { renderPop(); }
   },
-  ask: function (text) {
-    el("ask").value = text || "";
-    send();
+  /**
+   * 附件按钮的开关 —— 由 Java 决定（它才知道文件对话框装没装上）。
+   */
+  setAttach: function (on) {
+    attachOn = !!on;
+    var b = el("pick");
+    if (b) { b.style.display = attachOn ? "" : "none"; }
   },
   /** 给自检用：拼一段 Markdown 但不保存；以及走完整的导出路径。 */
   markdown: buildMarkdown,
   exportNow: exportNow,
+  /** 给自检用：Markdown 渲染函数本身（表格/代码块这些要看输出）。 */
+  render: md,
   /** 给自检用：估算函数本身。 */
   estTokens: estTokens
 };
@@ -1335,7 +1487,12 @@ function updateStats(bits) {
              + (lim > 0 ? " / " + compactN(lim) + " \u00b7 "
                  + Math.min(999, Math.round(used / lim * 100)) + "%" : " tok"));
   }
-  var rounds = Math.floor(turns.length / 2);
+  // 轮数按"回答了几次"数，不按消息条数 ÷ 2 —— 失败的那一轮只有一条消息，
+  // 条数除以二会算错。
+  var rounds = 0;
+  for (var ri = 0; ri < turns.length; ri++) {
+    if (turns[ri].role === "assistant") { rounds++; }
+  }
   if (rounds > 0) { out.push(rounds + " " + t("statRound")); }
   if (lastRate > 0) { out.push(Math.round(lastRate) + " tok/s"); }
   if (totalOutTok > 0) { out.push(t("statTotal") + " " + compactN(totalOutTok) + " tok"); }
@@ -1349,6 +1506,10 @@ function applyLang() {
   el("sessNew").title = t("sessNew");
   el("sessDel").title = t("sessDel");
   if (el("sessExp")) { el("sessExp").title = t("exp"); }
+  if (el("pick")) {
+    el("pick").title = attachOn ? t("pick") : t("noAttach");
+    el("pick").style.display = attachOn ? "" : "none";
+  }
   boot();
   renderSessions();
   renderLog();
@@ -1583,7 +1744,7 @@ loadSel();
       // 而用户看不出来它只看了一半。
       full += "\n\n[附件 " + atts[i].name + "]\n" + part
             + (whole.length > part.length
-               ? "\n" + t("cutNote") + whole.length + " 字符）" : "");
+               ? "\n" + t("cutNote") + whole.length + t("cutTail") : "");
     }
   }
   atts.length = 0;
@@ -1594,12 +1755,18 @@ loadSel();
   bubble("u", names.length ? (q + "\n\n\u{1F4CE} " + names.join("、")) : q);
 
   // 发给模型的历史：只带 user/assistant，不带 system（system 单独放最前）。
-  // 只拷 role/content 两个字段：历史里还挂着给界面用的东西（q），
-  // 整条对象丢进请求会让服务端收到不认识的字段。
+  //
+  // ★ 用户那些轮只发<b>问题</b>。历史里的 content 是"整段上下文 + 问题"
+  //   （老会话）或问题（新会话），而上下文只需要在<b>这一次</b>请求里带一遍 ——
+  //   不然 12 轮就等于把整份帮助原文和整个工具清单重发 12 遍，token 直接十倍。
   var msgs = [{ role: "system", content: sysPrompt() }];
   for (var i = 0; i < turns.length; i++) {
-    if (turns[i].role === "user" || turns[i].role === "assistant") {
-      msgs.push({ role: turns[i].role, content: turns[i].content });
+    var tr = turns[i];
+    if (tr.failed) { continue; }      // 失败的那一轮不算对话，不进模型历史
+    if (tr.role === "user") {
+      msgs.push({ role: "user", content: questionOf(tr) });
+    } else if (tr.role === "assistant") {
+      msgs.push({ role: "assistant", content: tr.content });
     }
   }
   msgs.push({ role: "user", content: full });
@@ -1699,18 +1866,22 @@ loadSel();
     totalOutTok += (lastOutReal > 0 ? lastOutReal : estTokens(text));
     // 回答下面给一行小动作：重试 / 编辑 / 继续 / 复制。
     addActions(box, q, text);
-    // q 是"用户实际问的那一句" —— 导出时用它，不然导出来的记录里每一轮
-    // 前面都挂着整段上下文（那是发出去的请求，不是给人看的对话）。
-    turns.push({ role: "user", content: full, q: q });
+    // 历史里只存<b>问题</b>：上下文在发送时单独带一次（见上面 msgs 那段），
+    // 存进历史只会让它跟着每一条记录一起重发。
+    turns.push({ role: "user", content: q, q: q });
     turns.push({ role: "assistant", content: text });
     // 历史太长会挤爆请求预算，留最近若干轮就够。
     if (turns.length > 24) { turns.splice(0, turns.length - 24); }
     touchTitle();
   }).catch(function (e) {
-    // 失败的那一轮不进历史 —— 否则下次会把它当上下文再发一遍。
+    // 失败的那一轮要留在<b>对话里</b> —— 以前什么都不存，于是一收起面板，
+    // 这个问题和错误提示就一起消失了。但标成 failed：它不会被当成上下文
+    // 再发给模型（见 msgs 那段），"失败的问题"对模型没有意义。
     var code = (typeof e === "string") ? e : (e && (e.code || e.reason));
+    var why = describe(e);
     box.className = "m e";
-    box.textContent = describe(e);
+    box.textContent = why;
+    turns.push({ role: "user", content: q, q: q, failed: true, err: why });
     if (code === "denied") { addRetry(q); } else { addActions(box, q, null); }
   }).then(finish);
 
@@ -1815,7 +1986,7 @@ function addRetry(original) {
 /* ---------------- 事件 ---------------- */
 // 一个按钮：忙的时候 send() 自己会转去 stop()（见它第一行）。
 el("go").onclick = send;
-el("pick").onclick = function () { el("file").click(); };
+el("pick").onclick = function () { if (attachOn) { el("file").click(); } };
 el("file").onchange = function () { addFiles(el("file").files); el("file").value = ""; };
 el("explain").onclick = function () {
   if (busy) { return; }
@@ -1824,7 +1995,15 @@ el("explain").onclick = function () {
 };
 el("ask").addEventListener("keydown", function (e) {
   if (e.key === "Escape") { e.preventDefault(); if (busy) { stop(); } return; }
-  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    // ★ 回答中按 Enter <b>不该</b>把回答掐掉。
+    //
+    // send() 的第一行是"忙就停"（那个 ▶/■ 按钮靠它切换），于是以前边看回答
+    // 边打下一个问题、一回车，当前回答就没了。停只有两个入口：Esc 和 ■。
+    if (busy) { flash(t("busyHint")); return; }
+    send();
+  }
 });
 el("sessNew").onclick = newSession;
 el("sessDel").onclick = deleteCurrent;
