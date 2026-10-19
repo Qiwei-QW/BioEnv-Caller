@@ -234,6 +234,9 @@ public final class Strings {
     public static final String AI_MODEL_HINT = "ai.model.hint";
     public static final String AI_MODEL_ADD = "ai.model.add";
     public static final String AI_MODEL_EDIT = "ai.model.edit";
+    /** 编辑对话框的标题：这次是"加一条"还是"改一条"，标题上要看得出来。 */
+    public static final String AI_MODEL_ADD_TITLE = "ai.model.addTitle";
+    public static final String AI_MODEL_EDIT_TITLE = "ai.model.editTitle";
     public static final String AI_MODEL_DELETE = "ai.model.delete";
     public static final String AI_MODEL_NAME_FIELD = "ai.model.namefield";
     public static final String AI_MODEL_EMPTY = "ai.model.empty";
@@ -1224,9 +1227,13 @@ public final class Strings {
                 "In custom mode the page sends the request itself. If it cannot connect, "
                 + "it is usually CORS: local Ollama needs OLLAMA_ORIGINS=* set.");
         put(ZH_TEXT, EN_TEXT, AI_MODEL_ADD, "＋ 添加模型", "Add model");
+        put(ZH_TEXT, EN_TEXT, AI_MODEL_ADD_TITLE, "添加模型", "Add a model");
+        put(ZH_TEXT, EN_TEXT, AI_MODEL_EDIT_TITLE, "编辑模型", "Edit the model");
         put(ZH_TEXT, EN_TEXT, AI_MODEL_EDIT, "编辑", "Edit");
         put(ZH_TEXT, EN_TEXT, AI_MODEL_DELETE, "删除", "Delete");
-        put(ZH_TEXT, EN_TEXT, AI_MODEL_NAME_FIELD, "显示名称", "Display name");
+        put(ZH_TEXT, EN_TEXT, AI_MODEL_NAME_FIELD,
+                "显示名称（留空就用模型名称）",
+                "Display name (blank = the model name)");
         put(ZH_TEXT, EN_TEXT, AI_MODEL_EMPTY,
                 "还没有配置模型，现在用的是内置模型。",
                 "No models configured yet; the built-in one is in use.");
@@ -1238,14 +1245,11 @@ public final class Strings {
                 "最大输出长度（token，max_tokens）",
                 "Max output (tokens; max_tokens)");
         put(ZH_TEXT, EN_TEXT, AI_MODEL_LEN_NOTE,
-                "下面两项只对「自定义」模型生效；内置模型的请求由 TBtools 发出，无法指定。"
-                + "输入长度是本地阈值，决定丢多少历史（面板本来就只留最近 24 条消息），"
+                "输入长度只在本地决定丢多少历史（面板本来就只留最近 24 条消息），"
                 + "不发往服务端；输出长度原样作为 max_tokens 发出去。",
-                "The two below apply to custom models only - built-in requests are sent by "
-                + "TBtools and their length cannot be set here. Max input is a local "
-                + "threshold that decides how much history to drop (the panel already keeps "
-                + "just the last 24 messages) and is never sent; max output goes out as "
-                + "max_tokens.");
+                "Max input only decides locally how much history to drop (the panel "
+                + "keeps just the last 24 messages) and is never sent; max output goes "
+                + "out as max_tokens.");
         put(ZH_TEXT, EN_TEXT, AI_MODEL_LEN_BAD,
                 "\u8bf7\u586b token \u6570\uff0c\u5982 4096\u30011024K\u30011M\uff1b\u7559\u7a7a\u8868\u793a\u4e0d\u9650\u3002",
                 "Length must be a number. Leave it blank for no limit.");

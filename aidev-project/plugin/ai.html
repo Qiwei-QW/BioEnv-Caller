@@ -709,10 +709,19 @@ function renderSessions() {
   sel.title = storeOk ? "" : t("storeOff");
 }
 
+/** 当前选中的工具名；没有就返回空串。 */
+function toolName() {
+  return (context && context.tool) ? String(context.tool).trim() : "";
+}
+
 function newSession() {
   closeConfirm();
+  // 会话名先挂当前工具名。一个会话基本就是围绕一个工具展开的，
+  // 而"新会话"三个字在一列会话里认不出任何东西（用户明确要求换掉）。
+  // auto 记着"这个名字是自动起的"，等第一句问题进来时换成问题的描述。
+  var tool = toolName();
   var s = { id: String(Date.now()) + "-" + Math.floor(Math.random() * 1000),
-            title: "", at: Date.now(), turns: [] };
+            title: tool, auto: !!tool, at: Date.now(), turns: [] };
   sessions.unshift(s);
   currentId = s.id;
   turns = s.turns;
@@ -845,10 +854,34 @@ function questionTitle(list) {
 
 function touchTitle() {
   var s = findCurrent();
-  if (s && !s.title) {
-    // 先取问题本身；取不到才退回"工具 · 时间"。
-    s.title = questionTitle(s.turns) || titleStamp();
+  if (s) {
+    var q = questionTitle(s.turns);
+    // 自动起的名字（工具名 / 空）在第一句问题进来之后换成问题的描述；
+    // 用户自己改过的名字不碰。
+    if (q && (!s.title || s.auto)) {
+      s.title = q;
+      s.auto = false;
+    } else if (!s.title) {
+      s.title = titleStamp();
+      s.auto = false;
+    }
   }
+  saveStore();
+  renderSessions();
+}
+
+/**
+ * 会话还挂着自动名时跟着上下文走。
+ *
+ * <p>先开会话、后选工具的顺序很常见（面板一直开着）。这时那个会话名应该
+ * 从"新会话"变成工具名 —— 不然一列会话里全是"新会话"。
+ */
+function nameIfUntitled() {
+  var s = findCurrent();
+  var tool = toolName();
+  if (!s || !tool || s.title) { return; }
+  s.title = tool;
+  s.auto = true;
   saveStore();
   renderSessions();
 }
@@ -1159,6 +1192,7 @@ window.tbvAi = {
     } catch (e) {
       context = null;
     }
+    nameIfUntitled();
     refreshCtx();
   },
   setTheme: function (name) {

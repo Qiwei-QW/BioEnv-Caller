@@ -2052,7 +2052,7 @@ public final class MainPanel extends JPanel {
             @Override
             public void actionPerformed(ActionEvent e) {
                 bioenv.ai.AiModelStore.Model m = new bioenv.ai.AiModelStore.Model();
-                if (editModelDialog(m)) {
+                if (editModelDialog(m, true)) {
                     store.models.add(m);
                     store.save();
                     aiAssist.setModels(store.toJson());
@@ -2106,7 +2106,7 @@ public final class MainPanel extends JPanel {
                 @Override
                 public void actionPerformed(ActionEvent e) {
                     bioenv.ai.AiModelStore.Model copy = m.copy();
-                    if (editModelDialog(copy)) {
+                    if (editModelDialog(copy, false)) {
                         store.models.set(idx, copy);
                         store.save();
                         aiAssist.setModels(store.toJson());
@@ -2141,14 +2141,20 @@ public final class MainPanel extends JPanel {
     /**
      * 编辑一条模型配置。点保存返回 true。
      *
+     * <p>字段顺序：<b>标识（模型名 / 显示名）→ 怎么连（地址 / key）→ 长度</b>。
+     * 显示名以前排在最后，和"模型名称"隔了三行 —— 两个都是名字，放一起才对。
+     *
      * <p><b>API key 用 JPasswordField，默认遮挡。</b> 这个字段不写日志、
      * 不进 tooltip、不进任何提示文字 —— 只有点“保存”时被读一次。
+     *
+     * @param adding true = 新建一条（标题显示"添加模型"），false = 改已有的
      */
-    private boolean editModelDialog(final bioenv.ai.AiModelStore.Model m) {
+    private boolean editModelDialog(final bioenv.ai.AiModelStore.Model m, boolean adding) {
         java.awt.Window owner = javax.swing.SwingUtilities.getWindowAncestor(this);
         final javax.swing.JDialog dlg = new javax.swing.JDialog(
                 (owner instanceof java.awt.Frame) ? (java.awt.Frame) owner : null,
-                I18n.t(Strings.AI_MODEL_SECTION), true);
+                I18n.t(adding ? Strings.AI_MODEL_ADD_TITLE : Strings.AI_MODEL_EDIT_TITLE),
+                true);
         dlg.setName("bioenv.model.dialog");
 
         final javax.swing.JTextField nameF = new javax.swing.JTextField(m.name, 24);
@@ -2167,6 +2173,10 @@ public final class MainPanel extends JPanel {
         form.add(mutedLabel(I18n.t(Strings.AI_MODEL_NAME)));
         form.add(modelF);
         form.add(javax.swing.Box.createVerticalStrut(6));
+        // 显示名紧跟模型名：两个都是"它叫什么"，中间不该隔三段别的东西。
+        form.add(mutedLabel(I18n.t(Strings.AI_MODEL_NAME_FIELD)));
+        form.add(nameF);
+        form.add(javax.swing.Box.createVerticalStrut(6));
         form.add(mutedLabel(I18n.t(Strings.AI_MODEL_URL)));
         form.add(urlF);
         form.add(javax.swing.Box.createVerticalStrut(6));
@@ -2180,8 +2190,7 @@ public final class MainPanel extends JPanel {
             }
         });
         form.add(show);
-        form.add(javax.swing.Box.createVerticalStrut(6));
-        // 下面两项只在自定义模式下生效 —— 内置模型的请求由 TBtools 发。
+        form.add(javax.swing.Box.createVerticalStrut(10));
         form.add(mutedLabel("<html><body style='width:300px'>"
                 + I18n.t(Strings.AI_MODEL_LEN_NOTE) + "</body></html>"));
         form.add(mutedLabel(I18n.t(Strings.AI_MODEL_MAX_IN)));
@@ -2189,10 +2198,7 @@ public final class MainPanel extends JPanel {
         form.add(javax.swing.Box.createVerticalStrut(6));
         form.add(mutedLabel(I18n.t(Strings.AI_MODEL_MAX_OUT)));
         form.add(maxOutF);
-        form.add(javax.swing.Box.createVerticalStrut(6));
-        form.add(mutedLabel(I18n.t(Strings.AI_MODEL_NAME_FIELD)));
-        form.add(nameF);
-        form.add(javax.swing.Box.createVerticalStrut(8));
+        form.add(javax.swing.Box.createVerticalStrut(10));
         form.add(mutedLabel("<html><body style='width:300px'>"
                 + I18n.t(Strings.AI_MODEL_KEY_NOTE) + "</body></html>"));
 

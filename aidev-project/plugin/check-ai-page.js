@@ -284,9 +284,15 @@ function sendOnce(text) {
   byId["go"].onclick();          // 页面上按的就是这个键
 }
 
+/** 会话下拉里第一项的名字。 */
+function firstOption() {
+  return String((byId["sessSel"].children[0] || {}).textContent || "");
+}
+
 function runNetwork() {
-  // 先开一个新会话：名字是空的时候才看得出"标题取的是问题"。
+  // 先开一个新会话：名字是空的才看得出"会话名怎么起"。
   byId["sessNew"].onclick();
+  want("空会话先显示「新会话」", firstOption() === "新会话", firstOption());
   windowStub.tbvAi.setModels(MODEL_JSON);
   // 带上上下文再发 —— 这样历史里存的是"整段上下文 + 问题"，
   // 和真机上一样；不然"重绘时只显示问题"那条根本测不到。
@@ -294,6 +300,9 @@ function runNetwork() {
     tool: "orthofinder", env: "orthofinder_env",
     help: "SIMPLE USAGE:\n Run full OrthoFinder analysis ...\n", options: []
   }));
+  // 面板开着的时候先开会话、后选工具是常态：这时会话名该跟着变成工具名，
+  // 而不是永远"新会话"。
+  want("选好工具后，空会话改挂工具名", firstOption() === "orthofinder", firstOption());
 
   console.log("");
   console.log("=== 发送：请求体里的 stream_options ===");
