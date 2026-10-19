@@ -34,3 +34,18 @@ ehthumbs.db
 *.class
 hs_err_pid*.log
 replay_pid*.log
+
+# --- 不随仓库发布（本地保留） -----------------------------------------
+# v1.0.0 公开发布时把这些从索引里移除：内部草稿、旧截图、宣传稿、
+# 被 使用说明.md 取代的旧文档。文件仍留在本机，只是不再进仓库。
+_archive/
+docs/images/
+docs/使用帮助.md
+docs/VMware连接指南.md
+docs/连接虚拟机操作说明.md
+docs/移植到BioEnvCaller.md
+docs/公众号推文.md
+docs/公众号推文_纯文本.txt
+docs/公众号推文_详细版.md
+docs/公众号推文_详细版_纯文本.txt
+docs/README.md

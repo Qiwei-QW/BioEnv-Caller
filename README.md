@@ -4,6 +4,11 @@
 
 **通用性**：插件包内不含任何工具清单。装了什么就能用什么，加新工具不需要改代码。
 
+> **版本** v1.0.0 ｜ **许可证** [MIT](LICENSE) ｜ **下载** [Releases](../../releases) ｜ **使用说明** [使用说明.md](使用说明.md) ｜ **更新日志** [CHANGELOG.md](CHANGELOG.md)
+>
+> 只想装上用：下载 Release 里的 `BioEnvCaller.plugin`，解压到 TBtools 插件目录即可（见[安装](#安装)）。
+> 想改代码：`build.ps1` 是唯一入口，详见[构建](#构建)。
+
 ---
 
 ## 核心设计
@@ -98,19 +103,22 @@ help 格式太怪时退化为纯命令行模式，工具照常可运行（DESIGN
 ```
 BioEnvCaller\
 ├─ build.ps1                    编译 + 测试 + 打包（唯一入口）
-├─ BioEnvCaller.plugin          产物，可解压安装到 TBtools
 ├─ aidev-project\               TBtools AI Dev 工程根
 │   ├─ project.json             插件注册信息（panelPackage=bioenv.ui）
 │   ├─ MenuConfig.ini           菜单挂载点（AI+）
+│   ├─ plugin\ai.html           AI 助手页面（JxBrowser 里运行）
+│   ├─ plugin\tbtools-ai.json   AI 能力声明（chat / vision）
 │   └─ src\bioenv\              插件源码
 │       ├─ core\                发现 / 解析 / 组装命令（无 UI 依赖）
 │       ├─ ui\                  Swing 界面
 │       ├─ i18n\                中英文案表
 │       ├─ test\                自带测试，全部纳入构建门禁（纯 main()，不依赖 JUnit）
 │       └─ tools\               调查/调试用 main()，编译但不打包、不入门禁
-├─ vmadapt\src\vmadapt\         SSH 传输模块（独立可编译，产物并入同一 JAR）
-├─ docs\                        使用帮助 / VMware 连接指南 / 公众号推文
-└─ _archive\ui-redesign\        UI 改造过程的截图与探针，仅供追溯
+├─ vmadapt\                     SSH 传输模块（独立可编译，产物并入同一 JAR）
+├─ docs\img\                    使用说明里的十张标注图
+├─ 使用说明.md                   完整图文使用手册
+├─ CHANGELOG.md                 版本更新日志
+└─ LICENSE                      MIT
 ```
 
 `build\` 是构建产物目录，**不入版本库**（见 `.gitignore`）。
@@ -282,7 +290,7 @@ orthofinder -f pep -M msa -T fasttree -t 12
 
 ## 安装
 
-把 `BioEnvCaller.plugin` 解压到 TBtools 插件根目录：
+从 [Releases](../../releases) 下载 `BioEnvCaller.plugin`（或自己用 `build.ps1` 构建），解压到 TBtools 插件根目录：
 
 ```
 D:\TBtoolsDir\.Plugin\BioEnv Caller\
@@ -463,3 +471,11 @@ ERROR conda.cli.main_run:execute(148): `conda run mafft ...` failed.
 > 若你再次遇到这条报错，请记录**完整命令行与上下文**再反馈。
 > 在此之前不应据此改动代码：现象复现不了，就没有可修的对象。
 
+---
+
+## 许可证
+
+[MIT](LICENSE) © 2026 Qiwei
+
+你可以自由使用、修改、分发（包括商用），保留版权声明与许可声明即可。
+本项目按「现状」提供，不附带任何担保。
