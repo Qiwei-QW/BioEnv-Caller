@@ -2067,49 +2067,67 @@ function stripLoneSurrogates(s) {
 var deletedByKey = false;
 var composing = false;
 
-el("ask").addEventListener("keydown", function (e) {
-  if (e.key === "Backspace" || e.key === "Delete") { deletedByKey = true; }
-});
+/**
+ * 把输入框这个元素整个重建一个。
+ *
+ * <p>删空之后那一块有时候会留下残影 —— 可能是像素没被清掉，也可能是输入法留了
+ * 几个看不见的字符。重建元素两种情况都能清干净：旧元素连同它的绘制缓存一起扔掉，
+ * 新元素从头画一次；而且新元素有实底（见 CSS），会先把那块区域涂一遍。
+ */
+function rebuildAsk() {
+  var old = el("ask");
+  if (!old || typeof old.cloneNode !== "function") { return; }   // 自检桩里没有
+  var parent = old.parentNode;
+  if (!parent || typeof parent.replaceChild !== "function") { return; }
+  var fresh = old.cloneNode(false);      // 只复制标签和属性，不带内容
+  fresh.id = "ask";
+  fresh.value = "";
+  parent.replaceChild(fresh, old);
+  wireAsk(fresh);
+  if (typeof fresh.focus === "function") { fresh.focus(); }
+}
 
-// 中文输入法组字期间绝对不能去动 value / display —— 那会把组字状态弄坏。
-el("ask").addEventListener("compositionstart", function () { composing = true; });
-el("ask").addEventListener("compositionend", function () { composing = false; });
+/** 输入框上的那几个监听。重建元素之后要重新挂一遍。 */
+function wireAsk(box) {
+  box.addEventListener("keydown", function (e) {
+    if (e.key === "Backspace" || e.key === "Delete") { deletedByKey = true; }
+  });
+  // 中文输入法组字期间绝对不能去动 value / 元素本身 —— 那会把组字状态弄坏。
+  box.addEventListener("compositionstart", function () { composing = true; });
+  box.addEventListener("compositionend", function () { composing = false; });
+  box.addEventListener("input", function () {
+    if (composing) { deletedByKey = false; return; }
+    var v = box.value;
+    var clean = stripLoneSurrogates(v);
+    if (clean !== v) { v = clean; box.value = clean; }
+    if (!deletedByKey) { return; }
+    deletedByKey = false;
+    // 删空之后重建元素：这是唯一能同时清掉"残留像素"和"看不见的残留字符"的办法。
+    if (v.length === 0) {
+      rebuildAsk();
+      return;
+    }
+    // 删了一部分：请 Java 把浏览器组件重画一遍（只重画，不动几何 —— 之前用
+    // applySize 重摆，把画面和组件的尺寸关系搞错位，结果输入框边框都残缺了）。
+    try { localStorage.setItem("tbv.repaint", "1"); } catch (e) {}
+  });
+  box.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") { e.preventDefault(); if (busy) { stop(); } return; }
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      // ★ 回答中按 Enter <b>不该</b>把回答掐掉。
+      //
+      // send() 的第一行是"忙就停"（那个 ▶/■ 按钮靠它切换），于是以前边看回答
+      // 边打下一个问题、一回车，当前回答就没了。停只有两个入口：Esc 和 ■。
+      if (busy) { flash(t("busyHint")); return; }
+      send();
+    }
+  });
+}
 
-el("ask").addEventListener("input", function () {
-  var box = el("ask");
-  if (composing) { deletedByKey = false; return; }
-  var v = box.value;
-  var clean = stripLoneSurrogates(v);
-  if (clean !== v) { box.value = clean; }
-  if (!deletedByKey) { return; }
-  deletedByKey = false;
-  var pos = box.selectionStart;
-  // ① 网页这一层：display 开关会强制重新布局并重新栅格化整块区域。
-  //    同一个任务里改回原样，浏览器不会在中间画一帧，所以看不到闪烁。
-  box.style.display = "none";
-  void box.offsetHeight;                 // 读一次布局，逼它立刻生效
-  box.style.display = "";
-  if (typeof box.setSelectionRange === "function" && typeof pos === "number") {
-    box.setSelectionRange(pos, pos);
-  }
-  if (typeof box.focus === "function") { box.focus(); }
-  // ② Java 那一层：请它把浏览器组件整个重画一遍。
-  try { localStorage.setItem("tbv.repaint", "1"); } catch (e) {}
-});
+wireAsk(el("ask"));
 
 
-el("ask").addEventListener("keydown", function (e) {
-  if (e.key === "Escape") { e.preventDefault(); if (busy) { stop(); } return; }
-  if (e.key === "Enter" && !e.shiftKey) {
-    e.preventDefault();
-    // ★ 回答中按 Enter <b>不该</b>把回答掐掉。
-    //
-    // send() 的第一行是"忙就停"（那个 ▶/■ 按钮靠它切换），于是以前边看回答
-    // 边打下一个问题、一回车，当前回答就没了。停只有两个入口：Esc 和 ■。
-    if (busy) { flash(t("busyHint")); return; }
-    send();
-  }
-});
 el("sessNew").onclick = newSession;
 el("sessDel").onclick = deleteCurrent;
 el("sessExp").onclick = exportNow;

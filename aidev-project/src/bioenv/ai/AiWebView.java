@@ -398,17 +398,9 @@ public final class AiWebView {
      * <p>在事件线程上调用。
      */
     public void repaintView() {
-        if (panel == null) {
-            return;
+        if (panel != null) {
+            repaintTree(panel);
         }
-        // 光 repaint 有时不够：BrowserView 会把上一帧的位图再贴一次。
-        // 先按当前尺寸把整棵子树重摆一遍（强制重新布局），再整树重画。
-        int w = panel.getWidth();
-        int h = panel.getHeight();
-        if (w > 0 && h > 0) {
-            applySize(panel, w, h);
-        }
-        repaintTree(panel);
     }
 
     private static void repaintTree(java.awt.Component c) {
