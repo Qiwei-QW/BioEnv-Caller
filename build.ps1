@@ -192,6 +192,15 @@ try {
         # are checked here without a browser.
         'bioenv.test.AiExportTest',
 
+        # --- the two length boxes in the model dialog -------------------------
+        # These have already lied once: an invalid entry was saved silently as 0
+        # ("no limit"), so the next time the dialog opened the field was blank and
+        # the user concluded their input had been lost. The three properties that
+        # matter are all pure functions now: bad input must be rejected (not turned
+        # into 0), K and M must both be binary, and what is stored must be shown
+        # back in the form the user typed it.
+        'bioenv.test.AiModelLenTest',
+
         # --- newly registered -------------------------------------------
         # These already lived in bioenv\test\ and already passed, but were
         # never listed here, so nothing ran them. They were found by running

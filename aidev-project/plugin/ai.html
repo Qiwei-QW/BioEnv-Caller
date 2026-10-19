@@ -324,6 +324,8 @@ var T = {
     expEmpty: "还没有对话，没有可导出的内容。",
     expHand: "正在打开保存对话框…", expOff: "网页存储不可用，导不出去。",
     adopted: "已送到命令框", adoptOff: "写不进网页存储",
+    statCtx: "上下文", statApprox: "≈", statRound: "轮",
+    statTotal: "累计", statBits: "已带上", statItems: "项",
     untitled: "新会话",
     confirmDel: "删除这个会话？它的对话记录会一起删掉。",
     storeOff: "（本次运行内有效：网页存储不可用）",
@@ -355,6 +357,8 @@ var T = {
     expEmpty: "Nothing to export yet.",
     expHand: "Opening the save dialog…", expOff: "Web storage is unavailable - cannot export.",
     adopted: "Sent to the command box", adoptOff: "Could not write to web storage",
+    statCtx: "Context", statApprox: "≈", statRound: "rounds",
+    statTotal: "total", statBits: "carried", statItems: "items",
     untitled: "New conversation",
     confirmDel: "Delete this conversation? Its messages go with it.",
     storeOff: "(kept for this run only: web storage is unavailable)",
@@ -411,10 +415,12 @@ var bridge = null;           // window.tbtools.ai
    */
   var models = [];              // [{id,label,baseUrl,apiKey,model,ok}]
   var SELKEY = "tbv.ai.sel";
-  var lastPromptTok = 0;        // 上一次发出去的提示估算 token
+  var lastPromptTok = 0;        // 上一次发出去的提示：估算 token
+  var lastPromptReal = 0;       // 同上，但来自服务端 usage（0 = 这次没拿到）
   var lastRate = 0;             // 上一次回答的速度（tok/s）
+  var lastOutReal = 0;          // 服务端返回的真实 completion_tokens（0 = 没拿到）
   var totalOutTok = 0;          // 本会话累计输出 token
-  var streamT0 = 0, streamChars = 0;        // 上一次发出去的提示估算 token
+  var streamT0 = 0;             // 这次回答开始的时间
   var selId = null;
   var popOpen = false;   // 列表是否展开（箭头朝向跟它走）             // null = 内置
 
@@ -429,6 +435,36 @@ var bridge = null;           // window.tbtools.ai
 
   function saveSel() {
     try { localStorage.setItem(SELKEY, selId === null ? "" : selId); } catch (e) {}
+  }
+
+  /**
+   * 哪些接口地址拒绝过 stream_options（也就是拿不到真实用量）。
+   *
+   * <p>记住它们，之后不再带这个字段：命中一次就够了，不该每次请求都白跑一次。
+   * 存在 localStorage 里，所以重开插件也记得。
+   */
+  var NOUSAGE = "tbv.ai.nousage";
+
+  function usageRefused(baseUrl) {
+    try {
+      var raw = String(localStorage.getItem(NOUSAGE) || "");
+      var key = String(baseUrl || "");
+      if (!raw || !key) { return false; }
+      return ("\n" + raw + "\n").indexOf("\n" + key + "\n") >= 0;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function usageRefuse(baseUrl) {
+    try {
+      var key = String(baseUrl || "");
+      if (!key || usageRefused(key)) { return; }
+      var raw = String(localStorage.getItem(NOUSAGE) || "");
+      localStorage.setItem(NOUSAGE, raw ? raw + "\n" + key : key);
+    } catch (e) {
+      // 存不进去就下次再试，不影响请求。
+    }
   }
 
   /** 当前选中的模型；null = 内置。 */
@@ -447,9 +483,22 @@ var bridge = null;           // window.tbtools.ai
     return m ? (m.label || m.model) : "内置模型";
   }
 
-  /** 3860 → 3.9k。底部那一行不该占太多字。 */
+  /**
+   * 3860 → 3.9k，1048576 → 1M。底部那一行不该占太多字。
+   *
+   * <p>以前只到 k：填了 1M 的输入上限会显示成 "1048.6k" —— 看着像算错了。
+   * 换算是二进制的（K = 1024，M = 1024²），和设置里那两个输入框一致。
+   */
   function compactN(n) {
-    return n >= 1000 ? (n / 1000).toFixed(1) + "k" : String(n);
+    if (n >= 1048576) {
+      var m = n / 1048576;
+      return (m >= 10 ? Math.round(m) : Math.round(m * 10) / 10) + "M";
+    }
+    if (n >= 1000) {
+      var k = n / 1000;
+      return (k >= 100 ? Math.round(k) : Math.round(k * 10) / 10) + "k";
+    }
+    return String(n);
   }
 
   function renderPill() {
@@ -1056,7 +1105,9 @@ window.tbvAi = {
   },
   /** 给自检用：拼一段 Markdown 但不保存；以及走完整的导出路径。 */
   markdown: buildMarkdown,
-  exportNow: exportNow
+  exportNow: exportNow,
+  /** 给自检用：估算函数本身。 */
+  estTokens: estTokens
 };
 
 /* ---------------- 上下文 ---------------- */
@@ -1108,26 +1159,66 @@ function refreshCtx() {
   updateStats(bits);
 }
 
+/* ================================================================
+ * token 估算
+ *
+ * 页面里没有分词器，也没有模型的词表 —— 所以只能估。估的时候要满足两条：
+ *   1. 尽量贴近真实分词器：中文/日文/韩文/全角标点 1 字 ≈ 1 token，
+ *      其它（英文、代码、路径）4 字符 ≈ 1 token；
+ *   2. 宁高不低：估多了只是早一点丢历史，估少了会被服务端当场拒。
+ *
+ * 以前这里是"字符数 ÷ 2"。中文上勉强（真实约 0.6/字），但工具帮助、命令、
+ * 报错几乎全是英文，而英文约 4 字符 1 token —— 那部分被高估了整整一倍。
+ * 页脚那行数字看着很精确，实际上可能差一倍。
+ * ================================================================ */
+function estTokens(s) {
+  var t = String(s == null ? "" : s);
+  var cjk = 0;
+  var other = 0;
+  for (var i = 0; i < t.length; i++) {
+    var c = t.charCodeAt(i);
+    if ((c >= 0x3000 && c <= 0x303F) ||      // 中日韩标点
+        (c >= 0x3040 && c <= 0x30FF) ||      // 平假名 / 片假名
+        (c >= 0x3400 && c <= 0x4DBF) ||      // 扩展 A
+        (c >= 0x4E00 && c <= 0x9FFF) ||      // 基本汉字
+        (c >= 0xAC00 && c <= 0xD7AF) ||      // 谚文
+        (c >= 0xF900 && c <= 0xFAFF) ||      // 兼容汉字
+        (c >= 0xFF00 && c <= 0xFFEF)) {      // 全角
+      cjk++;
+    } else {
+      other++;
+    }
+  }
+  return cjk + Math.ceil(other / 4);
+}
+
+/** 这一次请求的提示有多少 token：服务端给过真值就用真值。 */
+function usedTokens() {
+  return lastPromptReal > 0 ? lastPromptReal : lastPromptTok;
+}
+
 /**
  * 底部那一行：上下文用量 / 上限 / 百分比 · 轮数。
  *
- * <p>token 是估的：字符数 ÷ 2。和 trimToBudget 用的是同一个口径 ——
- * 两处口径不一样的话，用户会看到互相矛盾的两个数字。
+ * <p>服务端返回了 usage 就是真数；没有时是估算，估算前面带一个 ≈ ——
+ * 别让人把一个猜出来的数字当成账单。
  */
 function updateStats(bits) {
   var m = currentModel();
   var lim = (m && m.maxIn > 0) ? m.maxIn : 0;
   var out = [];
-  if (lastPromptTok > 0) {
-    out.push("\u4e0a\u4e0b\u6587 " + compactN(lastPromptTok)
+  var used = usedTokens();
+  if (used > 0) {
+    var exact = lastPromptReal > 0;
+    out.push(t("statCtx") + " " + (exact ? "" : t("statApprox")) + compactN(used)
              + (lim > 0 ? " / " + compactN(lim) + " \u00b7 "
-                 + Math.min(999, Math.round(lastPromptTok / lim * 100)) + "%" : " token"));
+                 + Math.min(999, Math.round(used / lim * 100)) + "%" : " tok"));
   }
   var rounds = Math.floor(turns.length / 2);
-  if (rounds > 0) { out.push(rounds + " \u8f6e"); }
+  if (rounds > 0) { out.push(rounds + " " + t("statRound")); }
   if (lastRate > 0) { out.push(Math.round(lastRate) + " tok/s"); }
-  if (totalOutTok > 0) { out.push("\u7d2f\u8ba1 " + compactN(totalOutTok) + " tok"); }
-  if (bits && bits.length) { out.push("\u5df2\u5e26\u4e0a " + bits.length + " \u9879"); }
+  if (totalOutTok > 0) { out.push(t("statTotal") + " " + compactN(totalOutTok) + " tok"); }
+  if (bits && bits.length) { out.push(t("statBits") + " " + bits.length + " " + t("statItems")); }
   el("budget").textContent = out.join(" \u00b7 ");
 }
 
@@ -1166,17 +1257,17 @@ function sysPrompt() {
  */
 function trimToBudget(msgs, maxIn) {
     // 不发给服务端 —— 只在本地决定发多少上下文。
-    // 字符数当两个 token 粗估；宁可保守，也不要被截断。
+    // 单位是 token（估算），和页脚那一行用同一个口径：两处口径不一样的话，
+    // 用户会看到"明明没到上限，历史却被截了"。
     if (!maxIn || maxIn <= 0 || msgs.length <= 2) { return msgs; }
-    var budget = maxIn * 2;
-    var total = 0;
-    for (var i = 0; i < msgs.length; i++) {
-      total += String(msgs[i].content || "").length;
-    }
     var out = msgs.slice();
-    while (total > budget && out.length > 2) {
+    var total = 0;
+    for (var i = 0; i < out.length; i++) {
+      total += estTokens(out[i].content);
+    }
+    while (total > maxIn && out.length > 2) {
       var dropped = out.splice(1, 1)[0];      // 第 0 条是 system，不动
-      total -= String(dropped.content || "").length;
+      total -= estTokens(dropped.content);
     }
     return out;
   }
@@ -1184,6 +1275,26 @@ function trimToBudget(msgs, maxIn) {
   function sendExternal(msgs, box, cfg) {
   var ctrl = new AbortController();
   var acc = "";
+  var trimmed = trimToBudget(msgs, cfg.maxIn);
+
+  /**
+   * 服务端回来的真实用量。
+   *
+   * <p>流式请求要 {@code stream_options.include_usage} 才会带 usage，
+   * 它可能在最后一帧（choices 为空），也可能挂在最后那一小段上。
+   * 拿到了就用真值显示 —— 这是唯一能"和 Harness 一样准"的办法，
+   * 因为页面里没有分词器。
+   */
+  function takeUsage(u) {
+    if (!u) { return; }
+    if (typeof u.prompt_tokens === "number" && u.prompt_tokens > 0) {
+      lastPromptReal = u.prompt_tokens;
+    }
+    if (typeof u.completion_tokens === "number" && u.completion_tokens > 0) {
+      lastOutReal = u.completion_tokens;
+    }
+    updateStats([]);
+  }
 
   function onEvent(chunk) {
     var lines = chunk.split("\n");
@@ -1194,14 +1305,14 @@ function trimToBudget(msgs, maxIn) {
       if (!payload || payload === "[DONE]") { continue; }
       try {
         var j = JSON.parse(payload);
+        if (j && j.usage) { takeUsage(j.usage); }
         var ch = j.choices && j.choices[0];
         var d = ch && (ch.delta || ch.message);
         if (d && d.content) {
           acc += d.content;
-          streamChars += d.content.length;
           // 每次都算会拖慢渲染；每 400ms 算一次就够了。
           var el2 = (Date.now() - streamT0) / 1000;
-          if (el2 > 0.4) { lastRate = (streamChars / 2) / el2; updateStats([]); }
+          if (el2 > 0.4) { lastRate = estTokens(acc) / el2; updateStats([]); }
           box.textContent = acc;
           el("log").scrollTop = el("log").scrollHeight;
         }
@@ -1211,31 +1322,46 @@ function trimToBudget(msgs, maxIn) {
     }
   }
 
-  // 输出上限：填了才发，否则用服务端默认。
-  var body = { model: cfg.model, messages: trimToBudget(msgs, cfg.maxIn), stream: true };
-  if (cfg.maxOut > 0) { body.max_tokens = cfg.maxOut; }
   var url = String(cfg.baseUrl).replace(/\/+$/, "") + "/chat/completions";
-  var p = fetch(url, {
-    method: "POST",
-    signal: ctrl.signal,
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": "Bearer " + (cfg.apiKey || "")
-    },
-    body: JSON.stringify(body)
-  }).then(function (res) {
-    if (!res.ok) {
-      return res.text().then(function (body) {
-        var tail = String(body || "").slice(0, 300);
-        // 服务端万一回显了 key，就打码 —— 错误文字会被用户看到、被截图。
-        if (cfg.apiKey) { tail = tail.split(cfg.apiKey).join("***"); }
-        throw (lang === "en" ? "HTTP " : "接口返回 ") + res.status + "  " + tail;
-      });
-    }
+
+  /* 请求体：输出上限填了才发（否则用服务端默认）。
+     真实用量要服务端带 usage，这由 stream_options 打开 —— 但它不是所有
+     OpenAI 兼容实现都认，所以放在第一次尝试里，被拒就去掉重发。 */
+  function body(withUsage) {
+    var b = { model: cfg.model, messages: trimmed, stream: true };
+    if (cfg.maxOut > 0) { b.max_tokens = cfg.maxOut; }
+    if (withUsage) { b.stream_options = { include_usage: true }; }
+    return b;
+  }
+
+  function post(withUsage) {
+    return fetch(url, {
+      method: "POST",
+      signal: ctrl.signal,
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + (cfg.apiKey || "")
+      },
+      body: JSON.stringify(body(withUsage))
+    });
+  }
+
+  function httpError(res) {
+    return res.text().then(function (raw) {
+      var tail = String(raw || "").slice(0, 300);
+      // 服务端万一回显了 key，就打码 —— 错误文字会被用户看到、被截图。
+      if (cfg.apiKey) { tail = tail.split(cfg.apiKey).join("***"); }
+      throw (lang === "en" ? "HTTP " : "接口返回 ") + res.status + "  " + tail;
+    });
+  }
+
+  /* 读响应：非流式 JSON 和 SSE 两条路都接。 */
+  function consume(res) {
     if (!res.body || !res.body.getReader) {
       return res.text().then(function (txt) {
         try {
           var j = JSON.parse(txt);
+          if (j && j.usage) { takeUsage(j.usage); }
           var m = j.choices && j.choices[0] && j.choices[0].message;
           acc = (m && m.content) ? m.content : txt;
         } catch (e) { acc = txt; }
@@ -1262,6 +1388,25 @@ function trimToBudget(msgs, maxIn) {
       });
     }
     return pump();
+  }
+
+  // 第一次带上 stream_options；服务端不认这个参数（400/422/501）就去掉重发。
+  // ★ 只有"去掉之后成功了"才记住这家服务器 —— 否则一次别的原因导致的 400
+  //   （模型名写错、额度用完）会被当成"它不支持用量"，之后永远拿不到真数，
+  //   而且界面上看不出来。这类静默降级在这个项目里已经出现过好几次了。
+  var wantUsage = !usageRefused(cfg.baseUrl);
+  var p = post(wantUsage).then(function (res) {
+    if (!res.ok && wantUsage
+            && (res.status === 400 || res.status === 422 || res.status === 501)) {
+      return post(false).then(function (again) {
+        if (again.ok) {
+          usageRefuse(cfg.baseUrl);
+          return consume(again);
+        }
+        return httpError(again);
+      });
+    }
+    return res.ok ? consume(res) : httpError(res);
   }).then(function (text) {
     return (typeof text === "string" && text) ? text : acc;
   }, function (e) {
@@ -1338,13 +1483,16 @@ loadSel();
   }
   msgs.push({ role: "user", content: full });
 
-  // 发之前算一次，用来在底部显示上下文用量。
-  var promptChars = 0;
+  // 发之前估一次，用来在底部显示上下文用量。服务端要是回了 usage，
+  // 下面会把它换成真值 —— 页脚那时会把 ≈ 去掉。
+  var promptTok = 0;
   for (var pi = 0; pi < msgs.length; pi++) {
-    promptChars += String(msgs[pi].content || "").length;
+    promptTok += estTokens(msgs[pi].content);
   }
-  lastPromptTok = Math.ceil(promptChars / 2);
-  streamT0 = Date.now(); streamChars = 0; lastRate = 0;
+  lastPromptTok = promptTok;
+  lastPromptReal = 0;
+  lastOutReal = 0;
+  streamT0 = Date.now(); lastRate = 0;
   updateStats([]);
 
   var box = bubble("a", "");
@@ -1402,6 +1550,8 @@ loadSel();
           base += s;
         }
         box.textContent = base;
+        var el3 = (Date.now() - streamT0) / 1000;
+        if (el3 > 0.4) { lastRate = estTokens(base) / el3; updateStats([]); }
         el("log").scrollTop = el("log").scrollHeight;
       }
     });
@@ -1425,7 +1575,7 @@ loadSel();
     var text = (typeof r === "string" && r) ? r : base;
     box.innerHTML = md(text);
       wireCopy(box);
-    totalOutTok += Math.ceil(text.length / 2);
+    totalOutTok += (lastOutReal > 0 ? lastOutReal : estTokens(text));
     // 回答下面给一行小动作：重试 / 编辑 / 继续 / 复制。
     addActions(box, q, text);
     // q 是"用户实际问的那一句" —— 导出时用它，不然导出来的记录里每一轮

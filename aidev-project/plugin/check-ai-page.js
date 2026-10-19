@@ -29,14 +29,18 @@ function makeEl(id) {
     scrollTop: 0,
     scrollHeight: 100,
     children: [],
+    parentNode: null,
+    nextSibling: null,
     classList: { add() {}, remove() {}, toggle() {}, contains() { return false; } },
-    appendChild(c) { calls.push("appendChild:" + id); this.children.push(c); return c; },
-    append(...xs) { calls.push("append:" + id); xs.forEach((x) => this.children.push(x)); },
+    appendChild(c) { calls.push("appendChild:" + id); c.parentNode = this; this.children.push(c); return c; },
+    insertBefore(n, ref) { calls.push("insertBefore:" + id); n.parentNode = this; this.children.push(n); return n; },
+    append(...xs) { calls.push("append:" + id); xs.forEach((x) => { x.parentNode = this; this.children.push(x); }); },
     remove() { calls.push("remove:" + id); },
     addEventListener(t) { calls.push("addEventListener:" + id + ":" + t); },
     querySelector() { return null; },
     setAttribute() {},
     getAttribute() { return null; },
+    hasAttribute() { return false; },
     removeAttribute() {},
   };
   return el;
@@ -88,6 +92,9 @@ var seed = [{
   ],
 }];
 var store = {};
+// 当前选中的模型。页面启动时从这里读 selId；没有它就走"内置模型"分支，
+// 下面自定义模型的请求测试就发不出去了。
+store["tbv.ai.sel"] = "m1";
 global.localStorage = {
   getItem: function (k) {
     if (k === "bioenv.ai.sessions.v1") { return JSON.stringify(seed); }
@@ -205,15 +212,191 @@ want("正文解得回来", body === exported);
 want("正文里中文没坏", body.indexOf("orthofinder") >= 0);
 want("正文里没有 %XX 残留", !/%[0-9A-Fa-f]{2}/.test(body));
 
+/* ================================================================
+ * token 用量：估算函数 · 请求里的 stream_options · usage 落到页脚
+ *
+ * 这一段盯的还是同一种形状：值算出来了、传过来了，但真正显示的那一行没读到。
+ * 以前页脚是"字符数 ÷ 2"猜的；现在要验三件事：
+ *   1. 估算口径（中文按字、英文按 4 字符）
+ *   2. 请求里真的带上了 stream_options
+ *   3. 服务端回的 prompt_tokens 真的到了页脚，而且去掉了 ≈
+ * 另加一条退路：服务端不认 stream_options 时要自动去掉重发，而不是报错。
+ * ================================================================ */
 console.log("");
-console.log(problems.length === 0
-  ? "PASS " + checks + " checks"
-  : "FAIL " + problems.length + " of " + checks);
+console.log("=== token 估算 ===");
+var est = windowStub.tbvAi && windowStub.tbvAi.estTokens;
+want("暴露了估算函数", typeof est === "function");
+if (typeof est === "function") {
+  want("空串 0 token", est("") === 0);
+  want("null 当空串", est(null) === 0);
+  want("中文 1 字 1 token", est("你好") === 2, est("你好"));
+  want("英文 4 字符 1 token", est("abcd") === 1, est("abcd"));
+  want("英文 8 字符 2 token", est("abcdefgh") === 2, est("abcdefgh"));
+  want("同样长的中文 token 更多", est("你好世界") > est("abcdefgh"));
+  // 旧口径是 length/2：13 字符 → 7。真实约 4，估 7 就是高估一倍。
+  want("英文不再被高估一倍", est("fastp -i a.fq") <= 5, est("fastp -i a.fq"));
+}
+
+var requests = [];
+
+function wait(ms) {
+  return new Promise(function (res) { setTimeout(res, ms); });
+}
+
+/** 一个假的 SSE 响应：把每段文本依次交出去。 */
+function sseResponse(chunks) {
+  var i = 0;
+  return {
+    ok: true,
+    status: 200,
+    body: {
+      getReader: function () {
+        return {
+          read: function () {
+            return Promise.resolve(i < chunks.length
+              ? { value: new TextEncoder().encode(chunks[i++]), done: false }
+              : { value: undefined, done: true });
+          }
+        };
+      }
+    }
+  };
+}
+
+var ASK = "hello";
+var MODEL_JSON = JSON.stringify([{
+  id: "m1", label: "Test model", baseUrl: "https://example.invalid/v1",
+  apiKey: "sk-secret", model: "m1", maxIn: 1048576, maxOut: 2048, ok: true
+}]);
+
+function sendOnce(text) {
+  byId["ask"].value = text;
+  byId["go"].onclick();          // 页面上按的就是这个键
+}
+
+function runNetwork() {
+  windowStub.tbvAi.setModels(MODEL_JSON);
+
+  console.log("");
+  console.log("=== 发送：请求体里的 stream_options ===");
+  requests = [];
+  global.fetch = function (url, opts) {
+    requests.push({ url: String(url), body: String((opts && opts.body) || "") });
+    return Promise.resolve(sseResponse([
+      'data: {"choices":[{"delta":{"content":"你好"}}]}\n\n',
+      'data: {"choices":[{"delta":{"content":"世界"}}],'
+        + '"usage":{"prompt_tokens":12345,"completion_tokens":7}}\n\n',
+      "data: [DONE]\n\n"
+    ]));
+  };
+  sendOnce(ASK);
+  return wait(120).then(function () {
+    want("发出了一个请求", requests.length === 1, "requests=" + requests.length);
+    var body = {};
+    try { body = JSON.parse(requests[0].body); } catch (e) {}
+    want("请求带 stream_options", !!(body.stream_options
+        && body.stream_options.include_usage), requests[0] && requests[0].body.slice(0, 80));
+    want("模型名对", body.model === "m1");
+    want("max_tokens 用设置里的值", body.max_tokens === 2048, body.max_tokens);
+    want("消息里有 system", !!(body.messages && body.messages[0]
+        && body.messages[0].role === "system"));
+
+    // ★ 这一段是重点：服务端给的 12345 必须真的出现在页脚上。
+    var budget = String(byId["budget"].textContent || "");
+    want("页脚用了服务端的真实值", budget.indexOf("12.3k") >= 0, budget);
+    want("有真值时不带 ≈", budget.indexOf("≈") < 0, budget);
+    want("上限显示成 1M", budget.indexOf("1M") >= 0, budget);
+
+    console.log("");
+    console.log("=== 退路：服务端不认 stream_options ===");
+    requests = [];
+    global.fetch = function (url, opts) {
+      var body2 = {};
+      try { body2 = JSON.parse((opts && opts.body) || "{}"); } catch (e) {}
+      requests.push({ body: String((opts && opts.body) || "") });
+      if (body2.stream_options) {
+        return Promise.resolve({
+          ok: false, status: 400,
+          text: function () {
+            return Promise.resolve('{"error":{"message":"Unknown field: stream_options"}}');
+          }
+        });
+      }
+      return Promise.resolve(sseResponse([
+        'data: {"choices":[{"delta":{"content":"ok"}}],'
+          + '"usage":{"prompt_tokens":777,"completion_tokens":3}}\n\n',
+        "data: [DONE]\n\n"
+      ]));
+    };
+    sendOnce("again");
+    return wait(150);
+  }).then(function () {
+    want("被拒之后自动重发了", requests.length === 2, "requests=" + requests.length);
+    var first = {}, second = {};
+    try {
+      first = JSON.parse(requests[0].body);
+      second = JSON.parse(requests[1].body);
+    } catch (e) {}
+    want("第一次带了 stream_options", !!first.stream_options);
+    want("重发时去掉了 stream_options", second.stream_options === undefined);
+    want("记住了这家服务器",
+        String(store["tbv.ai.nousage"] || "").indexOf("https://example.invalid/v1") >= 0,
+        store["tbv.ai.nousage"]);
+    var budget2 = String(byId["budget"].textContent || "");
+    want("重发成功、页脚用上了第二次的真值", budget2.indexOf("777") >= 0, budget2);
+    want("界面上没有报错气泡", !hasErrorBubble());
+  }).then(function () {
+    /* 两次都失败：那就不该把这家服务器记成"不支持用量" —— 否则以后永远拿不到
+       真数，而界面上一点提示都没有。这就是"静默降级"，在这个项目里出现过好几次。 */
+    console.log("");
+    console.log("=== 两次都失败时不能冤枉它 ===");
+    delete store["tbv.ai.nousage"];
+    var before = hasErrorBubble();
+    requests = [];
+    global.fetch = function (url, opts) {
+      requests.push({ body: String((opts && opts.body) || "") });
+      return Promise.resolve({
+        ok: false, status: 400,
+        text: function () {
+          return Promise.resolve('{"error":{"message":"model not found"}}');
+        }
+      });
+    };
+    sendOnce("third");
+    return wait(150).then(function () {
+      want("两次都失败了", requests.length === 2, "requests=" + requests.length);
+      want("没把服务器记成不支持用量",
+          String(store["tbv.ai.nousage"] || "").indexOf("example.invalid") < 0,
+          store["tbv.ai.nousage"]);
+      want("把真实错误显示了出来", !before && hasErrorBubble());
+    });
+  });
+}
+
+/** 对话区里有没有一条报错气泡（class 含 "m e"）。 */
+function hasErrorBubble() {
+  var kids = byId["log"].children;
+  for (var i = 0; i < kids.length; i++) {
+    if (String(kids[i].className || "").indexOf("m e") >= 0) { return true; }
+  }
+  return false;
+}
 
 console.log("");
-console.log("=== 调用轨迹 ===");
-console.log("  " + calls.join("\n  "));
+runNetwork().then(function () {
+  console.log("");
+  console.log(problems.length === 0
+    ? "PASS " + checks + " checks"
+    : "FAIL " + problems.length + " of " + checks);
 
-if (problems.length > 0) { process.exit(1); }
+  console.log("");
+  console.log("=== 调用轨迹 ===");
+  console.log("  " + calls.join("\n  "));
+
+  if (problems.length > 0) { process.exit(1); }
+}, function (e) {
+  console.log("网络段自己抛了：" + (e && e.stack || e));
+  process.exit(1);
+});
 
 function called(name) { return calls.indexOf(name) >= 0; }

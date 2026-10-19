@@ -1238,10 +1238,14 @@ public final class Strings {
                 "最大输出长度（token，max_tokens）",
                 "Max output (tokens; max_tokens)");
         put(ZH_TEXT, EN_TEXT, AI_MODEL_LEN_NOTE,
-                "\u4e0b\u9762\u4e24\u9879\u53ea\u5bf9\u300c\u81ea\u5b9a\u4e49\u300d\u6a21\u578b\u751f\u6548\uff1b"
-                + "\u5185\u7f6e\u6a21\u578b\u7684\u8bf7\u6c42\u7531 TBtools \u53d1\u51fa\uff0c\u65e0\u6cd5\u6307\u5b9a\u3002",
+                "下面两项只对「自定义」模型生效；内置模型的请求由 TBtools 发出，无法指定。"
+                + "输入长度是本地阈值，决定丢多少历史（面板本来就只留最近 24 条消息），"
+                + "不发往服务端；输出长度原样作为 max_tokens 发出去。",
                 "The two below apply to custom models only - built-in requests are sent by "
-                + "TBtools and their length cannot be set here.");
+                + "TBtools and their length cannot be set here. Max input is a local "
+                + "threshold that decides how much history to drop (the panel already keeps "
+                + "just the last 24 messages) and is never sent; max output goes out as "
+                + "max_tokens.");
         put(ZH_TEXT, EN_TEXT, AI_MODEL_LEN_BAD,
                 "\u8bf7\u586b token \u6570\uff0c\u5982 4096\u30011024K\u30011M\uff1b\u7559\u7a7a\u8868\u793a\u4e0d\u9650\u3002",
                 "Length must be a number. Leave it blank for no limit.");

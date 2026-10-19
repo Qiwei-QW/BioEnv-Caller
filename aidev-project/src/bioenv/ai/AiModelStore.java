@@ -93,6 +93,62 @@ public final class AiModelStore {
         }
     }
 
+    /**
+     * 长度输入框 → int：空 = 0（不限），<b>非法 = -1</b>，负数也非法。
+     *
+     * <p>-1 让调用方能区分"没填"和"填错了"。以前两种情况都返回 0，于是填错了
+     * 也照样保存，下次打开却是空的 —— "为什么我填的没了"就是这么来的。
+     *
+     * <p>K 按 1024、M 按 1024²：用户写 1024K 和 1M 应该是同一档。按十进制的话
+     * 1024K 会比 1M 大 2.4%，这个不一致会让人以为自己算错了。
+     */
+    public static int parseLen(String s) {
+        String v = (s == null) ? "" : s.trim().toLowerCase();
+        if (v.length() == 0) {
+            return 0;
+        }
+        long mult = 1L;
+        if (v.endsWith("k")) {
+            mult = 1024L;
+            v = v.substring(0, v.length() - 1).trim();
+        } else if (v.endsWith("m")) {
+            mult = 1024L * 1024L;
+            v = v.substring(0, v.length() - 1).trim();
+        }
+        if (v.length() == 0) {
+            return -1;
+        }
+        try {
+            // multiplyExact：填个天文数字也不该溢出成一个看着合理的负数/小数。
+            long n = Math.multiplyExact(Long.parseLong(v), mult);
+            if (n < 0) {
+                return -1;               // "-1M" 不是"不限"，是填错了
+            }
+            return (int) Math.min(Integer.MAX_VALUE, n);
+        } catch (Exception e) {
+            return -1;
+        }
+    }
+
+    /**
+     * 存着的长度 → 输入框里显示的样子。
+     *
+     * <p>填过 {@code 1M} 的人，下次打开应该还看到 {@code 1M}。显示 1048576 的话，
+     * 用户得数一遍零才能确认这是不是自己填的那个数 —— 而且很容易以为填错了。
+     */
+    public static String formatLen(int v) {
+        if (v <= 0) {
+            return "";
+        }
+        if (v % (1024 * 1024) == 0) {
+            return (v / (1024 * 1024)) + "M";
+        }
+        if (v % 1024 == 0) {
+            return (v / 1024) + "K";
+        }
+        return String.valueOf(v);
+    }
+
     /** 配好的模型。顺序就是界面上的顺序。 */
     public final List<Model> models = new ArrayList<Model>();
 

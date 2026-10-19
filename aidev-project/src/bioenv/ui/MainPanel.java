@@ -2156,9 +2156,9 @@ public final class MainPanel extends JPanel {
         final javax.swing.JPasswordField keyF = new javax.swing.JPasswordField(m.apiKey, 24);
         final javax.swing.JTextField modelF = new javax.swing.JTextField(m.model, 18);
         final javax.swing.JTextField maxInF = new javax.swing.JTextField(
-                m.maxIn > 0 ? String.valueOf(m.maxIn) : "", 10);
+                bioenv.ai.AiModelStore.formatLen(m.maxIn), 10);
         final javax.swing.JTextField maxOutF = new javax.swing.JTextField(
-                m.maxOut > 0 ? String.valueOf(m.maxOut) : "", 10);
+                bioenv.ai.AiModelStore.formatLen(m.maxOut), 10);
         final boolean[] ok = {false};
 
         JPanel form = new JPanel();
@@ -2206,8 +2206,8 @@ public final class MainPanel extends JPanel {
                 m.baseUrl = urlF.getText().trim();
                 m.apiKey = new String(keyF.getPassword()).trim();
                 m.model = modelF.getText().trim();
-                int inVal = parseLenOrNeg(maxInF.getText());
-                int outVal = parseLenOrNeg(maxOutF.getText());
+                int inVal = bioenv.ai.AiModelStore.parseLen(maxInF.getText());
+                int outVal = bioenv.ai.AiModelStore.parseLen(maxOutF.getText());
                 if (inVal < 0 || outVal < 0) {
                     // 填了非数字就停在这里。原来是静默当 0，
                     // 于是下次打开显示空白 —— 用户只能得出“我填的东西没了”。
@@ -2239,39 +2239,6 @@ public final class MainPanel extends JPanel {
         return ok[0];
     }
 
-
-    /**
-     * 长度输入框→int。空字串 = 0（不限）；<b>非数字返回 -1</b>。
-     *
-     * <p>-1 是为了让调用方能区分“没填”和“填错了”。以前两种情况都返回 0，
-     * 于是填错了也照样保存，下次打开就是空的 —— “为什么我填的没了”就是这么来的。
-     */
-    private static int parseLenOrNeg(String s) {
-        String v = (s == null) ? "" : s.trim().toLowerCase();
-        if (v.length() == 0) {
-            return 0;
-        }
-        // K 按 1024、M 按 1024² —— 用户写 1024K 和 1M 应该是同一个量级，
-        // 那就只能是二进制的 K。十进制的话 1024K 会比 1M 大 2.4%，
-        // 这个不一致会让人以为自己算错了。
-        long mult = 1L;
-        if (v.endsWith("k")) {
-            mult = 1024L;
-            v = v.substring(0, v.length() - 1).trim();
-        } else if (v.endsWith("m")) {
-            mult = 1024L * 1024L;
-            v = v.substring(0, v.length() - 1).trim();
-        }
-        if (v.length() == 0) {
-            return -1;
-        }
-        try {
-            long n = Long.parseLong(v) * mult;
-            return (int) Math.min(Integer.MAX_VALUE, Math.max(0L, n));
-        } catch (Exception e) {
-            return -1;
-        }
-    }
 
     /** 一行灰字。 */
     private JLabel mutedLabel(String text) {
