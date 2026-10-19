@@ -73,8 +73,8 @@ public final class ConcisePreviewTest {
         Tool t = new Tool("orthofinder", "env", "/envs/orthofinder");
 
         Map<String, ParamValue> v = values(s);
-        v.get("-o").set("C:\\Users\\14231\\Desktop\\Results_Sep07_2");
-        v.get("-f").set("C:\\Users\\14231\\Desktop\\pep");
+        v.get("-o").set("C:\\Users\\demo\\Desktop\\Results_Sep07_2");
+        v.get("-f").set("C:\\Users\\demo\\Desktop\\pep");
         v.get("-M").set("msa");
         v.get("-t").set("12");
 
@@ -94,9 +94,9 @@ public final class ConcisePreviewTest {
         check("the shown text expands to the full command",
                 run.equals(CommandBuilder.userFacingPreview(t, s, "", v, null)));
         check("the output path is restored",
-                run.contains("-o /mnt/c/Users/14231/Desktop/Results_Sep07_2"));
+                run.contains("-o /mnt/c/Users/demo/Desktop/Results_Sep07_2"));
         check("the input path is restored",
-                run.contains("-f /mnt/c/Users/14231/Desktop/pep"));
+                run.contains("-f /mnt/c/Users/demo/Desktop/pep"));
         line("");
     }
 
@@ -122,10 +122,10 @@ public final class ConcisePreviewTest {
         // A path typed in WSL form is a location too, and the file chooser is not
         // the only way one arrives.
         Map<String, ParamValue> typed = values(s);
-        typed.get("-i").set("/home/qw/data/pep.fa");
+        typed.get("-i").set("/home/demo/data/pep.fa");
         ConcisePreview p2 = ConcisePreview.of(t, s, "", typed, null);
         check("a POSIX path is shortened as well", p2.text().contains("-i pep.fa"));
-        check("and restored", p2.expand(p2.text()).contains("-i /home/qw/data/pep.fa"));
+        check("and restored", p2.expand(p2.text()).contains("-i /home/demo/data/pep.fa"));
         line("");
 
         // A value that carries no folder is already its own name.
@@ -165,11 +165,11 @@ public final class ConcisePreviewTest {
 
         Map<String, ParamValue> v = values(s);
         v.get("-M").set("msa");
-        v.get("-f").set("/home/qw/msa");
+        v.get("-f").set("/home/demo/msa");
         ConcisePreview p = ConcisePreview.of(t, s, "", v, null);
         line("      " + p.text());
         check("the path keeps its spelling",
-                p.text().contains("/home/qw/msa") && p.text().contains("-M msa"));
+                p.text().contains("/home/demo/msa") && p.text().contains("-M msa"));
         check("expanding cannot move the mode value", p.expand(p.text())
                 .equals(CommandBuilder.userFacingPreview(t, s, "", v, null)));
         line("");
@@ -246,8 +246,8 @@ public final class ConcisePreviewTest {
         s.options.add(opt("-t", "NUM", Schema.Option.Kind.NUMBER));
         Tool t = new Tool("orthofinder", "env", "/envs/e");
         Map<String, ParamValue> v = values(s);
-        v.get("-o").set("C:\\Users\\14231\\Desktop\\Results_Sep07_2");
-        v.get("-f").set("C:\\Users\\14231\\Desktop\\pep");
+        v.get("-o").set("C:\\Users\\demo\\Desktop\\Results_Sep07_2");
+        v.get("-f").set("C:\\Users\\demo\\Desktop\\pep");
         ConcisePreview p = ConcisePreview.of(t, s, "", v, null);
 
         String edited = "orthofinder -o Results_Sep07_2 -f pep -t 8";
@@ -255,9 +255,9 @@ public final class ConcisePreviewTest {
         line("      " + run);
         check("the edit is kept", run.endsWith("-t 8"));
         check("the output directory is restored",
-                run.contains("-o /mnt/c/Users/14231/Desktop/Results_Sep07_2"));
+                run.contains("-o /mnt/c/Users/demo/Desktop/Results_Sep07_2"));
         check("the input directory is restored",
-                run.contains("-f /mnt/c/Users/14231/Desktop/pep"));
+                run.contains("-f /mnt/c/Users/demo/Desktop/pep"));
         line("");
 
         // A word the pane never wrote is the user's own and is passed through.
@@ -266,7 +266,7 @@ public final class ConcisePreviewTest {
         line("      " + ownRun);
         check("a typed absolute path is untouched", ownRun.contains("-o /tmp/mine"));
         check("the name the pane wrote is still expanded",
-                ownRun.contains("-f /mnt/c/Users/14231/Desktop/pep"));
+                ownRun.contains("-f /mnt/c/Users/demo/Desktop/pep"));
         line("");
 
         // Quoting is the same on the way back as it was on the way out: a name
@@ -313,8 +313,8 @@ public final class ConcisePreviewTest {
         s.options.add(opt("-i", "LIST", Schema.Option.Kind.PATH_LIST));
         Tool t = new Tool("somecmd", "env", "/envs/e");
         Map<String, ParamValue> v = values(s);
-        v.get("-o").set("C:\\Users\\14231\\Desktop\\Results_Sep07_2");
-        v.get("-f").set("C:\\Users\\14231\\Desktop\\pep");
+        v.get("-o").set("C:\\Users\\demo\\Desktop\\Results_Sep07_2");
+        v.get("-f").set("C:\\Users\\demo\\Desktop\\pep");
         ConcisePreview p = ConcisePreview.of(t, s, "", v, null);
 
         // The pane can be edited into more than one line; the layout the user
@@ -324,7 +324,7 @@ public final class ConcisePreviewTest {
         line("      " + run.replace("\n", "\\n"));
         check("the double space is kept", run.startsWith("somecmd  -o "));
         check("the newline is kept", run.contains("Results_Sep07_2\n-f"));
-        check("both names are expanded", run.contains("/mnt/c/Users/14231/Desktop/pep"));
+        check("both names are expanded", run.contains("/mnt/c/Users/demo/Desktop/pep"));
         line("");
 
         // A path list is shortened piece by piece, so each entry reads as a name.

@@ -116,25 +116,25 @@ public final class AutoCopyInputsTest {
         JTextField wd = form.workdirFieldForTest();
         check("the working directory field exists", wd != null);
         if (wd != null) {
-            wd.setText("/home/qw/bioenv_work/probe_20260926");
+            wd.setText("/home/demo/bioenv_work/probe_20260926");
         }
         System.out.println("      inputs would go to: " + form.wslInputDirForTest());
         // 直接落在工作目录本身，不再多加一层 inputs。
         //
         // 原设计是"一次运行读的和产出的都放一起，拷回来一次就够"，但用户设完
-        // /home/qw/shili 之后看到文件落在 /home/qw/shili/inputs/pep，会问那个 inputs
+        // /home/demo/shili 之后看到文件落在 /home/demo/shili/inputs/pep，会问那个 inputs
         // 是哪来的——他设的路径被悄悄改样了。工作目录就是落脚点。
         check("inputs go into the working directory itself",
-                "/home/qw/bioenv_work/probe_20260926"
+                "/home/demo/bioenv_work/probe_20260926"
                         .equals(form.wslInputDirForTest()));
-        // 末尾斜杠要去掉，不能变成 "/home/qw/work/"，也不能出现双斜杠。
+        // 末尾斜杠要去掉，不能变成 "/home/demo/work/"，也不能出现双斜杠。
         if (wd != null) {
-            wd.setText("/home/qw/work/");
+            wd.setText("/home/demo/work/");
         }
         check("a trailing slash is dropped, not doubled",
-                "/home/qw/work".equals(form.wslInputDirForTest()));
+                "/home/demo/work".equals(form.wslInputDirForTest()));
         if (wd != null) {
-            wd.setText("/home/qw/work");
+            wd.setText("/home/demo/work");
         }
         line("");
 
@@ -144,7 +144,7 @@ public final class AutoCopyInputsTest {
         }
         check("a Windows path gives no destination", form.wslInputDirForTest() == null);
         if (wd != null) {
-            wd.setText("/home/qw/work");
+            wd.setText("/home/demo/work");
         }
         line("");
 

@@ -117,6 +117,7 @@ BioEnvCaller\
 ├─ vmadapt\                     SSH 传输模块（独立可编译，产物并入同一 JAR）
 ├─ docs\img\                    使用说明里的十张标注图
 ├─ 使用说明.md                   完整图文使用手册
+├─ DESIGN.md                    设计决策记录（为什么这样解析、这样排版）
 ├─ CHANGELOG.md                 版本更新日志
 └─ LICENSE                      MIT
 ```
@@ -461,7 +462,7 @@ ERROR conda.cli.main_run:execute(148): `conda run mafft ...` failed.
 | stderr 丢弃（`2>/dev/null`） | 正常 |
 | stderr 接到 PTY（`script -qec`） | 正常 |
 
-同样排除的变量：路径是否规范化（`/home/qw/x.fa` 与 `.../miniconda3/../x.fa` 都正常）、
+同样排除的变量：路径是否规范化（`/home/demo/x.fa` 与 `.../miniconda3/../x.fa` 都正常）、
 `PATH` 是否被单引号包住、`bash -lc` 与 `bash -s` 的差别。
 
 **因此触发条件未知。** 唯一确定的是：**结果不受影响**——

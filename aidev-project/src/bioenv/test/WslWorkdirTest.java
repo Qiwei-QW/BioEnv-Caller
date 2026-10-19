@@ -51,14 +51,14 @@ public final class WslWorkdirTest {
         f.set("pep");
         values.put("-f", f);
         ParamValue wd = new ParamValue(null);
-        wd.set("/home/qw/bioenv_work/orthofinder_20260926");
+        wd.set("/home/demo/bioenv_work/orthofinder_20260926");
         values.put("__workdir__", wd);
 
         String script = CommandBuilder.buildScript(tool, schema, "", values, "",
-                "/home/qw/miniconda3");
+                "/home/demo/miniconda3");
         System.out.println("      " + firstLineWith(script, "cd "));
         check("the Linux path is used as it stands",
-                script.contains("cd '/home/qw/bioenv_work/orthofinder_20260926'"));
+                script.contains("cd '/home/demo/bioenv_work/orthofinder_20260926'"));
         // Translating it would produce nonsense: it is already what the shell needs.
         check("it is not turned into a Windows path",
                 !script.contains("/mnt/") || !script.contains("cd /mnt"));
@@ -75,7 +75,7 @@ public final class WslWorkdirTest {
         wd2.set("C:\\Users\\me\\work");
         winValues.put("__workdir__", wd2);
         String winScript = CommandBuilder.buildScript(tool, schema, "", winValues, "",
-                "/home/qw/miniconda3");
+                "/home/demo/miniconda3");
         System.out.println("      " + firstLineWith(winScript, "cd "));
         check("a Windows path becomes a Linux one",
                 winScript.contains("cd '/mnt/c/Users/me/work'"));
@@ -84,12 +84,12 @@ public final class WslWorkdirTest {
         line("[a path with a space survives quoting]");
         Map<String, ParamValue> spaceValues = new LinkedHashMap<String, ParamValue>();
         ParamValue wd3 = new ParamValue(null);
-        wd3.set("/home/qw/my work");
+        wd3.set("/home/demo/my work");
         spaceValues.put("__workdir__", wd3);
         String spaceScript = CommandBuilder.buildScript(tool, schema, "", spaceValues,
-                "", "/home/qw/miniconda3");
+                "", "/home/demo/miniconda3");
         System.out.println("      " + firstLineWith(spaceScript, "cd "));
-        check("it is quoted", spaceScript.contains("cd '/home/qw/my work'"));
+        check("it is quoted", spaceScript.contains("cd '/home/demo/my work'"));
         line("");
 
         line("[the work directory is the home one, not a system temporary]");

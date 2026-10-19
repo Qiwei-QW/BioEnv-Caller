@@ -12,7 +12,7 @@ import java.util.List;
  * 连接配置持久化的往返测试。
  *
  * <p>本类最重要的一个用例是 <b>Windows 反斜杠路径的往返</b>。
- * 密钥路径形如 {@code C:\Users\14231\.ssh\id_rsa}，里面的每个 {@code \} 在 JSON
+ * 密钥路径形如 {@code C:\Users\demo\.ssh\id_rsa}，里面的每个 {@code \} 在 JSON
  * 里都必须写成 {@code \\}。少写一个，读回来就变成 {@code \U}、{@code \.} 这类
  * 非法转义——轻则路径错得莫名其妙，重则整个配置文件报废，用户所有的连接一起丢。
  * 而且这个错误**只在写盘再读回来时才暴露**，内存里怎么测都是对的，所以必须
@@ -47,7 +47,7 @@ public final class ConnectionStoreTest {
             Path file = dir.resolve("connections.json");
             ConnectionStore store = new ConnectionStore(file);
 
-            String winKey = "C:\\Users\\14231\\.ssh\\id_rsa";
+            String winKey = "C:\\Users\\demo\\.ssh\\id_rsa";
             SshTarget win = new SshTarget("192.168.190.128", 2222, "bio", winKey);
             win.label = "ubuntu-vm";
             win.timeoutSeconds = 20;

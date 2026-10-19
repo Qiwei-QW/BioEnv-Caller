@@ -68,12 +68,12 @@ public final class RemoteWorkdirTest {
     /** 回显的路径能不能当绝对路径用。 */
     private static void absolutePathValidation() {
         check("正常绝对路径可用",
-                RemoteFiles.isUsableRemoteWorkdir("/home/qw/vmadapt_work/x"));
+                RemoteFiles.isUsableRemoteWorkdir("/home/demo/vmadapt_work/x"));
         // 这一条就是 bug 本身：
         check("中间带 ~ 的路径不可用（老 bug 的产物）",
-                !RemoteFiles.isUsableRemoteWorkdir("/home/qw/~/vmadapt_work/x"));
+                !RemoteFiles.isUsableRemoteWorkdir("/home/demo/~/vmadapt_work/x"));
         check("末尾是 ~ 分量的不可用",
-                !RemoteFiles.isUsableRemoteWorkdir("/home/qw/~"));
+                !RemoteFiles.isUsableRemoteWorkdir("/home/demo/~"));
         check("以 ~ 开头的不可用",
                 !RemoteFiles.isUsableRemoteWorkdir("~/vmadapt_work/x"));
         check("单独的 ~ 不可用", !RemoteFiles.isUsableRemoteWorkdir("~"));
@@ -105,29 +105,29 @@ public final class RemoteWorkdirTest {
 
     /** 上传前必须先建目标目录，否则 scp 会把目标路径本身建成副本。 */
     private static void ensureDirScript() {
-        String s = RemoteFiles.ensureDirScript("/home/qw/work/inputs");
+        String s = RemoteFiles.ensureDirScript("/home/demo/work/inputs");
         check("建目录脚本用 mkdir -p", s.contains("mkdir -p"));
         check("路径被单引号保护",
-                s.contains("'/home/qw/work/inputs'"));
+                s.contains("'/home/demo/work/inputs'"));
         // 带空格的路径如果不加引号会被 shell 拆成两个参数，建出两个目录。
-        String spaced = RemoteFiles.ensureDirScript("/home/qw/my work/inputs");
+        String spaced = RemoteFiles.ensureDirScript("/home/demo/my work/inputs");
         check("含空格路径仍被完整引用",
-                spaced.contains("'/home/qw/my work/inputs'"));
+                spaced.contains("'/home/demo/my work/inputs'"));
         check("脚本以换行结束", s.endsWith("\n"));
     }
 
     /** 上传后的存在性核对：对不上的位置要是 null，而不是想当然的路径。 */
     private static void verifyPresentParsing() {
         List<String> paths = new ArrayList<String>();
-        paths.add("/home/qw/work/inputs/pep");
-        paths.add("/home/qw/work/inputs/other");
+        paths.add("/home/demo/work/inputs/pep");
+        paths.add("/home/demo/work/inputs/other");
 
         List<String> yesNo = new ArrayList<String>();
         yesNo.add("YES");
         yesNo.add("NO");
         List<String> out = RemoteFiles.presentFrom(paths, yesNo);
         check("存在的保留原路径",
-                "/home/qw/work/inputs/pep".equals(out.get(0)));
+                "/home/demo/work/inputs/pep".equals(out.get(0)));
         check("不存在的返回 null", out.get(1) == null);
         check("结果个数与输入一致", out.size() == paths.size());
 

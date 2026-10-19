@@ -28,7 +28,7 @@ public final class EvidenceSurvey {
 
     public static void main(String[] args) {
         File dir = new File(args.length > 0 ? args[0]
-                : "C:\\Users\\14231\\Desktop\\TBtools插件\\_helpsurvey");
+                : "C:\\Users\\demo\\Desktop\\TBtools插件\\_helpsurvey");
         File[] files = dir.listFiles();
         if (files == null) {
             line("no sample directory: " + dir);

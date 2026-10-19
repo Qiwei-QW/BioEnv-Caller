@@ -54,14 +54,14 @@ public final class StopRunTest {
 
         line("[a run without a marker looks as it always did]");
         String plain = CommandBuilder.buildScript(tool, schema, "", values, "",
-                "/home/qw/miniconda3");
+                "/home/demo/miniconda3");
         check("no marker is exported", !plain.contains(CommandBuilder.MARKER_ENV));
         check("the command is there", plain.contains("conda run"));
         line("");
 
         line("[a run with a marker carries it before the work starts]");
         String marked = CommandBuilder.buildScript(tool, schema, "", values, "",
-                "/home/qw/miniconda3", "bioenv-abc123");
+                "/home/demo/miniconda3", "bioenv-abc123");
         check("the marker is exported",
                 marked.contains("export " + CommandBuilder.MARKER_ENV));
         check("with this run's value", marked.contains("bioenv-abc123"));

@@ -222,7 +222,7 @@ public class RemoteFiles {
      * 回显出来的路径能不能当「远端工作目录的绝对路径」用。
      *
      * <p>光看「以 {@code /} 开头」是不够的：那个 bug 产出的
-     * {@code /home/qw/~/vmadapt_work/x} 语法上完全合法，但它指的是一个名字叫
+     * {@code /home/demo/~/vmadapt_work/x} 语法上完全合法，但它指的是一个名字叫
      * {@code ~} 的目录，不是用户的 HOME。所以这里要求路径里<b>不含任何
      * {@code ~}</b>——展开过的绝对路径不该再有它，还留着就说明展开没发生。
      */

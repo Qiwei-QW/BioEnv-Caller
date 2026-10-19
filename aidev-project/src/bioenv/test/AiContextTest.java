@@ -55,13 +55,13 @@ public final class AiContextTest {
 
     private static void fields() {
         String json = AiContext.build("codeml", "paml_env", "usage: codeml",
-                "conda run codeml", "WSL", "/home/qw/work", null);
+                "conda run codeml", "WSL", "/home/demo/work", null);
         check("工具名在里面", json.contains("\"tool\":\"codeml\""));
         check("环境名在里面", json.contains("\"env\":\"paml_env\""));
         check("帮助在里面", json.contains("usage: codeml"));
         check("命令在里面", json.contains("conda run codeml"));
         check("连接方式在里面", json.contains("\"mode\":\"WSL\""));
-        check("工作目录在里面", json.contains("/home/qw/work"));
+        check("工作目录在里面", json.contains("/home/demo/work"));
         check("是合法 JSON 的形状", json.startsWith("{") && json.endsWith("}"));
 
         List<String> extras = new ArrayList<String>();

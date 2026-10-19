@@ -14,7 +14,7 @@ import bioenv.core.Schema;
 public final class ShowParse {
 
     public static void main(String[] args) throws Exception {
-        String dir = "C:\\Users\\14231\\Desktop\\TBtools插件\\_helpsurvey\\";
+        String dir = "C:\\Users\\demo\\Desktop\\TBtools插件\\_helpsurvey\\";
         String[] names = args.length > 0 ? args
                 : new String[]{"clustalw", "abiview", "2to3-3.10", "FastTree"};
         for (String name : names) {

@@ -33,12 +33,12 @@ import bioenv.i18n.Strings;
  * <h2>版式照 Windows 的「打开」窗口</h2>
  *
  * <pre>
- *   查找(I):  [ /home/qw/shili                      v ] [↑][⌂][＋][列表][详细]
+ *   查找(I):  [ /home/demo/shili                      v ] [↑][⌂][＋][列表][详细]
  *   ┌──────────────────────────────────────────────────────┐
  *   │  📁 inputs        📁 OrthoFinder                      │
  *   │  📄 At.pep        📄 Os.pep        📄 Ta_A.pep        │
  *   └──────────────────────────────────────────────────────┘
- *   文件夹名(N): [ /home/qw/shili/At.pep ]
+ *   文件夹名(N): [ /home/demo/shili/At.pep ]
  *   文件类型(T): [ 所有文件                v ]
  *                                    [打开] [取消]
  * </pre>

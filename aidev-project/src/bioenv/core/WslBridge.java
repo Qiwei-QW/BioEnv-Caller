@@ -666,7 +666,7 @@ public final class WslBridge implements Transport {
         return p;
     }
 
-    /** Converts {@code \\wsl$\Ubuntu\home\qw\x} to {@code /home/qw/x}. */
+    /** Converts {@code \\wsl$\Ubuntu\home\qw\x} to {@code /home/demo/x}. */
     private static String wslUncToPosix(String unc) {
         String rest = unc;
         if (rest.startsWith("\\\\wsl$\\")) {

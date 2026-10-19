@@ -23,7 +23,7 @@ import bioenv.core.Schema;
 public final class ShowChoices {
 
     public static void main(String[] args) {
-        String dir = "C:\\Users\\14231\\Desktop\\TBtools插件\\_helpsurvey";
+        String dir = "C:\\Users\\demo\\Desktop\\TBtools插件\\_helpsurvey";
         File[] files = new File(dir).listFiles();
         if (files == null) {
             return;

@@ -107,7 +107,7 @@ public final class ShellQuoteTest {
                 "$HOME", "${HOME}", "$(whoami)", "`whoami`", "a;b", "a&&b",
                 "a|b", "a>b", "a<b", "*.fa", "?.fa", "[a-z].fa", "~", "~/x",
                 "D:\\data\\x.fa", "D:/data/x.fa", "\\\\server\\share",
-                "C:\\Users\\14231\\.ssh\\id_rsa",
+                "C:\\Users\\demo\\.ssh\\id_rsa",
                 "我的 数据.fa", "基因's数据.fa", "测序 数据'x'.fa",
                 "a\"b", "'a\"b'", "!x", "#x", "a\\b", "\\", "$", "&", "|",
                 ";", "*", "?", "(", ")", "{", "}", "<", ">", "%", "@", "+", "=",

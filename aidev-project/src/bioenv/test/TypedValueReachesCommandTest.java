@@ -163,7 +163,7 @@ public final class TypedValueReachesCommandTest {
                 controlsFound[0] = outC instanceof JTextField;
                 controlsFound[1] = revC instanceof JCheckBox;
                 if (outC instanceof JTextField) {
-                    ((JTextField) outC).setText("C:\\Users\\14231\\Desktop\\111\\222.fasta");
+                    ((JTextField) outC).setText("C:\\Users\\demo\\Desktop\\111\\222.fasta");
                 }
                 if (revC instanceof JCheckBox) {
                     ((JCheckBox) revC).setSelected(true);

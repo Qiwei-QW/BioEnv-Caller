@@ -59,9 +59,9 @@ public final class TerminalLaunchTest {
     }
 
     private static void transcript() {
-        String cmd = TerminalLaunch.withTranscript("evolver", "/home/qw/x.log");
+        String cmd = TerminalLaunch.withTranscript("evolver", "/home/demo/x.log");
         eq("记录用的是 script -qec",
-                "script -qec 'evolver' '/home/qw/x.log'", cmd);
+                "script -qec 'evolver' '/home/demo/x.log'", cmd);
         // -e 少了的话，子命令失败也会看着像成功。
         check("带上 -e，退出码才会被带回来", cmd.contains("-qec"));
         // 脚本里有单引号时，引用必须仍然成立。
@@ -95,12 +95,12 @@ public final class TerminalLaunchTest {
 
     private static void channels() {
         // WSL：走 wsl.exe，读 profile（-l），再执行脚本文本。
-        List<String> wsl = TerminalLaunch.wslArgv("Ubuntu", "/home/qw/shili/tbvterm.sh");
+        List<String> wsl = TerminalLaunch.wslArgv("Ubuntu", "/home/demo/shili/tbvterm.sh");
         check("WSL 用 wsl.exe", wsl.get(0).equals("wsl.exe"), wsl.toString());
         check("WSL 指定发行版", wsl.contains("Ubuntu"), wsl.toString());
         check("WSL 末尾用 bash 跑脚本文件",
                 wsl.get(wsl.size() - 2).equals("bash")
-                        && wsl.get(wsl.size() - 1).equals("/home/qw/shili/tbvterm.sh"),
+                        && wsl.get(wsl.size() - 1).equals("/home/demo/shili/tbvterm.sh"),
                 wsl.toString());
         check("空发行版就不传 -d",
                 !TerminalLaunch.wslArgv("", "x.sh").contains("-d"));
@@ -179,10 +179,10 @@ public final class TerminalLaunchTest {
         // 插件的记账混进了数据目录。路径现在一律在 /tmp 下，见上面的检查。
 
         // base64：脚本里那些单引号、美元符、换行都不能原样进 shell。
-        String cmd = TerminalLaunch.writeScriptCommand("/home/qw/x.sh",
+        String cmd = TerminalLaunch.writeScriptCommand("/home/demo/x.sh",
                 "echo 'hi' $HOME\nnext");
         check("写入用 base64 -d", cmd.contains("base64 -d"), cmd);
-        check("重定向到脚本文件", cmd.contains("> '/home/qw/x.sh'"), cmd);
+        check("重定向到脚本文件", cmd.contains("> '/home/demo/x.sh'"), cmd);
         // 编码后的载荷里不该出现脚本原文的任何片段——出现了就说明没编码。
         check("载荷里不含脚本原文", !cmd.contains("$HOME"), cmd);
         // 反过来：解出来必须和原文一模一样。
@@ -198,7 +198,7 @@ public final class TerminalLaunchTest {
     /** 面板内交互：WSL 要多一层 script（造 PTY），SSH 复用 sshArgv。 */
     private static void interactive() {
         List<String> w = TerminalLaunch.wslInteractiveArgv("Ubuntu",
-                "/home/qw/shili/tbvterm.sh");
+                "/home/demo/shili/tbvterm.sh");
         check("交互用 wsl.exe", w.get(0).equals("wsl.exe"), w.toString());
         check("交互指定发行版", w.contains("Ubuntu"), w.toString());
         // 这一条是核心：没有 script 就没有 PTY，远端程序会块缓冲，提示憋在缓冲区里。
@@ -207,7 +207,7 @@ public final class TerminalLaunchTest {
         check("交互把记录丢到 /dev/null（输出由插件自己收）",
                 w.get(w.size() - 1).equals("/dev/null"), w.toString());
         check("交互把 'bash 脚本路径' 作为一个元素传给 script",
-                w.contains("bash /home/qw/shili/tbvterm.sh"), w.toString());
+                w.contains("bash /home/demo/shili/tbvterm.sh"), w.toString());
 
         // 这一条<b>反过来</b>钉：这里允许元素含空格。
         //

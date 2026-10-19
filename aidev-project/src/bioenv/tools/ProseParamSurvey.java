@@ -31,7 +31,7 @@ public final class ProseParamSurvey {
 
     public static void main(String[] args) {
         String dir = args.length > 0 ? args[0]
-                : "C:\\Users\\14231\\Desktop\\TBtools插件\\_helpsurvey";
+                : "C:\\Users\\demo\\Desktop\\TBtools插件\\_helpsurvey";
         File[] files = new File(dir).listFiles();
         if (files == null) {
             return;
