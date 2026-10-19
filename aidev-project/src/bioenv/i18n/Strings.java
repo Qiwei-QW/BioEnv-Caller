@@ -1215,7 +1215,7 @@ public final class Strings {
         put(ZH_TEXT, EN_TEXT, AI_COLLAPSE_SHORT, "收起", "Hide");
         put(ZH_TEXT, EN_TEXT, SETTINGS_TITLE, "设置", "Settings");
         put(ZH_TEXT, EN_TEXT, AI_MODEL_SECTION, "模型", "Model");
-        put(ZH_TEXT, EN_TEXT, AI_MODEL_BUILTIN, "内置模型", "Built-in");
+        put(ZH_TEXT, EN_TEXT, AI_MODEL_BUILTIN, "TBmodel", "TBmodel");
         put(ZH_TEXT, EN_TEXT, AI_MODEL_CUSTOM, "自定义（OpenAI 兼容）",
                 "Custom (OpenAI-compatible)");
         put(ZH_TEXT, EN_TEXT, AI_MODEL_URL, "接口地址", "Endpoint");
