@@ -183,6 +183,15 @@ try {
         'bioenv.test.ReinstallClassLossTest',
         'bioenv.test.HotPathClassLoadTest',
 
+        # --- exporting a conversation: three steps that fail silently ---------
+        # The page builds the Markdown and leaves it in localStorage; Java picks it
+        # up, asks where to save it, and writes the file. Each step can be wrong in
+        # a way nothing reports: a payload split at the wrong place exports a
+        # truncated file, an unsanitised name fails only after the user has already
+        # clicked Save, and a BOM turns into a stray glyph on line one. All three
+        # are checked here without a browser.
+        'bioenv.test.AiExportTest',
+
         # --- newly registered -------------------------------------------
         # These already lived in bioenv\test\ and already passed, but were
         # never listed here, so nothing ran them. They were found by running

@@ -399,18 +399,32 @@ public final class MainPanel extends JPanel {
     private JPanel formAndPreview;
     private boolean outerSplitPending;
 
-    /**
-     * Applies initial divider positions once the panel has been laid out.' Starting width of the tool tree, in pixels. */
+    /** 工具树 / AI 助手那一列的默认宽度（像素）。 */
     private static final int TREE_WIDTH_PX = 260;
 
     /**
-     * Starting width of the output column, in pixels.
+     * AI 助手展开时的默认宽度（像素）。
      *
-     * <p>Fixed rather than a fraction, for the same reason as the tree: output is
-     * lines of text, so its useful width does not grow with the window, and the
-     * spare room is better spent on the form. A fraction would also compute a
-     * position past what a narrow window allows and be clamped.
+     * <p>比命令树宽：命令树是一列工具名，260 够了；AI 那一栏装的是整段整段的回答，
+     * 窄了每行都在换行。三张卡共用同一列，所以这个默认值只在"切到 AI、而用户还没
+     * 拖过"的时候用。
      */
+    private static final int AI_WIDTH_PX = 420;
+
+    /** 比这更窄就没有意义了；也是"收起（0）"和"用户确实想要很窄"的分界。 */
+    private static final int CARD_MIN_PX = 160;
+
+    /**
+     * 用户拖出来的列宽；0 表示还没拖过。
+     *
+     * <p>要记下来的理由：切卡片、收起再展开都会重设分隔条位置 —— 每次都回到默认值，
+     * 就等于用户白拖了一次。
+     */
+    private int cardWidth;
+
+    /** 分隔条是不是正被拖着。只有拖着的时候才把位置当成"用户的选择"。 */
+    private boolean dividerDragging;
+
     /**
      * 输出默认占的高度。
      *
@@ -420,8 +434,7 @@ public final class MainPanel extends JPanel {
      */
     private static final int LOG_HEIGHT_PX = 120;
 
-    /**
-     * Applies initial divider positions once the panel has been laid out.' A component's minimum extent along one axis, or 0 when unset. */
+    /** 一个组件在某个方向上的最小尺寸；没设就是 0。 */
     private static int minimumOf(java.awt.Component c, boolean horizontal) {
         if (c == null) {
             return 0;
@@ -430,8 +443,14 @@ public final class MainPanel extends JPanel {
         return horizontal ? d.width : d.height;
     }
 
-    /**
-     * Applies initial divider positions once the panel has been laid out.' Adopts a registry and its collaborators as the panel's live state. */
+    /** 分隔条本身那个组件（要给它挂鼠标监听）；拿不到就返回 null。 */
+    private static java.awt.Component dividerOf(JSplitPane split) {
+        if (split == null || !(split.getUI() instanceof javax.swing.plaf.basic.BasicSplitPaneUI)) {
+            return null;
+        }
+        return ((javax.swing.plaf.basic.BasicSplitPaneUI) split.getUI()).getDivider();
+    }
+
     /**
      * 装上"浏览 Linux 目录"的口子。
      *
@@ -467,7 +486,8 @@ public final class MainPanel extends JPanel {
     }
 
     /**
-     * Applies initial divider positions once the panel has been laid out.' Adopts a registry and its collaborators as the panel's live state. */
+     * 装上注册表和它的协作者，作为面板当前的状态。
+     */
     private void adoptRegistry(ToolRegistry reg, EnvScanner sc,
                                Transport bridge, EnvRunner er) {
         this.registry = reg;
@@ -2615,6 +2635,55 @@ public final class MainPanel extends JPanel {
         outerSplit = split;
         outerSplitPending = true;
 
+        // 拖出来的列宽要记住：切卡片、收起再展开都会把分隔条重设一次，
+        // 每次都回到默认值就等于用户白拖了。
+        //
+        // 只在<b>真的在拖</b>的时候记（dividerDragging）。窗口变窄时 JSplitPane 也会
+        // 被动移动分隔条，那种位置不是用户的选择 —— 记下来会在窗口恢复之后留下一个
+        // 莫名的窄列。
+        split.addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY,
+                new java.beans.PropertyChangeListener() {
+                    @Override
+                    public void propertyChange(java.beans.PropertyChangeEvent e) {
+                        if (!dividerDragging || activePanel == null) {
+                            return;
+                        }
+                        Object v = e.getNewValue();
+                        if (!(v instanceof Integer)) {
+                            return;
+                        }
+                        int loc = ((Integer) v).intValue();
+                        if (loc >= CARD_MIN_PX) {
+                            cardWidth = loc;
+                        }
+                    }
+                });
+        java.awt.Component divider = dividerOf(split);
+        if (divider != null) {
+            // 双击回到默认宽度：拖窄了总得有条路回去，不然只能重开插件。
+            divider.addMouseListener(new java.awt.event.MouseAdapter() {
+                @Override
+                public void mousePressed(java.awt.event.MouseEvent me) {
+                    dividerDragging = true;
+                }
+
+                @Override
+                public void mouseReleased(java.awt.event.MouseEvent me) {
+                    dividerDragging = false;
+                }
+
+                @Override
+                public void mouseClicked(java.awt.event.MouseEvent me) {
+                    if (me.getClickCount() != 2 || activePanel == null) {
+                        return;
+                    }
+                    cardWidth = 0;
+                    outerSplitPending = true;
+                    outerSplit.setDividerLocation(defaultWidth(activePanel));
+                }
+            });
+        }
+
         // 最外层再包一层：AI 助手在最左，默认收起。
         aiAssist = new AiAssistPanel();
         // 页面→Java 没有通道，所以面板定时问页面要不要采用某条命令。
@@ -2622,15 +2691,19 @@ public final class MainPanel extends JPanel {
         // 这里就是那条命令的去处。
 
         aiAssist.setAdoptSink(new java.util.function.Consumer<String>() {
-
             @Override
-
             public void accept(String cmd) {
-
                 setPreviewText(cmd);
-
             }
+        });
 
+        // 导出对话：正文由页面拼好（它才知道有哪些轮、哪一句是问题），
+        // 这里只负责问一句"存哪"然后写文件。
+        aiAssist.setExportSink(new java.util.function.BiConsumer<String, String>() {
+            @Override
+            public void accept(String name, String text) {
+                saveMarkdown(name, text);
+            }
         });
 
         // 最左那条图标栏，而且是<b>唯一的开关</b>：
@@ -2742,12 +2815,6 @@ public final class MainPanel extends JPanel {
     }
 
     /**
-     * 每张卡展开时的宽度。
-     *
-     * <p>都用工具树那条宽度：三张卡占的是同一块地方，切来切去时列宽跟着跳，
-     * 看上去像界面在抖。想更宽更窄，拖分隔条就是 —— 那是用户自己的选择。
-     */
-    /**
      * 打开设置窗口 —— 照「编辑参数…」那个窗口的做法。
      *
      * <p>用 JFrame 而不是自己画一个面板：最小化、最大化、关闭是系统窗口
@@ -2775,8 +2842,69 @@ public final class MainPanel extends JPanel {
         settingsWindow.setVisible(true);
     }
 
-    private static int panelWidth(String id) {
-        return TREE_WIDTH_PX;
+    /**
+     * 这张卡展开时用多宽。
+     *
+     * <p>用户拖过就用他拖出来的那个宽度；没拖过就按卡片自己的默认值 ——
+     * 命令树窄、AI 助手宽，因为它们装的东西不一样。三张卡共用一列，
+     * 所以在同一时刻只会有一张卡在用这个宽度，切来切去不会跳。
+     */
+    private int panelWidth(String id) {
+        return cardWidth > 0 ? cardWidth : defaultWidth(id);
+    }
+
+    /** 这张卡在用户还没拖过时的宽度。 */
+    private static int defaultWidth(String id) {
+        return "ai".equals(id) ? AI_WIDTH_PX : TREE_WIDTH_PX;
+    }
+
+    /** 上一次导出到哪个目录；下次从这里开始。 */
+    private java.io.File lastExportDir;
+
+    /**
+     * 问一句存哪，然后把 Markdown 写下去。
+     *
+     * <p>为什么用原生保存对话框、而不是让页面自己下载：JxBrowser 的下载行为没有验证过，
+     * 而且文件会落进浏览器的下载目录 —— 用户既不知道在哪，也不知道叫什么名字。
+     * 保存对话框是他熟悉的那一套：自己选目录、自己改名字，写完之后状态栏里还留着
+     * 完整路径。
+     */
+    private void saveMarkdown(String sessionName, String text) {
+        if (text == null || text.trim().length() == 0) {
+            return;
+        }
+        java.io.File dir = lastExportDir;
+        if (dir == null || !dir.isDirectory()) {
+            dir = defaultExportDir();
+        }
+        javax.swing.JFileChooser fc = new javax.swing.JFileChooser(dir);
+        fc.setDialogTitle(I18n.t(Strings.AI_EXPORT_TITLE));
+        fc.setSelectedFile(new java.io.File(dir, bioenv.ai.AiExport.safeBase(sessionName) + ".md"));
+        fc.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter(
+                I18n.t(Strings.AI_EXPORT_FILTER), "md", "markdown"));
+        if (fc.showSaveDialog(this) != javax.swing.JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+        java.io.File f = bioenv.ai.AiExport.withMdSuffix(fc.getSelectedFile());
+        try {
+            bioenv.ai.AiExport.write(f, text);
+        } catch (Exception ex) {
+            javax.swing.JOptionPane.showMessageDialog(this,
+                    I18n.t(Strings.AI_EXPORT_FAIL) + "\n" + f.getAbsolutePath()
+                            + "\n" + ex.getMessage(),
+                    I18n.t(Strings.AI_EXPORT_TITLE), javax.swing.JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        lastExportDir = f.getParentFile();
+        // 用状态栏而不是再弹一个窗：导出成功了，用户只需要知道文件在哪。
+        statusLabel.setText(I18n.t(Strings.AI_EXPORT_DONE) + " " + f.getAbsolutePath());
+    }
+
+    /** 默认导出目录：桌面；没有桌面就用主目录。 */
+    private static java.io.File defaultExportDir() {
+        String home = System.getProperty("user.home", ".");
+        java.io.File desk = new java.io.File(home, "Desktop");
+        return desk.isDirectory() ? desk : new java.io.File(home);
     }
 
     /** 换卡片。 */
@@ -2785,24 +2913,21 @@ public final class MainPanel extends JPanel {
     }
 
     /**
-     * Applies initial divider positions once the panel has been laid out.
+     * 第一次拿到真实尺寸时摆一次分隔条。
      *
-     * <p>Divider locations are meaningless before the component has a size: the
-     * layout pass replaces them. Doing this after the first layout is what makes
-     * the starting positions stick rather than being silently reset.
+     * <p>分隔条的位置在组件有尺寸之前是没有意义的：布局那一趟会把它冲掉。
+     * 所以起始位置只能在第一次布局之后设，否则会静默失效。
      *
-     * <p>The tree width is set in pixels rather than as a fraction. A fraction
-     * scales with the window, so in a narrow window it computes a position beyond
-     * what the split pane allows and gets clamped — which is what made the tree
-     * divider appear jammed against one edge and immovable.
+     * <p>宽度用<b>像素</b>而不是比例。比例会跟着窗口缩放，窗口一窄算出来的位置就超出
+     * 分隔条允许的范围、被夹到边上 —— 那正是"分隔条卡在一侧拖不动"的来由。
      */
     @Override
     public void doLayout() {
         super.doLayout();
-        // 整列收起时（activePanel == null）不能在这里按树宽把它拽回来。
+        // 整列收起时（activePanel == null）不能在这里按卡片宽把它拽回来。
         if (outerSplitPending && outerSplit != null && outerSplit.getWidth() > 0
                 && activePanel != null) {
-            int want = TREE_WIDTH_PX;
+            int want = panelWidth(activePanel);
             int max = outerSplit.getWidth() - outerSplit.getDividerSize()
                     - minimumOf(outerSplit.getRightComponent(), true);
             int min = minimumOf(outerSplit.getLeftComponent(), true);
@@ -2810,7 +2935,7 @@ public final class MainPanel extends JPanel {
                 max = min; // the window is too narrow for both minimums
             }
             outerSplit.setDividerLocation(Math.max(min, Math.min(want, max)));
-            outerSplit.setResizeWeight(0.0); // keep the tree width as set when resizing
+            outerSplit.setResizeWeight(0.0); // keep the card width as set when resizing
             outerSplitPending = false;
         }
 

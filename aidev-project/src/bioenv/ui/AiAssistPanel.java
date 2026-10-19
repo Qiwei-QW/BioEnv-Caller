@@ -191,14 +191,16 @@ public final class AiAssistPanel extends JPanel {
         body.repaint();
 
 
-        // 补推：主题、语言、以及期间攒下来的上下文。
+        // 补推：主题、语言、模型列表、以及期间攒下来的上下文。
+        //
+        // ★ 这几行原来全缩在下面那个 if 里面 —— 于是"页面加载之前就先到的模型列表"
+        // 只有在上下文非空时才会补推，而采用命令的轮询更是压根不会启动。
+        // 空上下文恰恰是刚打开插件时的常态，所以症状不是"不工作"，而是"有时候不工作"。
         pushTheme(theme);
         pushLang(lang);
-        if (!pendingContext.isEmpty()) {
-            pushContext(pendingContext);
-        startAdoptWatch();
+        pushContext(pendingContext);
         pushModels(pendingModels);
-        }
+        startAdoptWatch();
     }
 
     /** 把当前工具 / 命令 / 上次运行等推给页面（JSON 字符串）。 */
@@ -215,7 +217,20 @@ public final class AiAssistPanel extends JPanel {
         adoptSink = sink;
     }
 
-    /** 循环问页面：有没有待采用的命令。 */
+    /** 导出回调：会话名 + Markdown 正文，交给外面去弹保存对话框。 */
+    private java.util.function.BiConsumer<String, String> exportSink;
+
+    /**
+     * 设置「导出对话」的去处。
+     *
+     * <p>和采用命令一样是<b>拉</b>：页面把整篇 Markdown 写进 localStorage，
+     * 这边轮询取走。存文件这件事留给外面（它才知道该弹哪个对话框、上一次导到哪）。
+     */
+    public void setExportSink(java.util.function.BiConsumer<String, String> sink) {
+        exportSink = sink;
+    }
+
+    /** 循环问页面：有没有待采用的命令、待导出的对话。 */
     private void startAdoptWatch() {
         if (adoptTimer != null || view == null) {
             return;
@@ -223,27 +238,57 @@ public final class AiAssistPanel extends JPanel {
         adoptTimer = new javax.swing.Timer(700, new java.awt.event.ActionListener() {
             @Override
             public void actionPerformed(java.awt.event.ActionEvent e) {
-                if (adoptSink == null || !isShowing()) {
-                    return;
-                }
-                String raw = view.evalString("localStorage.getItem('tbv.adopt') || ''");
-                if (raw == null || raw.trim().length() == 0) {
-                    return;
-                }
+                pollPage();
+            }
+        });
+        adoptTimer.start();
+    }
+
+    /**
+     * 往页面里问一次：手上有没有东西要交出来。
+     *
+     * <p>两条都用同一套办法（页面写 localStorage，Java 定时来取），
+     * 所以放在一次轮询里做完，而不是各开一个定时器。
+     */
+    void pollPage() {
+        if (view == null || !isShowing()) {
+            return;
+        }
+        if (adoptSink != null) {
+            String raw = take("tbv.adopt");
+            if (raw != null) {
                 String cmd;
                 try {
                     cmd = java.net.URLDecoder.decode(raw, "UTF-8");
                 } catch (Exception bad) {
                     cmd = raw;
                 }
-                // 读完就清掉 —— 不清的话下一次又会被当成新命令重复填。
-                view.run("try{localStorage.removeItem('tbv.adopt')}catch(e){}");
                 if (cmd.trim().length() > 0) {
                     adoptSink.accept(cmd);
                 }
             }
-        });
-        adoptTimer.start();
+        }
+        if (exportSink != null) {
+            String[] part = bioenv.ai.AiExport.decode(take("tbv.export"));
+            if (part != null) {
+                exportSink.accept(part[0], part[1]);
+            }
+        }
+    }
+
+    /**
+     * 读一个 key，<b>读到就立刻清掉</b>。
+     *
+     * <p>不清的话下一轮会把同一份数据再处理一遍 —— 命令会被重复填进命令框，
+     * 导出会第二次弹出保存对话框。
+     */
+    private String take(String key) {
+        String raw = view.evalString("localStorage.getItem('" + key + "') || ''");
+        if (raw == null || raw.trim().length() == 0) {
+            return null;
+        }
+        view.run("try{localStorage.removeItem('" + key + "')}catch(e){}");
+        return raw;
     }
 
     private javax.swing.Timer adoptTimer;

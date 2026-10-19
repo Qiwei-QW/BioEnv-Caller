@@ -244,6 +244,11 @@ public final class Strings {
     public static final String AI_MODEL_MAX_IN = "ai.model.maxin";
     public static final String AI_MODEL_LEN_NOTE = "ai.model.lennote";
     public static final String AI_MODEL_LEN_BAD = "ai.model.lenbad";
+    /** 把对话导出成 Markdown：保存对话框的标题、文件类型，以及成功/失败两句话。 */
+    public static final String AI_EXPORT_TITLE = "ai.export.title";
+    public static final String AI_EXPORT_FILTER = "ai.export.filter";
+    public static final String AI_EXPORT_DONE = "ai.export.done";
+    public static final String AI_EXPORT_FAIL = "ai.export.fail";
     public static final String SETTINGS_CONN = "settings.conn";
     public static final String SETTINGS_LOOK = "settings.look";
     public static final String SETTINGS_LANGUAGE = "settings.language";
@@ -1246,6 +1251,16 @@ public final class Strings {
                 + "但请求由页面发出，所以请求期间它存在页面内存里。",
                 "The API key never goes into logs, hints or error text. "
                 + "The request is sent from the page, so the key is in page memory while it runs.");
+        put(ZH_TEXT, EN_TEXT, AI_EXPORT_TITLE,
+                "\u5bfc\u51fa\u5bf9\u8bdd\u4e3a Markdown",
+                "Export the conversation as Markdown");
+        put(ZH_TEXT, EN_TEXT, AI_EXPORT_FILTER,
+                "Markdown \u6587\u4ef6",
+                "Markdown files");
+        put(ZH_TEXT, EN_TEXT, AI_EXPORT_DONE, "\u5df2\u5bfc\u51fa\uff1a", "Exported to ");
+        put(ZH_TEXT, EN_TEXT, AI_EXPORT_FAIL,
+                "\u5199\u4e0d\u4e86\u8fd9\u4e2a\u6587\u4ef6\uff1a",
+                "Could not write this file: ");
         put(ZH_TEXT, EN_TEXT, SETTINGS_CONN, "连接", "Connection");
         put(ZH_TEXT, EN_TEXT, SETTINGS_LOOK, "界面风格", "Theme");
         put(ZH_TEXT, EN_TEXT, SETTINGS_LANGUAGE, "语言", "Language");

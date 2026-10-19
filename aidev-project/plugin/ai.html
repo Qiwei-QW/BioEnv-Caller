@@ -104,8 +104,11 @@
   .acts button{font-size:11px;padding:2px 9px;border:1px solid var(--line);border-radius:6px;
     background:var(--panel);color:var(--muted);cursor:pointer}
   .acts button:hover{color:var(--ink);border-color:var(--accent)}
-  /* 图标按钮：方一点，不抢视线 */
-  button.icon{padding:6px 9px;font-size:13px;line-height:1}
+  /* 图标按钮：方一点，不抢视线。svg 图标和文字图标（＋ / 🗑）都要能居中 ——
+     flex 负责这件事，否则 svg 会按基线对齐，看上去偏高一点。 */
+  button.icon{padding:6px 9px;font-size:13px;line-height:1;
+    display:flex;align-items:center;justify-content:center}
+  button.icon svg{width:14px;height:14px;display:block}
   button:disabled{opacity:.5;cursor:default}
   /* 键盘 Tab 过去时要能看出焦点在哪 —— 鼠标点不挂这个规则 */
   .pill:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
@@ -161,7 +164,7 @@
 #atts{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 6px}
 #atts .att{display:flex;align-items:center;gap:4px;font-size:11px;
            background:var(--panel);border:1px solid var(--line);border-radius:6px;
-\1padding:2px 8px;max-width:100%}
+           padding:2px 8px;max-width:100%}
 #atts .att span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:190px}
 #atts .att b{cursor:pointer;font-weight:400;opacity:.6;padding:0 2px}
 #atts .att b:hover{opacity:1}
@@ -207,6 +210,12 @@ pre .cp:hover{opacity:1}
   <select id="sessSel" title="会话"></select>
   <button id="sessNew" class="icon" title="新建会话">＋</button>
   <button id="sessDel" class="icon" title="删除这个会话">🗑</button>
+  <!-- 导出：整段对话已经是 Markdown 了，导出去就能直接看/存档/贴进 issue。
+       图标用 SVG 而不是字符 —— 字符箭头坐在字上沿，居中要靠猜。 -->
+  <button id="sessExp" class="icon" title="导出为 Markdown"><svg viewBox="0 0 16 16"
+      aria-hidden="true"><path d="M8 2v7.5M5 6.5 8 9.5l3-3M3 11v1.6A1.4 1.4 0 0 0 4.4 14h7.2A1.4
+      1.4 0 0 0 13 12.6V11" fill="none" stroke="currentColor" stroke-width="1.6"
+      stroke-linecap="round" stroke-linejoin="round"/></svg></button>
   <!-- status 只在出错时才有字。平时空白，"就绪"那两个字没有信息量。 -->
   <span id="status"></span>
 </header>
@@ -310,6 +319,11 @@ var T = {
   bigImg: "图片太大，没有加进来（上限 4 MB，这张 ",
   cutNote: "（只取了开头一部分，全文 ",
   imgNoStream: "（图片请求不带历史，也不流式返回）",
+    exp: "导出为 Markdown", expMe: "我", expAi: "AI",
+    expAt: "导出时间", expModel: "模型", expRounds: "轮",
+    expEmpty: "还没有对话，没有可导出的内容。",
+    expHand: "正在打开保存对话框…", expOff: "网页存储不可用，导不出去。",
+    adopted: "已送到命令框", adoptOff: "写不进网页存储",
     untitled: "新会话",
     confirmDel: "删除这个会话？它的对话记录会一起删掉。",
     storeOff: "（本次运行内有效：网页存储不可用）",
@@ -336,6 +350,11 @@ var T = {
   bigImg: "Image too large, not attached (4 MB limit; this one is ",
   cutNote: "(only the beginning is included; the whole file is ",
   imgNoStream: "(image requests carry no history and do not stream)",
+    exp: "Export as Markdown", expMe: "Me", expAi: "AI",
+    expAt: "Exported", expModel: "Model", expRounds: "rounds",
+    expEmpty: "Nothing to export yet.",
+    expHand: "Opening the save dialog…", expOff: "Web storage is unavailable - cannot export.",
+    adopted: "Sent to the command box", adoptOff: "Could not write to web storage",
     untitled: "New conversation",
     confirmDel: "Delete this conversation? Its messages go with it.",
     storeOff: "(kept for this run only: web storage is unavailable)",
@@ -707,6 +726,83 @@ function touchTitle() {
 }
 
 /* ================================================================
+ * 导出这个会话
+ *
+ * 正文在<b>页面里</b>拼：Java 那边只知道工具和命令，不知道会话里有哪些轮 ——
+ * 对话只存在这一侧的 localStorage 里。所以这里拼好，Java 只负责问一句存哪、写文件。
+ * ================================================================ */
+/* send() 把"上下文 + 问题"整段存进历史。导出是给人看的记录，不是重放请求，
+   所以要从这段里把问题挑出来。 */
+var MARK = "\n\n---\n\n问题：";
+
+function questionOf(m) {
+  // 新会话的轮次自带干净的问题；老会话没有，只能从整段里切出来。
+  if (m && typeof m.q === "string" && m.q) { return m.q; }
+  var c = String((m && m.content) || "");
+  var k = c.indexOf(MARK);
+  return k >= 0 ? c.slice(k + MARK.length) : c;
+}
+
+function p2(n) { return ("0" + n).slice(-2); }
+
+function stamp() {
+  var d = new Date();
+  return d.getFullYear() + "-" + p2(d.getMonth() + 1) + "-" + p2(d.getDate())
+    + " " + p2(d.getHours()) + ":" + p2(d.getMinutes());
+}
+
+function fileNameStamp() {
+  var d = new Date();
+  return "" + d.getFullYear() + p2(d.getMonth() + 1) + p2(d.getDate())
+    + "-" + p2(d.getHours()) + p2(d.getMinutes());
+}
+
+function buildMarkdown() {
+  var s = findCurrent();
+  if (!s || !s.turns.length) { return null; }
+  var title = String(s.title || "").trim() || t("untitled");
+  var rows = [];
+  rows.push("# " + title);
+  rows.push("");
+  rows.push("> " + t("expAt") + " " + stamp()
+            + " \u00b7 " + t("expModel") + " " + modelLabel()
+            + " \u00b7 " + Math.ceil(s.turns.length / 2) + " " + t("expRounds"));
+  rows.push("");
+  for (var i = 0; i < s.turns.length; i++) {
+    var x = s.turns[i];
+    if (x.role !== "user" && x.role !== "assistant") { continue; }
+    rows.push(x.role === "user" ? "## " + t("expMe") : "## " + t("expAi"));
+    rows.push("");
+    rows.push(questionOf(x));
+    rows.push("");
+  }
+  return { name: title + " " + fileNameStamp(), text: rows.join("\n") };
+}
+
+/**
+ * 导出：把名字和正文写成一条 localStorage 载荷，Java 定时来取。
+ *
+ * <p>载荷是 {@code encodeURIComponent(名字) + "|" + encodeURIComponent(正文)}。
+ * 编码之后整条里不可能有引号、反斜杠、换行 —— 而 {@code |} 本身会被编成 %7C，
+ * 所以第一个竖线必然是分隔符。这样它穿过 executeJavaScript 的返回值也不会变形。
+ *
+ * @return 导出的正文（给自检用）；没有可导出的内容时返回空串
+ */
+function exportNow() {
+  var doc = buildMarkdown();
+  if (!doc) { flash(t("expEmpty")); return ""; }
+  try {
+    localStorage.setItem("tbv.export",
+      encodeURIComponent(doc.name) + "|" + encodeURIComponent(doc.text));
+    flash(t("expHand"));
+    return doc.text;
+  } catch (e) {
+    setStatus(t("expOff"), "bad");
+    return "";
+  }
+}
+
+/* ================================================================
  * 对话区
  * ================================================================ */
 /* ---------------- 附件 ----------------
@@ -841,6 +937,24 @@ function setStatus(text, cls) {
   s.className = cls || "";
 }
 
+var flashT = 0;
+
+/**
+ * 说一句就收回去的提示。
+ *
+ * <p>setStatus("…","ok") 是不写字的（那是给"就绪"用的）。可"已送到命令框"这种反馈
+ * <b>必须看得见</b> —— 用户点了按钮，两三秒后才发现另一边变了，中间那几秒会以为
+ * 点空了。所以凡是"某个动作成了"，都走这里。
+ */
+function flash(text) {
+  var s = el("status");
+  if (!s) { return; }
+  s.textContent = text;
+  s.className = "";
+  clearTimeout(flashT);
+  flashT = setTimeout(function () { s.textContent = ""; }, 2200);
+}
+
 /** 发送/停止那一个按钮的样子：不忙是 ▶，忙了是 ■。 */
 function goUI() {
   var b = el("go");
@@ -939,7 +1053,10 @@ window.tbvAi = {
   ask: function (text) {
     el("ask").value = text || "";
     send();
-  }
+  },
+  /** 给自检用：拼一段 Markdown 但不保存；以及走完整的导出路径。 */
+  markdown: buildMarkdown,
+  exportNow: exportNow
 };
 
 /* ---------------- 上下文 ---------------- */
@@ -1019,6 +1136,7 @@ function applyLang() {
   goUI();
   el("sessNew").title = t("sessNew");
   el("sessDel").title = t("sessDel");
+  if (el("sessExp")) { el("sessExp").title = t("exp"); }
   boot();
   renderSessions();
   renderLog();
@@ -1210,9 +1328,13 @@ loadSel();
   bubble("u", names.length ? (q + "\n\n\u{1F4CE} " + names.join("、")) : q);
 
   // 发给模型的历史：只带 user/assistant，不带 system（system 单独放最前）。
+  // 只拷 role/content 两个字段：历史里还挂着给界面用的东西（q），
+  // 整条对象丢进请求会让服务端收到不认识的字段。
   var msgs = [{ role: "system", content: sysPrompt() }];
   for (var i = 0; i < turns.length; i++) {
-    if (turns[i].role === "user" || turns[i].role === "assistant") { msgs.push(turns[i]); }
+    if (turns[i].role === "user" || turns[i].role === "assistant") {
+      msgs.push({ role: turns[i].role, content: turns[i].content });
+    }
   }
   msgs.push({ role: "user", content: full });
 
@@ -1306,7 +1428,9 @@ loadSel();
     totalOutTok += Math.ceil(text.length / 2);
     // 回答下面给一行小动作：重试 / 编辑 / 继续 / 复制。
     addActions(box, q, text);
-    turns.push({ role: "user", content: full });
+    // q 是"用户实际问的那一句" —— 导出时用它，不然导出来的记录里每一轮
+    // 前面都挂着整段上下文（那是发出去的请求，不是给人看的对话）。
+    turns.push({ role: "user", content: full, q: q });
     turns.push({ role: "assistant", content: text });
     // 历史太长会挤爆请求预算，留最近若干轮就够。
     if (turns.length > 24) { turns.splice(0, turns.length - 24); }
@@ -1389,9 +1513,9 @@ function extractCode(md) {
 function adoptCmd(cmd) {
   try {
     localStorage.setItem("tbv.adopt", encodeURIComponent(cmd));
-    setStatus(lang === "en" ? "Sent to the command box" : "\u5df2\u9001\u5230\u547d\u4ee4\u6846");
+    flash(t("adopted"));
   } catch (e) {
-    setStatus("\u5199\u4e0d\u8fdb localStorage");
+    setStatus(t("adoptOff"), "bad");
   }
 }
 
@@ -1449,6 +1573,7 @@ el("ask").addEventListener("keydown", function (e) {
 });
 el("sessNew").onclick = newSession;
 el("sessDel").onclick = deleteCurrent;
+el("sessExp").onclick = exportNow;
 el("sessSel").onchange = function () { selectSession(el("sessSel").value); };
 
 /* ---------------- 启动 ---------------- */

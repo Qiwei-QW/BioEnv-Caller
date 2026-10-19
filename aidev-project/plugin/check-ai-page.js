@@ -79,6 +79,7 @@ Object.defineProperty(global, "history", {
 
 // localStorage 桩：塞一段带 Markdown 的历史，用来验证
 //   1) 会话能不能恢复  2) Markdown 有没有真的渲染成标签
+// 写入要记下来 —— 导出功能（tbv.export）就看这一条，不记录就没法验。
 var seed = [{
   id: "s1", title: "测试会话", at: 1,
   turns: [
@@ -86,10 +87,14 @@ var seed = [{
     { role: "assistant", content: "**-v** 是显示版本号。\n\n```bash\northofinder -v\n```\n\n- 第一点\n- 第二点\n" },
   ],
 }];
+var store = {};
 global.localStorage = {
-  getItem: function (k) { return k === "bioenv.ai.sessions.v1" ? JSON.stringify(seed) : null; },
-  setItem: function () {},
-  removeItem: function () {},
+  getItem: function (k) {
+    if (k === "bioenv.ai.sessions.v1") { return JSON.stringify(seed); }
+    return store[k] === undefined ? null : store[k];
+  },
+  setItem: function (k, v) { store[k] = String(v); },
+  removeItem: function (k) { delete store[k]; },
 };
 
 global.document = documentStub;
@@ -154,8 +159,61 @@ console.log("=== 会话下拉 ===");
 var sel = byId["sessSel"];
 console.log("  select 里的项数: " + (sel ? sel.children.length : 0));
 
+/* ================================================================
+ * 导出：页面拼 Markdown → localStorage 载荷 → Java 去取。
+ *
+ * 这一段要验的是"拼出来的正文对不对、载荷能不能原样解回来" ——
+ * 它错了不会报错，只会导出一个看起来正常但其实缺内容/串行的文件。
+ * ================================================================ */
+console.log("");
+console.log("=== 导出为 Markdown ===");
+var problems = [];
+var checks = 0;
+function want(what, ok, detail) {
+  checks++;
+  console.log((ok ? "  PASS  " : "  FAIL  ") + what + (ok || detail === undefined ? "" : "  [" + detail + "]"));
+  if (!ok) { problems.push(what); }
+}
+
+var doc = windowStub.tbvAi && windowStub.tbvAi.markdown ? windowStub.tbvAi.markdown() : null;
+want("能拼出文档", doc !== null && typeof doc.text === "string");
+if (doc) {
+  var md = doc.text;
+  want("有标题（会话名）", md.indexOf("# 测试会话") === 0);
+  want("有导出时间那一行", md.indexOf("> 导出时间") >= 0);
+  want("有我的那一轮", md.indexOf("## 我") >= 0 && md.indexOf("orthofinder 的 -v 是什么意思") >= 0);
+  want("有 AI 的那一轮", md.indexOf("## AI") >= 0);
+  want("代码块原样保留", md.indexOf("```bash\northofinder -v\n```") >= 0);
+  want("没有未渲染的反引号块丢失", md.indexOf("```") >= 0);
+  want("文件名带时间戳", /^\S.* \d{8}-\d{4}$/.test(doc.name || ""), doc.name);
+}
+
+var exported = windowStub.tbvAi && windowStub.tbvAi.exportNow ? windowStub.tbvAi.exportNow() : "";
+want("exportNow 返回正文", typeof exported === "string" && exported.length > 0);
+
+var payload = store["tbv.export"] || "";
+want("载荷写进了 localStorage", payload.length > 0);
+want("载荷里没有换行", payload.indexOf("\n") < 0, "raw newline in payload");
+want("载荷里没有双引号", payload.indexOf('"') < 0);
+want("载荷里只有一个分隔竖线", payload.split("|").length === 2);
+
+var bar = payload.indexOf("|");
+var name = bar < 0 ? "" : decodeURIComponent(payload.slice(0, bar));
+var body = bar < 0 ? "" : decodeURIComponent(payload.slice(bar + 1));
+want("名字解得回来", name.length > 0 && name.indexOf("测试会话") >= 0, name);
+want("正文解得回来", body === exported);
+want("正文里中文没坏", body.indexOf("orthofinder") >= 0);
+want("正文里没有 %XX 残留", !/%[0-9A-Fa-f]{2}/.test(body));
+
+console.log("");
+console.log(problems.length === 0
+  ? "PASS " + checks + " checks"
+  : "FAIL " + problems.length + " of " + checks);
+
 console.log("");
 console.log("=== 调用轨迹 ===");
 console.log("  " + calls.join("\n  "));
+
+if (problems.length > 0) { process.exit(1); }
 
 function called(name) { return calls.indexOf(name) >= 0; }
