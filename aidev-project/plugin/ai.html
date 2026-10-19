@@ -174,8 +174,12 @@
      又铺满外层的上方。一旦它自己画底色，就会从圆角**外面**漏出去，把两个上角的
      圆角盖成方角（实测踩过）。透明背景让外层的那一圈圆角原样留着。 */
   #askWrap #ask{border:0;border-radius:0;background:transparent;box-shadow:none;outline:none}
-  /* 聚焦时让框本身变色 —— 而不是在 textarea 上面套一圈黑框 */
-  #askWrap:focus-within{border-color:var(--accent)}
+  /* 聚焦时不做任何强调。
+   *
+   * 以前这里有一条 #askWrap:focus-within{border-color:var(--accent)}，点进来整个框
+   * 变蓝。用户明确要求去掉：一是这圈蓝边在离屏渲染下容易画出缺口，二是这个面板
+   * 的焦点经常"粘"在输入框上（点旁边的 Swing 组件不会让网页失焦），蓝框就一直亮着，
+   * 看着像有东西没弄完。光标本身在闪，已经足够指示当前在哪。 */
 #askWrap #ask{flex:1;width:100%;padding-left:10px;padding-right:14px}
 #askWrap #go{position:absolute;right:7px;bottom:7px;width:38px;height:28px;
              min-width:0;padding:0;font-size:13px;line-height:1}
