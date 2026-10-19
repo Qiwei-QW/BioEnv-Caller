@@ -19,7 +19,6 @@ function makeEl(id) {
   const el = {
     id: id,
     textContent: "",
-    innerHTML: "",
     className: "",
     placeholder: "",
     value: "",
@@ -43,6 +42,17 @@ function makeEl(id) {
     hasAttribute() { return false; },
     removeAttribute() {},
   };
+  // 真浏览器里 innerHTML = "" 会把子节点清掉。桩里如果只存字符串，
+  // "清空后还剩几条"这类断言就会永远数到累加值 —— 测出来的东西和实际不一致。
+  var html = "";
+  Object.defineProperty(el, "innerHTML", {
+    get() { return html; },
+    set(v) {
+      html = String(v == null ? "" : v);
+      if (v === "" || v == null) { el.children.length = 0; }
+    },
+    enumerable: true,
+  });
   return el;
 }
 
@@ -370,6 +380,32 @@ function runNetwork() {
           store["tbv.ai.nousage"]);
       want("把真实错误显示了出来", !before && hasErrorBubble());
     });
+  }).then(function () {
+    /* 删会话：点一次只出确认条，点「删除」才真删。
+       以前这里是 window.confirm —— 在 JxBrowser 里等于"点了没反应 + 整个应用冻住"，
+       因为那个弹框永远等不到人点，而 Java 每 700ms 还要来读一次页面。 */
+    console.log("");
+    console.log("=== 删除会话：页面内确认 ===");
+    want("页面里没有 window.confirm / alert（会冻住整个应用）",
+        !hasBrowserModal(script));
+
+    var logBefore = byId["log"].children.length;
+    byId["sessDel"].onclick();          // 就是 🗑 按钮
+    want("点删除先出确认条", byId["confirm"].hidden === false);
+    want("确认条上有字", String(byId["confirmText"].textContent || "").length > 0);
+    want("确认条上有两个按钮", String(byId["confirmYes"].textContent || "").length > 0
+        && String(byId["confirmNo"].textContent || "").length > 0);
+    want("还没真删", byId["log"].children.length === logBefore);
+
+    byId["confirmNo"].onclick();        // 先测取消
+    want("点取消就收起来", byId["confirm"].hidden === true);
+    want("取消之后什么都没删", byId["log"].children.length === logBefore);
+
+    byId["sessDel"].onclick();
+    byId["confirmYes"].onclick();       // 再确认一次，这次真删
+    want("确认之后关掉确认条", byId["confirm"].hidden === true);
+    want("删干净了（只剩空状态一行）", byId["log"].children.length === 1,
+        "children=" + byId["log"].children.length);
   });
 }
 
@@ -380,6 +416,18 @@ function hasErrorBubble() {
     if (String(kids[i].className || "").indexOf("m e") >= 0) { return true; }
   }
   return false;
+}
+
+/**
+ * 页面里有没有"浏览器模态框"的调用。
+ *
+ * <p>这些调用在 JxBrowser 里会把渲染进程停在"等一个没人点的对话框"上，
+ * 而 Java 每 700ms 要读一次页面 → Swing 事件线程跟着堵死，整个界面冻住。
+ * 所以它们在这个页面里是被禁止的；只认真正的调用（带括号），
+ * 注释里提到这几个词不算。
+ */
+function hasBrowserModal(src) {
+  return /(^|[^.\w])(confirm|alert|prompt)\s*\(/.test(src);
 }
 
 console.log("");

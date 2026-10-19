@@ -38,6 +38,20 @@
   #status{font-size:11px;color:var(--muted);margin-left:8px;text-align:right}
   #status.ok{color:var(--ok)} #status.bad{color:var(--err)} #status.warn{color:var(--warn)}
 
+  /* 页内确认条。
+     ★ 页面里绝对不要用 window.confirm / alert / prompt：TBtools 的网页面板
+     没有给 JxBrowser 注册 DialogHandler，浏览器弹框会让渲染进程停在"等一个
+     永远不会有人点的对话框"上；而 Java 每 700ms 要读一次页面（采用命令、
+     导出对话都靠这条通道），于是 Swing 的事件线程被一起堵死 —— 用户看到的是
+     "点了没反应，而且整个面板都收不起来"。 */
+  .confirm{flex:none;display:flex;align-items:center;gap:8px;
+    padding:6px 10px;font-size:12px;background:var(--panel);
+    border-bottom:1px solid var(--line)}
+  .confirm[hidden]{display:none}
+  .confirm span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .confirm button{font-size:11px;padding:3px 10px}
+  .confirm .yes{border-color:var(--err);color:var(--err)}
+
   /* 会话下拉放在表头：它是"切换"而不是"操作"，和状态栏放一起更顺 */
   #sessSel{
     flex:1;min-width:0;max-width:220px;margin-left:6px;
@@ -220,6 +234,13 @@ pre .cp:hover{opacity:1}
   <span id="status"></span>
 </header>
 
+<!-- 确认条：不可撤销的操作（删会话）走这里。不要用 window.confirm —— 见上面 CSS 里那段注释。 -->
+<div id="confirm" class="confirm" hidden>
+  <span id="confirmText"></span>
+  <button id="confirmYes" class="yes" type="button"></button>
+  <button id="confirmNo" type="button"></button>
+</div>
+
 <input type="file" id="file" multiple style="display:none">
 
 <div id="log"></div>
@@ -326,6 +347,7 @@ var T = {
     adopted: "已送到命令框", adoptOff: "写不进网页存储",
     statCtx: "上下文", statApprox: "≈", statRound: "轮",
     statTotal: "累计", statBits: "已带上", statItems: "项",
+    yes: "删除", no: "取消",
     untitled: "新会话",
     confirmDel: "删除这个会话？它的对话记录会一起删掉。",
     storeOff: "（本次运行内有效：网页存储不可用）",
@@ -359,6 +381,7 @@ var T = {
     adopted: "Sent to the command box", adoptOff: "Could not write to web storage",
     statCtx: "Context", statApprox: "≈", statRound: "rounds",
     statTotal: "total", statBits: "carried", statItems: "items",
+    yes: "Delete", no: "Cancel",
     untitled: "New conversation",
     confirmDel: "Delete this conversation? Its messages go with it.",
     storeOff: "(kept for this run only: web storage is unavailable)",
@@ -698,6 +721,7 @@ function renderSessions() {
 }
 
 function newSession() {
+  closeConfirm();
   var s = { id: String(Date.now()) + "-" + Math.floor(Math.random() * 1000),
             title: "", at: Date.now(), turns: [] };
   sessions.unshift(s);
@@ -709,6 +733,7 @@ function newSession() {
 }
 
 function selectSession(id) {
+  closeConfirm();
   for (var i = 0; i < sessions.length; i++) {
     if (sessions[i].id === id) {
       currentId = id;
@@ -727,17 +752,59 @@ function findCurrent() {
   return null;
 }
 
+/* ---------- 删除会话：页面内确认 ----------
+ *
+ * ★ 页面里绝对不要用 window.confirm / alert / prompt。
+ *
+ * TBtools 的网页面板没有给 JxBrowser 注册 DialogHandler，浏览器弹框等的是一个
+ * 永远不会有人点的对话框 —— 渲染进程停在这里；而 Java 每 700ms 要读一次页面
+ * （采用命令、导出对话都靠这条通道），于是 Swing 的事件线程跟着堵死。
+ * 用户看到的是"点了没反应，面板也收不起来，只能重启 TBtools"。
+ *
+ * 这个坑已经踩过一次：删会话点了没反应，而且整个界面冻住。不要再踩。
+ */
+var confirmAction = null;
+
+/** 出一行确认。onYes 只在用户真的点「删除」之后才执行。 */
+function askConfirm(text, onYes) {
+  var box = el("confirm");
+  if (!box) { return; }
+  el("confirmText").textContent = text;
+  el("confirmYes").textContent = t("yes");
+  el("confirmNo").textContent = t("no");
+  confirmAction = onYes;
+  box.hidden = false;
+}
+
+function closeConfirm() {
+  var box = el("confirm");
+  if (box) { box.hidden = true; }
+  confirmAction = null;
+}
+
 /**
  * 删除当前会话。
  *
  * <p>原来"清空"和"删除"是两个按钮，但用户想要的结果是同一个：<b>眼前清干净</b>。
  * 合成一个之后，只剩一条会话时就地清空（总得留着一条，否则下拉是空的），
  * 还有别的就直接删掉、切到上一条。
+ *
+ * <p>有内容时先出确认条（见上面那段）—— 空会话没什么可丢的，直接删。
  */
 function deleteCurrent() {
   var s = findCurrent();
   if (!s) { return; }
-  if (s.turns.length && !window.confirm(t("confirmDel"))) { return; }
+  if (!s.turns.length) {
+    doDelete();
+    return;
+  }
+  askConfirm(t("confirmDel"), doDelete);
+}
+
+/** 真正删掉当前会话（已经确认过）。 */
+function doDelete() {
+  var s = findCurrent();
+  if (!s) { return; }
   if (sessions.length <= 1) {
     s.turns.length = 0;
     s.title = "";
@@ -1725,6 +1792,13 @@ el("sessNew").onclick = newSession;
 el("sessDel").onclick = deleteCurrent;
 el("sessExp").onclick = exportNow;
 el("sessSel").onchange = function () { selectSession(el("sessSel").value); };
+// 确认条的两个按钮。先关条再执行 —— 回调里可能会切会话/重绘。
+el("confirmYes").onclick = function () {
+  var fn = confirmAction;
+  closeConfirm();
+  if (fn) { fn(); }
+};
+el("confirmNo").onclick = closeConfirm;
 
 /* ---------------- 启动 ---------------- */
 loadStore();
