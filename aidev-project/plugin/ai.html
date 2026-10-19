@@ -41,8 +41,8 @@
   /* 页内确认条。
      ★ 页面里绝对不要用 window.confirm / alert / prompt：TBtools 的网页面板
      没有给 JxBrowser 注册 DialogHandler，浏览器弹框会让渲染进程停在"等一个
-     永远不会有人点的对话框"上；而 Java 每 700ms 要读一次页面（采用命令、
-     导出对话都靠这条通道），于是 Swing 的事件线程被一起堵死 —— 用户看到的是
+     永远不会有人点的对话框"上；而 Java 每 700ms 要读一次页面（导出对话、
+     补推模型列表都靠这条通道），于是 Swing 的事件线程被一起堵死 —— 用户看到的是
      "点了没反应，而且整个面板都收不起来"。 */
   .confirm{flex:none;display:flex;align-items:center;gap:8px;
     padding:6px 10px;font-size:12px;background:var(--panel);
@@ -344,7 +344,6 @@ var T = {
     expAt: "导出时间", expModel: "模型", expRounds: "轮",
     expEmpty: "还没有对话，没有可导出的内容。",
     expHand: "正在打开保存对话框…", expOff: "网页存储不可用，导不出去。",
-    adopted: "已送到命令框", adoptOff: "写不进网页存储",
     statCtx: "上下文", statApprox: "≈", statRound: "轮",
     statTotal: "累计", statBits: "已带上", statItems: "项",
     yes: "删除", no: "取消",
@@ -378,7 +377,6 @@ var T = {
     expAt: "Exported", expModel: "Model", expRounds: "rounds",
     expEmpty: "Nothing to export yet.",
     expHand: "Opening the save dialog…", expOff: "Web storage is unavailable - cannot export.",
-    adopted: "Sent to the command box", adoptOff: "Could not write to web storage",
     statCtx: "Context", statApprox: "≈", statRound: "rounds",
     statTotal: "total", statBits: "carried", statItems: "items",
     yes: "Delete", no: "Cancel",
@@ -695,16 +693,6 @@ function saveStore() {
   }
 }
 
-function titleOf(list) {
-  for (var i = 0; i < list.length; i++) {
-    if (list[i].role === "user") {
-      var s = String(list[i].content || "").replace(/\s+/g, " ").trim();
-      return s.length > 28 ? s.slice(0, 28) + "…" : s;
-    }
-  }
-  return "";
-}
-
 function renderSessions() {
   var sel = el("sessSel");
   if (!sel) { return; }
@@ -713,7 +701,8 @@ function renderSessions() {
     var s = sessions[i];
     var o = document.createElement("option");
     o.value = s.id;
-    o.textContent = (s.title || t("untitled")) + "  (" + s.turns.length + ")";
+    // 不带 "(3)" 这种条数：会话名本来就该认出是哪一次，条数只是噪音。
+    o.textContent = (s.title || t("untitled"));
     sel.appendChild(o);
   }
   if (currentId) { sel.value = currentId; }
@@ -822,10 +811,7 @@ function doDelete() {
 }
 
 /**
- * 会话标题：工具名 + 时间。
- *
- * 以前取第一条消息的头几个字 -- 于是发一句“你好”，下拉框里就只显示一个“你”。
- * 一个字什么也说不明，还白白占着刚给会话名让出来的宽度。
+ * 兜底标题：工具名 + 时间。只在拿不到问题文字时用（比如只发了附件）。
  */
 function titleStamp() {
   var d = new Date();
@@ -834,9 +820,35 @@ function titleStamp() {
   return (tool ? tool + " · " : "") + hm;
 }
 
+/**
+ * 会话名：第一句问题的开头，压成一行、截到 20 字。
+ *
+ * <p>用过两种别的写法，都不行：
+ * <ul>
+ *   <li><b>"工具 · 时间"</b> —— 同一个工具开两次，名字长得一样，认不出是哪一次；</li>
+ *   <li><b>content 的头几个字</b> —— content 是"整段上下文 + 问题"，于是标题变成
+ *       "以下是当前状态：…"。所以要取的是 {@link questionOf} 挑出来的那一句。</li>
+ * </ul>
+ */
+function questionTitle(list) {
+  for (var i = 0; i < list.length; i++) {
+    if (list[i].role !== "user") { continue; }
+    var s = String(questionOf(list[i]) || "");
+    s = s.replace(/```[\s\S]*$/, " ");        // 代码块不进标题
+    s = s.replace(/[`*_#>]/g, " ");           // markdown 记号不留
+    s = s.replace(/\s+/g, " ").trim();
+    if (!s) { continue; }
+    return s.length > 20 ? s.slice(0, 20) + "…" : s;
+  }
+  return "";
+}
+
 function touchTitle() {
   var s = findCurrent();
-  if (s && !s.title) { s.title = titleStamp(); }
+  if (s && !s.title) {
+    // 先取问题本身；取不到才退回"工具 · 时间"。
+    s.title = questionTitle(s.turns) || titleStamp();
+  }
   saveStore();
   renderSessions();
 }
@@ -978,14 +990,22 @@ function addFiles(list) {
 
 function renderLog() {
   el("log").innerHTML = "";
+  var ask = "";
   for (var i = 0; i < turns.length; i++) {
     var m = turns[i];
     if (m.role === "user") {
-      bubble("u", m.content);
+      // ★ 用户那一轮存的是"整段上下文 + 问题"（发给模型的就是它）。
+      // 这里必须只显示问题 —— 否则每次重绘（切语言、收起再展开）都会把
+      // 整份工具帮助原文糊到对话区上。
+      ask = questionOf(m);
+      bubble("u", ask);
     } else {
       var bb = bubble("a", "");
       bb.innerHTML = md(m.content);
       wireCopy(bb);
+      // 动作按钮只挂在最新那条回答下面。重绘（切语言、收起再展开）之后
+      // 它们不该凭空消失 —— 复制/重试正是这时候最需要。
+      if (i === turns.length - 1) { addActions(bb, ask, m.content); }
     }
   }
   if (!turns.length) {
@@ -1706,36 +1726,20 @@ function addActions(box, question, text) {
     }
   }
   if (text) {
-    var cmd = extractCode(text);
-    if (cmd) {
-      // 采用：写进 localStorage，Java 定时过来取。
-      // 页面→Java 没有通道，这是免费能用的唯一一条。
-      act(lang === "en" ? "Use" : "\u91c7\u7528", function () { adoptCmd(cmd); });
-    }
     act(lang === "en" ? "Copy" : "\u590d\u5236", function () { copyText(text); });
   }
   box.parentNode.insertBefore(row, box.nextSibling);
   el("log").scrollTop = el("log").scrollHeight;
 }
 
-/** 靠 execCommand 复制 —— JxBrowser 拒绝 navigator.clipboard。 */
-/** 第一个代码块里的内容；没有就返回空。 */
-function extractCode(md) {
-  if (!md) { return ""; }
-  var m = /```[a-zA-Z0-9_-]*\n([\s\S]*?)```/.exec(String(md));
-  return m ? m[1].replace(/\s+$/, "") : "";
-}
-
-/** 把命令交给 Java —— encodeURIComponent 避开所有引号和换行的麻烦。 */
-function adoptCmd(cmd) {
-  try {
-    localStorage.setItem("tbv.adopt", encodeURIComponent(cmd));
-    flash(t("adopted"));
-  } catch (e) {
-    setStatus(t("adoptOff"), "bad");
-  }
-}
-
+/**
+ * 靠 execCommand 复制 —— JxBrowser 拒绝 navigator.clipboard。
+ *
+ * <p>原来这里还有一个「采用」按钮，把回答里的命令直接塞进命令预览框。去掉了：
+ * 一次回答里可能给好几条命令（该用哪条它也不说），而插件这边命令框还牵涉
+ * 路径转换和参数重置 —— 塞进去往往是个半对的状态，比让用户复制走更糟。
+ * 每个代码块右上角本来就有复制按钮，那才是该走的路。
+ */
 function copyText(text) {
   var ta = document.createElement("textarea");
   ta.value = text;

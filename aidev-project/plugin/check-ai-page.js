@@ -285,7 +285,15 @@ function sendOnce(text) {
 }
 
 function runNetwork() {
+  // 先开一个新会话：名字是空的时候才看得出"标题取的是问题"。
+  byId["sessNew"].onclick();
   windowStub.tbvAi.setModels(MODEL_JSON);
+  // 带上上下文再发 —— 这样历史里存的是"整段上下文 + 问题"，
+  // 和真机上一样；不然"重绘时只显示问题"那条根本测不到。
+  windowStub.tbvAi.setContext(JSON.stringify({
+    tool: "orthofinder", env: "orthofinder_env",
+    help: "SIMPLE USAGE:\n Run full OrthoFinder analysis ...\n", options: []
+  }));
 
   console.log("");
   console.log("=== 发送：请求体里的 stream_options ===");
@@ -316,6 +324,53 @@ function runNetwork() {
     want("页脚用了服务端的真实值", budget.indexOf("12.3k") >= 0, budget);
     want("有真值时不带 ≈", budget.indexOf("≈") < 0, budget);
     want("上限显示成 1M", budget.indexOf("1M") >= 0, budget);
+
+    console.log("");
+    console.log("=== 回答下面那行按钮 ===");
+    var acts = byId["log"].children.filter(function (c) {
+      return String(c.className || "") === "acts";
+    }).pop();
+    var labels = acts ? acts.children.map(function (c) { return String(c.textContent); }) : [];
+    // 「采用」把命令塞进命令框，但一次回答可能给好几条命令，而命令框还牵着
+    // 路径转换和参数重置 —— 塞进去往往是个半对的状态。去掉，只留复制。
+    want("没有「采用」按钮", labels.indexOf("采用") < 0, labels.join(","));
+    want("有「复制」按钮", labels.indexOf("复制") >= 0, labels.join(","));
+    want("有「重试」按钮", labels.indexOf("重试") >= 0, labels.join(","));
+
+    console.log("");
+    console.log("=== 会话名 / 重绘后只显示问题 ===");
+    var optText = String((byId["sessSel"].children[0] || {}).textContent || "");
+    want("会话名取的是问题本身", optText === ASK, optText);
+    want("会话名后面没有 (N) 条数", optText.indexOf("(") < 0
+        && optText.indexOf("（") < 0, optText);
+
+    // 模拟"收起再展开"：Java 会重推语言 → applyLang → renderLog 整块重绘。
+    windowStub.tbvAi.setLang("zh");
+    var users = byId["log"].children.filter(function (c) {
+      return String(c.className || "").indexOf("m u") === 0;
+    });
+    want("重绘后用户气泡还在", users.length > 0, "users=" + users.length);
+    want("重绘后用户气泡只有问题，没有上下文",
+        users.length > 0
+        && users.every(function (c) {
+             return String(c.textContent).indexOf("以下是当前状态") < 0;
+           }),
+        users.length ? String(users[0].textContent).slice(0, 40) : "");
+    want("重绘后用户气泡文字就是问题本身",
+        users.length > 0 && String(users[0].textContent) === ASK,
+        users.length ? String(users[0].textContent).slice(0, 40) : "");
+
+    // 重绘会把整块 log 清空重建 —— 动作按钮也要跟着重建，否则"收起再展开"
+    // 之后复制按钮就没了，而那正是最需要它的时候。
+    var actsAfter = byId["log"].children.filter(function (c) {
+      return String(c.className || "") === "acts";
+    });
+    want("重绘后动作按钮还在", actsAfter.length === 1, "rows=" + actsAfter.length);
+    var labelsAfter = actsAfter.length
+      ? actsAfter[0].children.map(function (c) { return String(c.textContent); })
+      : [];
+    want("重绘后没有「采用」", labelsAfter.indexOf("采用") < 0, labelsAfter.join(","));
+    want("重绘后还有「复制」", labelsAfter.indexOf("复制") >= 0, labelsAfter.join(","));
 
     console.log("");
     console.log("=== 退路：服务端不认 stream_options ===");
@@ -389,23 +444,27 @@ function runNetwork() {
     want("页面里没有 window.confirm / alert（会冻住整个应用）",
         !hasBrowserModal(script));
 
+    var sessionCount = byId["sessSel"].children.length;
     var logBefore = byId["log"].children.length;
     byId["sessDel"].onclick();          // 就是 🗑 按钮
     want("点删除先出确认条", byId["confirm"].hidden === false);
     want("确认条上有字", String(byId["confirmText"].textContent || "").length > 0);
     want("确认条上有两个按钮", String(byId["confirmYes"].textContent || "").length > 0
         && String(byId["confirmNo"].textContent || "").length > 0);
-    want("还没真删", byId["log"].children.length === logBefore);
+    want("还没真删", byId["log"].children.length === logBefore
+        && byId["sessSel"].children.length === sessionCount);
 
     byId["confirmNo"].onclick();        // 先测取消
     want("点取消就收起来", byId["confirm"].hidden === true);
-    want("取消之后什么都没删", byId["log"].children.length === logBefore);
+    want("取消之后什么都没删", byId["log"].children.length === logBefore
+        && byId["sessSel"].children.length === sessionCount);
 
     byId["sessDel"].onclick();
     byId["confirmYes"].onclick();       // 再确认一次，这次真删
     want("确认之后关掉确认条", byId["confirm"].hidden === true);
-    want("删干净了（只剩空状态一行）", byId["log"].children.length === 1,
-        "children=" + byId["log"].children.length);
+    // 这里还有一条别的会话，所以删掉的是当前这条、然后切过去 —— 不是清空。
+    want("会话真的少了一条", byId["sessSel"].children.length === sessionCount - 1,
+        "before=" + sessionCount + " after=" + byId["sessSel"].children.length);
   });
 }
 

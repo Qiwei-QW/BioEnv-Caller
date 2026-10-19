@@ -2653,16 +2653,16 @@ public final class MainPanel extends JPanel {
 
         // 最外层再包一层：AI 助手在最左，默认收起。
         aiAssist = new AiAssistPanel();
-        // 页面→Java 没有通道，所以面板定时问页面要不要采用某条命令。
 
-        // 这里就是那条命令的去处。
-
-        aiAssist.setAdoptSink(new java.util.function.Consumer<String>() {
-            @Override
-            public void accept(String cmd) {
-                setPreviewText(cmd);
-            }
-        });
+        // ★ 模型列表要在<b>启动时</b>就推一次。
+        //
+        // 以前只在"打开设置"的时候推 —— 而设置面板是懒加载的，于是从插件启动到
+        // 用户第一次打开设置之间，AI 面板里只有"内置模型"，自定义的模型压根看不到；
+        // 用户得进设置随便编辑保存一次，它才冒出来。
+        //
+        // 面板内部会记住这一份，等页面的脚本真跑起来（window.tbvAi 出现）再补推 ——
+        // 这里推的时候页面通常还没加载完，直接推是推不进去的。
+        aiAssist.setModels(bioenv.ai.AiModelStore.load().toJson());
 
         // 导出对话：正文由页面拼好（它才知道有哪些轮、哪一句是问题），
         // 这里只负责问一句"存哪"然后写文件。

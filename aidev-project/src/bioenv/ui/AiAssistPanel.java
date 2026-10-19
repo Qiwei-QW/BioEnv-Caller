@@ -191,30 +191,10 @@ public final class AiAssistPanel extends JPanel {
         body.repaint();
 
 
-        // 补推：主题、语言、模型列表、以及期间攒下来的上下文。
-        //
-        // ★ 这几行原来全缩在下面那个 if 里面 —— 于是"页面加载之前就先到的模型列表"
-        // 只有在上下文非空时才会补推，而采用命令的轮询更是压根不会启动。
-        // 空上下文恰恰是刚打开插件时的常态，所以症状不是"不工作"，而是"有时候不工作"。
-        pushTheme(theme);
-        pushLang(lang);
-        pushContext(pendingContext);
-        pushModels(pendingModels);
-        startAdoptWatch();
-    }
-
-    /** 把当前工具 / 命令 / 上次运行等推给页面（JSON 字符串）。 */
-    /** 采用回调：页面写了一条命令，交给外面填进预览框。 */
-    private java.util.function.Consumer<String> adoptSink;
-
-    /**
-     * 设置「采用 AI 命令」的去处。
-     *
-     * <p>为什么是拉而不是推：页面→Java 没有通道，只能 Java 过去问。
-     * 每 700ms 问一次，仅在面板看得见的时候问 —— 看不见的时候问也没人用。
-     */
-    public void setAdoptSink(java.util.function.Consumer<String> sink) {
-        adoptSink = sink;
+        // 补推一次。此时页面多半还没跑完脚本，所以这次多半是石沉大海 ——
+        // 真正的重推在下面的轮询里：它先探 window.tbvAi 有没有出现。
+        deliverPending();
+        startWatch();
     }
 
     /** 导出回调：会话名 + Markdown 正文，交给外面去弹保存对话框。 */
@@ -223,50 +203,71 @@ public final class AiAssistPanel extends JPanel {
     /**
      * 设置「导出对话」的去处。
      *
-     * <p>和采用命令一样是<b>拉</b>：页面把整篇 Markdown 写进 localStorage，
-     * 这边轮询取走。存文件这件事留给外面（它才知道该弹哪个对话框、上一次导到哪）。
+     * <p>页面把整篇 Markdown 写进 localStorage，这边轮询取走。存文件这件事
+     * 留给外面（它才知道该弹哪个对话框、上一次导到哪）。
      */
     public void setExportSink(java.util.function.BiConsumer<String, String> sink) {
         exportSink = sink;
     }
 
-    /** 循环问页面：有没有待采用的命令、待导出的对话。 */
-    private void startAdoptWatch() {
-        if (adoptTimer != null || view == null) {
+    /**
+     * 页面里的 {@code window.tbvAi} 出现了没有。
+     *
+     * <p>★ 这是这一整块最容易出错的地方。网页是<b>异步</b>加载的：插件刚启动、
+     * 面板第一次显示的时候，{@link #ensureLoaded()} 立刻就把模型列表、上下文、
+     * 主题、语言推过去 —— 而那时页面的脚本一行都还没跑，{@code window.tbvAi}
+     * 还不存在，每一次 {@code run()} 都是静默的空操作。
+     *
+     * <p>症状不是"不工作"，而是"**要先进一次设置、随便编辑保存一下才好**"：
+     * 唯一还会再推一次模型列表的地方就是设置里的保存。别的地方（切工具会重推
+     * 上下文）刚好掩盖了这个问题。
+     */
+    private boolean pageReady;
+
+    /** 有东西要补推。页面就绪前推过的、以及刚就绪的，都算。 */
+    private boolean dirty;
+
+    /** 轮询定时器。 */
+    private javax.swing.Timer watchTimer;
+
+    private void startWatch() {
+        if (watchTimer != null || view == null) {
             return;
         }
-        adoptTimer = new javax.swing.Timer(700, new java.awt.event.ActionListener() {
+        watchTimer = new javax.swing.Timer(700, new java.awt.event.ActionListener() {
             @Override
             public void actionPerformed(java.awt.event.ActionEvent e) {
                 pollPage();
             }
         });
-        adoptTimer.start();
+        watchTimer.start();
     }
 
     /**
-     * 往页面里问一次：手上有没有东西要交出来。
+     * 每 700ms 问一次页面：脚本起来了没有、有没有东西要交出来。
      *
-     * <p>两条都用同一套办法（页面写 localStorage，Java 定时来取），
-     * 所以放在一次轮询里做完，而不是各开一个定时器。
+     * <p>干三件事，顺序有讲究：
+     * <ol>
+     *   <li>页面没就绪就只探一下，别的都不做（推过去也是白推）；</li>
+     *   <li>刚就绪时<b>把所有待推的东西重推一遍</b> —— 页面加载期间攒下的模型列表、
+     *       上下文、主题、语言都在这一步补上；</li>
+     *   <li>取走页面写下的导出载荷。</li>
+     * </ol>
      */
     void pollPage() {
         if (view == null || !isShowing()) {
             return;
         }
-        if (adoptSink != null) {
-            String raw = take("tbv.adopt");
-            if (raw != null) {
-                String cmd;
-                try {
-                    cmd = java.net.URLDecoder.decode(raw, "UTF-8");
-                } catch (Exception bad) {
-                    cmd = raw;
-                }
-                if (cmd.trim().length() > 0) {
-                    adoptSink.accept(cmd);
-                }
+        if (!pageReady) {
+            if (!"object".equals(view.evalString("typeof window.tbvAi"))) {
+                return;
             }
+            pageReady = true;
+            dirty = true;
+        }
+        if (dirty) {
+            deliverPending();
+            dirty = false;
         }
         if (exportSink != null) {
             String[] part = bioenv.ai.AiExport.decode(take("tbv.export"));
@@ -279,8 +280,7 @@ public final class AiAssistPanel extends JPanel {
     /**
      * 读一个 key，<b>读到就立刻清掉</b>。
      *
-     * <p>不清的话下一轮会把同一份数据再处理一遍 —— 命令会被重复填进命令框，
-     * 导出会第二次弹出保存对话框。
+     * <p>不清的话下一轮会把同一份数据再处理一遍 —— 导出会第二次弹出保存对话框。
      */
     private String take(String key) {
         String raw = view.evalString("localStorage.getItem('" + key + "') || ''");
@@ -290,8 +290,6 @@ public final class AiAssistPanel extends JPanel {
         view.run("try{localStorage.removeItem('" + key + "')}catch(e){}");
         return raw;
     }
-
-    private javax.swing.Timer adoptTimer;
 
     /** 模型列表；网页还没建的时候先放这里。 */
     private String pendingModels = "[]";
@@ -305,26 +303,49 @@ public final class AiAssistPanel extends JPanel {
      */
     public void setModels(String json) {
         pendingModels = (json == null || json.trim().length() == 0) ? "[]" : json;
-        pushModels(pendingModels);
+        dirty = true;
+        sendModels();
     }
 
-    private void pushModels(String json) {
-        if (view == null) {
-            return;
+    /**
+     * 把待推的东西全部再推一遍。轮询判定"页面刚就绪"时调。
+     *
+     * <p>只用已经存下的 pending 值，不动标记 —— 调用方负责清 dirty。
+     */
+    private void deliverPending() {
+        sendTheme();
+        sendLang();
+        sendContext();
+        sendModels();
+    }
+
+    private void sendModels() {
+        if (view != null) {
+            view.run("window.tbvAi && window.tbvAi.setModels(" + jsString(pendingModels) + ")");
         }
-        view.run("window.tbvAi && window.tbvAi.setModels(" + jsString(json) + ")");
     }
 
     public void pushContext(String json) {
         pendingContext = json == null ? "" : json;
+        dirty = true;
+        sendContext();
+    }
+
+    private void sendContext() {
         if (view != null) {
-            view.run("window.tbvAi && window.tbvAi.setContext(" + jsString(pendingContext) + ")");
+            view.run("window.tbvAi && window.tbvAi.setContext("
+                    + jsString(pendingContext) + ")");
         }
     }
 
     /** 跟着插件的界面风格走（classic / light / dark）。 */
     public void pushTheme(String name) {
         theme = name == null ? "classic" : name;
+        dirty = true;
+        sendTheme();
+    }
+
+    private void sendTheme() {
         if (view != null) {
             view.run("window.tbvAi && window.tbvAi.setTheme(" + jsString(theme) + ")");
         }
@@ -333,6 +354,11 @@ public final class AiAssistPanel extends JPanel {
     /** 跟着插件的语言走（zh / en）。 */
     public void pushLang(String code) {
         lang = "en".equalsIgnoreCase(code) ? "en" : "zh";
+        dirty = true;
+        sendLang();
+    }
+
+    private void sendLang() {
         if (view != null) {
             view.run("window.tbvAi && window.tbvAi.setLang(" + jsString(lang) + ")");
         }
