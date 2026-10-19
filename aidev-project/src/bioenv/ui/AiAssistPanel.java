@@ -365,6 +365,18 @@ public final class AiAssistPanel extends JPanel {
         if (st != null && take(v, "tbv.openSettings") != null) {
             java.awt.EventQueue.invokeLater(st);
         }
+        // 页面里删了字，请我们把浏览器组件重画一遍（见 AiWebView.repaintView）。
+        if (take(v, "tbv.repaint") != null) {
+            java.awt.EventQueue.invokeLater(new Runnable() {
+                @Override
+                public void run() {
+                    AiWebView w = view;
+                    if (w != null) {
+                        w.repaintView();
+                    }
+                }
+            });
+        }
     }
 
     /**

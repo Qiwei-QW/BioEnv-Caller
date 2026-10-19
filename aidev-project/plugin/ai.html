@@ -169,8 +169,11 @@
 /* 发送按钮进输入框：外层相对定位，按钮压右下角；文字给它让出一条。 */
 #askWrap{position:relative;flex:1;display:flex;padding-bottom:44px;
     border:1px solid var(--line);border-radius:8px;background:var(--bg)}
-  /* 输入框本身不再有框 —— 框在外层容器上，所以看起来是一个整框 */
-  #askWrap #ask{border:0;border-radius:0;background:transparent;box-shadow:none;outline:none}
+  /* 输入框本身不再有框 —— 框在外层容器上，所以看起来是一个整框。
+     ★ 背景要和外层同色、但**不能透明**：透明元素不自己画底，删字之后那块区域
+     就完全依赖"下面那层被重画"，一旦掉帧就留下上一帧的字影（实测：中文删完后
+     留下竖笔画）。给它自己一个底，等于每次重绘都把那一块盖一遍，外观没有区别。 */
+  #askWrap #ask{border:0;border-radius:0;background:var(--bg);box-shadow:none;outline:none}
   /* 聚焦时让框本身变色 —— 而不是在 textarea 上面套一圈黑框 */
   #askWrap:focus-within{border-color:var(--accent)}
 #askWrap #ask{flex:1;width:100%;padding-left:10px;padding-right:14px}
@@ -2030,11 +2033,18 @@ el("explain").onclick = function () {
 };
 /**
  * 退格删字之后，输入框那一块偶尔没被重绘干净，留下几道竖线
- * （删除前那些字的残影，不是输入框里的内容）。
+ * （删除前那些中文的竖笔画，不是输入框里的内容）。
  *
- * <p>这是嵌入浏览器渲染层的问题，不是文本问题，所以做两件事：
- *   1. 顺手清掉落单的代理字符（半个 emoji 之类），那类字符本身也会画成小方块/竖条；
- *   2. 删字之后强制让输入框重新合成一帧（translateZ(0) 开关一次）。
+ * <p>画面是两段组成的：网页 → Chromium 的离屏位图 → Swing 组件把位图贴上来。
+ * 哪一段脏了都会留下残影，所以两边都要推：
+ *   <ul>
+ *     <li>这里：用 {@code display} 开关强制整块重新布局+重新栅格化。
+ *         上次只改 {@code transform}，那通常只是复用缓存好的图层，白推。</li>
+ *     <li>Java 侧：看到 {@code tbv.repaint} 就把浏览器组件整个重画一遍
+ *         （见 AiAssistPanel 的轮询）。</li>
+ *   </ul>
+ *
+ * <p>另外顺手清掉落单的代理字符（半个 emoji 之类，本身也会画成小方块/竖条）。
  */
 function stripLoneSurrogates(s) {
   var out = "";
@@ -2055,21 +2065,36 @@ function stripLoneSurrogates(s) {
 }
 
 var deletedByKey = false;
+var composing = false;
 
 el("ask").addEventListener("keydown", function (e) {
   if (e.key === "Backspace" || e.key === "Delete") { deletedByKey = true; }
 });
 
+// 中文输入法组字期间绝对不能去动 value / display —— 那会把组字状态弄坏。
+el("ask").addEventListener("compositionstart", function () { composing = true; });
+el("ask").addEventListener("compositionend", function () { composing = false; });
+
 el("ask").addEventListener("input", function () {
   var box = el("ask");
+  if (composing) { deletedByKey = false; return; }
   var v = box.value;
   var clean = stripLoneSurrogates(v);
   if (clean !== v) { box.value = clean; }
   if (!deletedByKey) { return; }
   deletedByKey = false;
-  // 强制重排一帧：有的渲染后端在删字后不会清掉原来那些像素。
-  box.style.transform = "translateZ(0)";
-  requestAnimationFrame(function () { box.style.transform = ""; });
+  var pos = box.selectionStart;
+  // ① 网页这一层：display 开关会强制重新布局并重新栅格化整块区域。
+  //    同一个任务里改回原样，浏览器不会在中间画一帧，所以看不到闪烁。
+  box.style.display = "none";
+  void box.offsetHeight;                 // 读一次布局，逼它立刻生效
+  box.style.display = "";
+  if (typeof box.setSelectionRange === "function" && typeof pos === "number") {
+    box.setSelectionRange(pos, pos);
+  }
+  if (typeof box.focus === "function") { box.focus(); }
+  // ② Java 那一层：请它把浏览器组件整个重画一遍。
+  try { localStorage.setItem("tbv.repaint", "1"); } catch (e) {}
 });
 
 

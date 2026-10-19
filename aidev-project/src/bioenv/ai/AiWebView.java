@@ -387,6 +387,41 @@ public final class AiWebView {
     }
 
     /**
+     * 把整个网页视图重画一遍。
+     *
+     * <p>为什么需要这个：TBtools 的 {@code WebGuiJPanel} 用
+     * {@code RenderingMode.OFF_SCREEN}，画面是"Chromium 渲染到离屏位图 → Swing
+     * 组件把位图贴上来"两段。网页里删字之后，位图上偶尔会留下被删那些字的残影，
+     * 而脏的是"位图 → 组件"这一段时，网页里怎么重绘都没用 —— 只能让 Java 把
+     * 组件整棵子树重画一次。
+     *
+     * <p>在事件线程上调用。
+     */
+    public void repaintView() {
+        if (panel == null) {
+            return;
+        }
+        // 光 repaint 有时不够：BrowserView 会把上一帧的位图再贴一次。
+        // 先按当前尺寸把整棵子树重摆一遍（强制重新布局），再整树重画。
+        int w = panel.getWidth();
+        int h = panel.getHeight();
+        if (w > 0 && h > 0) {
+            applySize(panel, w, h);
+        }
+        repaintTree(panel);
+    }
+
+    private static void repaintTree(java.awt.Component c) {
+        c.repaint();
+        if (c instanceof java.awt.Container) {
+            java.awt.Component[] kids = ((java.awt.Container) c).getComponents();
+            for (int i = 0; i < kids.length; i++) {
+                repaintTree(kids[i]);
+            }
+        }
+    }
+
+    /**
      * 把网页视图按给定尺寸摆一遍，<b>连同它内部的子组件</b>。
      *
      * <p>为什么要自己走一遍：外面那个 {@code WebGuiJPanel} 服从布局，但它内部真正的
