@@ -170,10 +170,10 @@
 #askWrap{position:relative;flex:1;display:flex;padding-bottom:44px;
     border:1px solid var(--line);border-radius:8px;background:var(--bg)}
   /* 输入框本身不再有框 —— 框在外层容器上，所以看起来是一个整框。
-     ★ 背景要和外层同色、但**不能透明**：透明元素不自己画底，删字之后那块区域
-     就完全依赖"下面那层被重画"，一旦掉帧就留下上一帧的字影（实测：中文删完后
-     留下竖笔画）。给它自己一个底，等于每次重绘都把那一块盖一遍，外观没有区别。 */
-  #askWrap #ask{border:0;border-radius:0;background:var(--bg);box-shadow:none;outline:none}
+     ★ 背景必须透明：外层 #askWrap 是圆角 + 1px 边框，而 textarea 是一个直角矩形、
+     又铺满外层的上方。一旦它自己画底色，就会从圆角**外面**漏出去，把两个上角的
+     圆角盖成方角（实测踩过）。透明背景让外层的那一圈圆角原样留着。 */
+  #askWrap #ask{border:0;border-radius:0;background:transparent;box-shadow:none;outline:none}
   /* 聚焦时让框本身变色 —— 而不是在 textarea 上面套一圈黑框 */
   #askWrap:focus-within{border-color:var(--accent)}
 #askWrap #ask{flex:1;width:100%;padding-left:10px;padding-right:14px}
@@ -2064,6 +2064,33 @@ function stripLoneSurrogates(s) {
   return out;
 }
 
+/**
+ * 删字的时候临时把光标藏起来。
+ *
+ * <p>★ 这是"一串竖线"的真正原因（用户自己看出来的）：
+ *
+ * <p>删得快的时候，光标每退一格都会在**旧位置**画一次；离屏渲染这条路上，
+ * 旧位置来不及被擦掉，于是留下**一串竖线** —— 那是删到过的每一个光标位置，
+ * 不是字符，也不是字影。所以治它的办法不是"重绘"（重绘只是把旧画面再贴一次），
+ * 而是**让它在删的时候别画光标**：不画，就没有旧位置可残留。
+ *
+ * <p>停手 400ms 之后再把光标放回来 —— 那会儿早就不在删了，看不见它消失。
+ */
+var caretTimer = 0;
+
+function hideCaret() {
+  var box = el("ask");
+  if (!box || !box.style) { return; }
+  box.style.caretColor = "transparent";
+  clearTimeout(caretTimer);
+  caretTimer = setTimeout(showCaret, 400);
+}
+
+function showCaret() {
+  var box = el("ask");
+  if (box && box.style) { box.style.caretColor = ""; }
+}
+
 var deletedByKey = false;
 var composing = false;
 
@@ -2085,12 +2112,16 @@ function rebuildAsk() {
   parent.replaceChild(fresh, old);
   wireAsk(fresh);
   if (typeof fresh.focus === "function") { fresh.focus(); }
+  hideCaret();
 }
 
 /** 输入框上的那几个监听。重建元素之后要重新挂一遍。 */
 function wireAsk(box) {
   box.addEventListener("keydown", function (e) {
-    if (e.key === "Backspace" || e.key === "Delete") { deletedByKey = true; }
+    if (e.key === "Backspace" || e.key === "Delete") {
+      deletedByKey = true;
+      hideCaret();
+    }
   });
   // 中文输入法组字期间绝对不能去动 value / 元素本身 —— 那会把组字状态弄坏。
   box.addEventListener("compositionstart", function () { composing = true; });
