@@ -472,6 +472,10 @@ var bridge = null;           // window.tbtools.ai
   var lastPromptTok = 0;        // 上一次发出去的提示：估算 token
   var lastPromptReal = 0;       // 同上，但来自服务端 usage（0 = 这次没拿到）
   var lastRate = 0;             // 上一次回答的速度（tok/s）
+  /** 算速度用的采样点 [{t, n}]，只留最近 2 秒。 */
+  var rateMarks = [];
+  /** 上一次刷新速度的时间：每 300ms 才刷一次，不然每来一小段就重排一次页脚。 */
+  var lastNoteAt = 0;
   var lastOutReal = 0;          // 服务端返回的真实 completion_tokens（0 = 没拿到）
   var totalOutTok = 0;          // 本会话累计输出 token
   var streamT0 = 0;             // 这次回答开始的时间
@@ -842,7 +846,35 @@ function resetUsage() {
   lastOutReal = 0;
   lastRate = 0;
   totalOutTok = 0;
+  rateMarks.length = 0;
+  lastNoteAt = 0;
   updateStats([]);
+}
+
+/**
+ * 记一个"到目前为止已经输出多少 token"的采样点，算<b>最近 2 秒</b>的速度。
+ *
+ * <p>以前这里是"累计 token ÷ 累计秒数"。那个数在开头一定是小的，然后一路往上爬
+ * 到真实值 —— 看起来就像一个从 0 开始爬的计数器，而不是"现在多快"。
+ * 滑动窗口才能反映当下的速度，而且两秒内就稳定下来。
+ */
+function noteRate(tokens) {
+  var now = Date.now();
+  // 流式回答一秒能来上百小段，每次都重算+重排只会让界面发卡。
+  if (now - lastNoteAt < 300) { return false; }
+  lastNoteAt = now;
+  rateMarks.push({ t: now, n: tokens });
+  while (rateMarks.length > 2 && now - rateMarks[0].t > 2000) {
+    rateMarks.shift();
+  }
+  if (rateMarks.length < 2) { return false; }
+  var dt = (now - rateMarks[0].t) / 1000;
+  var dn = tokens - rateMarks[0].n;
+  if (dt >= 0.2 && dn >= 0) {
+    lastRate = dn / dt;
+    return true;
+  }
+  return false;
 }
 
 function newSession() {
@@ -1592,9 +1624,8 @@ function trimToBudget(msgs, maxIn) {
         var d = ch && (ch.delta || ch.message);
         if (d && d.content) {
           acc += d.content;
-          // 每次都算会拖慢渲染；每 400ms 算一次就够了。
-          var el2 = (Date.now() - streamT0) / 1000;
-          if (el2 > 0.4) { lastRate = estTokens(acc) / el2; updateStats([]); }
+          // 每 300ms 刷一次速度就够（见 noteRate）。
+          if (noteRate(estTokens(acc))) { updateStats([]); }
           box.textContent = acc;
           el("log").scrollTop = el("log").scrollHeight;
         }
@@ -1781,6 +1812,8 @@ loadSel();
   lastPromptReal = 0;
   lastOutReal = 0;
   streamT0 = Date.now(); lastRate = 0;
+  rateMarks.length = 0;
+  lastNoteAt = 0;
   updateStats([]);
 
   var box = bubble("a", "");
@@ -1838,8 +1871,7 @@ loadSel();
           base += s;
         }
         box.textContent = base;
-        var el3 = (Date.now() - streamT0) / 1000;
-        if (el3 > 0.4) { lastRate = estTokens(base) / el3; updateStats([]); }
+        if (noteRate(estTokens(base))) { updateStats([]); }
         el("log").scrollTop = el("log").scrollHeight;
       }
     });
@@ -1863,6 +1895,9 @@ loadSel();
     var text = (typeof r === "string" && r) ? r : base;
     box.innerHTML = md(text);
       wireCopy(box);
+    // 结束时用<b>整段平均</b>收尾：窗口里最后一小段常常偏低，收尾的数字会难看。
+    var secs = (Date.now() - streamT0) / 1000;
+    if (secs >= 0.3) { lastRate = estTokens(text) / secs; }
     totalOutTok += (lastOutReal > 0 ? lastOutReal : estTokens(text));
     // 回答下面给一行小动作：重试 / 编辑 / 继续 / 复制。
     addActions(box, q, text);
@@ -1993,6 +2028,51 @@ el("explain").onclick = function () {
   el("ask").value = t("explainQ");
   send();
 };
+/**
+ * 退格删字之后，输入框那一块偶尔没被重绘干净，留下几道竖线
+ * （删除前那些字的残影，不是输入框里的内容）。
+ *
+ * <p>这是嵌入浏览器渲染层的问题，不是文本问题，所以做两件事：
+ *   1. 顺手清掉落单的代理字符（半个 emoji 之类），那类字符本身也会画成小方块/竖条；
+ *   2. 删字之后强制让输入框重新合成一帧（translateZ(0) 开关一次）。
+ */
+function stripLoneSurrogates(s) {
+  var out = "";
+  for (var i = 0; i < s.length; i++) {
+    var c = s.charCodeAt(i);
+    if (c >= 0xD800 && c <= 0xDBFF) {
+      var n = s.charCodeAt(i + 1);
+      if (n >= 0xDC00 && n <= 0xDFFF) {
+        out += s.charAt(i) + s.charAt(i + 1);
+        i++;
+      }
+      continue;                       // 落单的高位代理：丢掉
+    }
+    if (c >= 0xDC00 && c <= 0xDFFF) { continue; }   // 落单的低位代理：丢掉
+    out += s.charAt(i);
+  }
+  return out;
+}
+
+var deletedByKey = false;
+
+el("ask").addEventListener("keydown", function (e) {
+  if (e.key === "Backspace" || e.key === "Delete") { deletedByKey = true; }
+});
+
+el("ask").addEventListener("input", function () {
+  var box = el("ask");
+  var v = box.value;
+  var clean = stripLoneSurrogates(v);
+  if (clean !== v) { box.value = clean; }
+  if (!deletedByKey) { return; }
+  deletedByKey = false;
+  // 强制重排一帧：有的渲染后端在删字后不会清掉原来那些像素。
+  box.style.transform = "translateZ(0)";
+  requestAnimationFrame(function () { box.style.transform = ""; });
+});
+
+
 el("ask").addEventListener("keydown", function (e) {
   if (e.key === "Escape") { e.preventDefault(); if (busy) { stop(); } return; }
   if (e.key === "Enter" && !e.shiftKey) {
