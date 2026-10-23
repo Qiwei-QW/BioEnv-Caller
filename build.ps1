@@ -39,20 +39,37 @@ $DistDir     = Join-Path $BuildDir 'dist'
 $VmadaptSrc  = Join-Path $Root 'vmadapt\src'
 
 # --- locate a Java 11 toolchain -------------------------------------
-$Candidates = @(
+# Search order: TBTOOLS_HOME (the folder that holds jre\), JAVA_HOME, then the
+# usual install locations, so TBtools installed somewhere other than D:\ still
+# works. A candidate only wins if its javac really reports version 11 -- a stray
+# JDK 17 must not be picked up, or every class would come out as major 61.
+$Candidates = @()
+if ($env:TBTOOLS_HOME) { $Candidates += (Join-Path $env:TBTOOLS_HOME 'jre') }
+if ($env:JAVA_HOME)    { $Candidates += $env:JAVA_HOME }
+$Candidates += @(
     'D:\TBtools\jre',
+    'C:\TBtools\jre',
     'C:\Program Files\Eclipse Adoptium\jdk-11*',
-    'C:\Program Files\Java\jdk-11*'
+    'C:\Program Files\Java\jdk-11*',
+    'C:\Program Files\Microsoft\jdk-11*'
 )
 $JdkHome = $null
 foreach ($c in $Candidates) {
-    $resolved = Get-Item $c -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($resolved) {
+    if (-not $c) { continue }
+    foreach ($resolved in (Get-Item $c -ErrorAction SilentlyContinue)) {
         $javac = Join-Path $resolved.FullName 'bin\javac.exe'
-        if (Test-Path $javac) { $JdkHome = $resolved.FullName; break }
+        if (-not (Test-Path $javac)) { continue }
+        if (((& $javac -version 2>&1) -join ' ') -match 'javac 11\.') {
+            $JdkHome = $resolved.FullName
+            break
+        }
     }
+    if ($JdkHome) { break }
 }
-if (-not $JdkHome) { throw "No JDK 11 found. TBtools ships one at D:\TBtools\jre." }
+if (-not $JdkHome) {
+    throw ("No JDK 11 found. Set TBTOOLS_HOME to your TBtools folder (it ships jre\), " +
+           "or set JAVA_HOME to a JDK 11.")
+}
 
 $Javac = Join-Path $JdkHome 'bin\javac.exe'
 $Jar   = Join-Path $JdkHome 'bin\jar.exe'
@@ -84,9 +101,16 @@ if ($LASTEXITCODE -ne 0) { throw "vmadapt compilation failed." }
 
 # --- compile the merged plugin ---------------------------------------
 $tbJar = $null
-foreach ($candidate in @('D:\TBtools\TBtools_JRE1.6.jar',
-                         (Join-Path $env:USERPROFILE '.TBtools\TBtools_JRE1.6.jar'))) {
-    if (Test-Path $candidate) { $tbJar = $candidate; break }
+$tbJarCandidates = @()
+if ($env:TBTOOLS_JAR)  { $tbJarCandidates += $env:TBTOOLS_JAR }
+if ($env:TBTOOLS_HOME) { $tbJarCandidates += (Join-Path $env:TBTOOLS_HOME 'TBtools_JRE1.6.jar') }
+$tbJarCandidates += @(
+    'D:\TBtools\TBtools_JRE1.6.jar',
+    'C:\TBtools\TBtools_JRE1.6.jar',
+    (Join-Path $env:USERPROFILE '.TBtools\TBtools_JRE1.6.jar')
+)
+foreach ($candidate in $tbJarCandidates) {
+    if ($candidate -and (Test-Path $candidate)) { $tbJar = $candidate; break }
 }
 
 $sources = Get-ChildItem $SrcDir -Recurse -Filter *.java | ForEach-Object { $_.FullName }
@@ -99,7 +123,8 @@ if ($tbJar) {
     $sources = $sources | Where-Object { $_ -ne $stub }
     & $Javac -encoding UTF-8 -Xlint:-options -cp $cp -d $ClassesDir $sources
 } else {
-    Write-Host "Compiling $($sources.Count) source file(s) against the local stub + vmadapt"
+    Write-Host ("Compiling $($sources.Count) source file(s) against the local stub + vmadapt " +
+            "-- set TBTOOLS_JAR or TBTOOLS_HOME to compile against the real host API")
     & $Javac -encoding UTF-8 -Xlint:-options -cp $cp -d $ClassesDir $sources
 }
 if ($LASTEXITCODE -ne 0) { throw "Compilation failed." }

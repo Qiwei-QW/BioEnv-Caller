@@ -292,3 +292,5 @@ AI 已经成为我们日常工作和学习中必不可少的得力助手，所�
 ---
 
 > 开发相关：构建入口 [build.ps1](build.ps1)、设计记录 [DESIGN.md](DESIGN.md)、版本历史 [CHANGELOG.md](CHANGELOG.md)、参与贡献 [CONTRIBUTING.md](CONTRIBUTING.md)。
+>
+> 构建脚本按 `TBTOOLS_HOME` → `JAVA_HOME` → 常见安装位置（`D:\TBtools`、`C:\Program Files\*\jdk-11*`）的顺序找 **JDK 11**；TBtools 没装在 D 盘时，先 `setx TBTOOLS_HOME "E:\TBtools"` 再构建即可。

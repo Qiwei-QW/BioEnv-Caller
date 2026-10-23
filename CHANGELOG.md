@@ -1,5 +1,10 @@
 # 更新日志
 
+## 未发布 / Unreleased
+
+- **构建脚本不再假定 TBtools 装在 `D:\TBtools`**：按 `TBTOOLS_HOME` → `JAVA_HOME` → 常见安装位置查找 JDK 11，并逐个校验 `javac -version` 确实是 11；`TBTOOLS_JAR` / `TBTOOLS_HOME` 也可指定宿主 jar。找不到时给出可直接照做的提示。
+- **文档**：README / CONTRIBUTING 拆成中英两个文件，顶部一行可点击切换；README 图片改走 jsDelivr（`raw.githubusercontent.com` 在国内常不可达）。
+
 ## v1.0.0 — 2026-10-19
 
 首个公开版本。
