@@ -467,14 +467,20 @@ public final class ConnectionLayoutTest {
                 return f;
             }
         }
-        // 从类文件位置往上找仓库根
+        // 从类文件位置往上找仓库根，再按**调用方要的那个文件**去找。
+        //
+        // 第一版这里把回退路径写死成 ConnectionPanel.java：从 vmadapt\ 目录单独
+        // 跑测试时（vmadapt\build.ps1 就是），UiText 的文案检查拿到的其实是
+        // ConnectionPanel 的源码，于是"三种模式填法相同"那 3 条断言全红——报错
+        // 指向文案，真凶却是这个回退分支。从仓库根跑（根 build.ps1）走的是第一条
+        // 候选路径，所以一直没露出来。
+        String relative = candidates[0].replace('\\', '/');
         try {
             java.io.File here = new java.io.File(ConnectionLayoutTest.class
                     .getProtectionDomain().getCodeSource().getLocation().toURI());
             java.io.File dir = here;
             for (int up = 0; up < 6 && dir != null; up++) {
-                java.io.File f = new java.io.File(dir,
-                        "vmadapt/src/vmadapt/ui/ConnectionPanel.java");
+                java.io.File f = new java.io.File(dir, relative);
                 if (f.isFile()) {
                     return f;
                 }
