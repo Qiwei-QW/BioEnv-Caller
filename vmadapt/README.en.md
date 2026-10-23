@@ -42,7 +42,7 @@ powershell -ExecutionPolicy Bypass -File .\build.ps1
 ```
 
 The output lands in `vmadapt\build\classes`; the tests are run by `build.ps1` together with the
-rest (15 of them, including the logic that skips the live-SSH cases when no server is
+rest (16 of them, including the logic that skips the live-SSH cases when no server is
 configured).
 
 ## The three design boundaries

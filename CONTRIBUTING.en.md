@@ -25,7 +25,7 @@ powershell -ExecutionPolicy Bypass -File .\build.ps1
 1. compiles `vmadapt\src` (the SSH transport module)
 2. compiles `aidev-project\src` (the plugin itself)
 3. checks every class is **major 55** (Java 11)
-4. runs the **regression tests** (78 at the moment) and the **vmadapt tests** (15)
+4. runs the **regression tests** (83 at the moment) and the **vmadapt tests** (16)
 5. produces `BioEnvCaller.plugin`
 
 **The gate has to be green before a commit**:
