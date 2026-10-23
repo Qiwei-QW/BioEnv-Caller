@@ -6,7 +6,7 @@
 
 [![release](https://img.shields.io/github/v/release/Qiwei-QW/BioEnv-Caller)](https://github.com/Qiwei-QW/BioEnv-Caller/releases) [![license](https://img.shields.io/github/license/Qiwei-QW/BioEnv-Caller)](LICENSE) [![stars](https://img.shields.io/github/stars/Qiwei-QW/BioEnv-Caller)](https://github.com/Qiwei-QW/BioEnv-Caller/stargazers)
 
-> **Download**: [Releases](https://github.com/Qiwei-QW/BioEnv-Caller/releases/latest) ｜ **License**: [MIT](LICENSE) ｜ **Build**: [build.ps1](build.ps1) ｜ **Design**: [DESIGN.md](DESIGN.md) ｜ **Changelog**: [CHANGELOG.md](CHANGELOG.md) ｜ **Contributing**: [CONTRIBUTING.en.md](CONTRIBUTING.en.md)
+> **Download**: [Releases](https://github.com/Qiwei-QW/BioEnv-Caller/releases/latest) ｜ **License**: [MIT](LICENSE) ｜ **Build**: [build.ps1](build.ps1) ｜ **Design**: [DESIGN.en.md](DESIGN.en.md) ｜ **Changelog**: [CHANGELOG.en.md](CHANGELOG.en.md) ｜ **Contributing**: [CONTRIBUTING.en.md](CONTRIBUTING.en.md)
 
 If you run bioinformatics tools on Linux, you have probably met the same wall: OrthoFinder takes 21 parameters and every one of them has to be picked out of a `[Default = xxx]` line; the help text is English and still leaves you unsure whether `-M` and `-A` have to go together; the data lives on Windows while the tools live on Linux; and after a few months away you have to read the help again. BioEnv Caller is built for exactly that.
 
@@ -291,7 +291,7 @@ There is one entry point:
 powershell -ExecutionPolicy Bypass -File .\build.ps1
 ```
 
-It compiles `vmadapt` and the plugin sources, checks every class is Java 11, runs **78 regression tests plus 15 vmadapt tests**, and produces `BioEnvCaller.plugin`. The gate has to be green before a commit. Design notes live in [DESIGN.md](DESIGN.md); contribution rules in [CONTRIBUTING.en.md](CONTRIBUTING.en.md).
+It compiles `vmadapt` and the plugin sources, checks every class is Java 11, runs **78 regression tests plus 15 vmadapt tests**, and produces `BioEnvCaller.plugin`. The gate has to be green before a commit. Design notes live in [DESIGN.en.md](DESIGN.en.md); contribution rules in [CONTRIBUTING.en.md](CONTRIBUTING.en.md).
 
 > The script looks for **JDK 11** in `TBTOOLS_HOME`, then `JAVA_HOME`, then the usual install locations (`D:\TBtools`, `C:\Program Files\*\jdk-11*`). If TBtools lives somewhere else, run `setx TBTOOLS_HOME "E:\TBtools"` first.
 

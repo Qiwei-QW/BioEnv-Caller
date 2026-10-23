@@ -1,9 +1,12 @@
 # 更新日志
 
+**中文** ｜ [English](CHANGELOG.en.md)
+
 ## 未发布 / Unreleased
 
 - **构建脚本不再假定 TBtools 装在 `D:\TBtools`**：根目录与 `vmadapt\` 下的两个 `build.ps1` 都按 `TBTOOLS_HOME` → `JAVA_HOME` → 常见安装位置查找 JDK 11，并逐个校验 `javac -version` 确实是 11；`TBTOOLS_JAR` / `TBTOOLS_HOME` 也可指定宿主 jar。找不到时给出可直接照做的提示。
-- **文档**：README / CONTRIBUTING 拆成中英两个文件，顶部一行可点击切换；README 图片改走 jsDelivr（`raw.githubusercontent.com` 在国内常不可达）。
+- **文档**：README、CONTRIBUTING 与新增的 DESIGN / CHANGELOG 都拆成中英两个文件，顶部一行可点击切换；README 图片改走 jsDelivr（`raw.githubusercontent.com` 在国内常不可达）。
+- **测试修正**：`ConnectionLayoutTest.findSource()` 的回退分支写死了 `ConnectionPanel.java`，从 `vmadapt\` 目录跑测试时会把它的源码当成 `UiText` 交给文案检查，3 条断言无故变红。
 
 ## v1.0.0 — 2026-10-19
 
