@@ -1,13 +1,7 @@
 package bioenv.core;
 
-import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
-import java.io.Writer;
-import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 
 /**
  * 记住上次用的是哪个连接方式。
@@ -56,6 +50,9 @@ public final class ConnectionModeStore {
     /**
      * 读取上次使用的连接方式。
      *
+     * <p>和以前一样：认不出来就回默认 WSL，不猜。区别只在于"文件坏了"这件事
+     * 不再静默——原文件会先备份成 {@code .bak}，界面上会有一行提示。
+     *
      * @return {@link #MODE_VM} 或 {@link #MODE_WSL}；文件缺失、损坏或内容无法
      *         识别时返回 {@link #MODE_WSL}
      */
@@ -63,34 +60,34 @@ public final class ConnectionModeStore {
         if (file == null || !file.isFile()) {
             return MODE_WSL;
         }
-        BufferedReader br = null;
-        try {
-            br = new BufferedReader(new InputStreamReader(
-                    new FileInputStream(file), Charset.forName("UTF-8")));
-            String line = br.readLine();
-            if (line == null) {
-                return MODE_WSL;
-            }
-            String v = line.trim().toLowerCase();
-            return MODE_VM.equals(v) ? MODE_VM : MODE_WSL;
-        } catch (Exception e) {
-            // 读不出来就当没记录过：一次错误的模式恢复比多切一次方式更烦人。
+        String text = AtomicFiles.read(file, StandardCharsets.UTF_8);
+        if (text == null) {
+            reportCorrupt();
             return MODE_WSL;
-        } finally {
-            if (br != null) {
-                try {
-                    br.close();
-                } catch (Exception ignored) {
-                    // 读已经结束，关不掉也无妨
-                }
-            }
         }
+        int nl = text.indexOf('\n');
+        String line = nl < 0 ? text : text.substring(0, nl);
+        String v = line.trim().toLowerCase();
+        if (MODE_VM.equals(v) || MODE_WSL.equals(v)) {
+            return v;
+        }
+        // 内容认不出来就是"这个文件坏了"（旧写法可能留下半行或空文件）。
+        // 行为不变（回 WSL，一个读不懂的文件不该把用户带到别的模式去），
+        // 但原文件先留一份 .bak，并报一次。
+        reportCorrupt();
+        return MODE_WSL;
+    }
+
+    /** 文件在、但读不出来（或内容不是 wsl/vm）：留 .bak + 报一次。 */
+    private void reportCorrupt() {
+        ConfigWarnings.readFailed(file, AtomicFiles.backup(file));
     }
 
     /**
      * 记住这次使用的方式。
      *
-     * <p>写失败不抛异常：记不住只是下次要多切一次，不该因此让界面报错。
+     * <p>写失败不抛异常：记不住只是下次要多切一次，不该因此让界面报错——但会
+     * 由 {@link AtomicFiles} 报一次，不再完全无声。
      *
      * @param mode {@link #MODE_VM} 或 {@link #MODE_WSL}
      */
@@ -98,26 +95,8 @@ public final class ConnectionModeStore {
         if (file == null) {
             return;
         }
-        File dir = file.getParentFile();
-        if (dir != null && !dir.isDirectory() && !dir.mkdirs()) {
-            return;
-        }
-        Writer w = null;
-        try {
-            w = new OutputStreamWriter(new FileOutputStream(file),
-                    Charset.forName("UTF-8"));
-            w.write(MODE_VM.equals(mode) ? MODE_VM : MODE_WSL);
-            w.write("\n");
-        } catch (Exception e) {
-            // 见方法注释：写不进去就静默放弃
-        } finally {
-            if (w != null) {
-                try {
-                    w.close();
-                } catch (Exception ignored) {
-                    // 同上
-                }
-            }
-        }
+        AtomicFiles.write(file,
+                (MODE_VM.equals(mode) ? MODE_VM : MODE_WSL) + "\n",
+                StandardCharsets.UTF_8);
     }
 }

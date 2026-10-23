@@ -1,12 +1,9 @@
 package bioenv.core;
 
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
+import java.io.StringReader;
+import java.io.StringWriter;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -63,6 +60,25 @@ public final class DiscoveryCache {
      * for; it is rewritten as version 3 on the next save.
      */
     private static final String FORMAT_VERSION = "3";
+
+    /**
+     * 文件里的计数上限，超过就当作文件坏了。
+     *
+     * <h2>为什么需要上限</h2>
+     *
+     * <p>缓存文件是"可以手工修的"（见类注释），所以其中的数字不能被信任：
+     * 一次截断或一个手误就能写出 {@code entryCount=2147483647}，读的时候照着它
+     * 循环，插件在启动路径上卡死几十秒；更坏的情况是照着计数分配，直接 OOM。
+     * 真实使用远达不到这些值（一台机器几十个环境、几千条命令），所以超限只能意味着
+     * "这个文件不是我们写的"——备份、报一次、按空缓存重扫。
+     */
+    private static final int MAX_ENTRIES = 200;
+    private static final int MAX_TOOLS_PER_ENTRY = 5000;
+    /** One schema cannot sanely hold more options/subcommands than this. */
+    private static final int MAX_OPTIONS = 5000;
+    private static final int MAX_SUBCOMMANDS = 1000;
+    /** A subcommand tree deeper than this is not a tool's help any more. */
+    private static final int MAX_SCHEMA_DEPTH = 20;
 
     private static final String K_VERSION = "formatVersion";
     private static final String K_ENTRY_COUNT = "entryCount";
@@ -206,21 +222,34 @@ public final class DiscoveryCache {
         if (file == null || !file.isFile()) {
             return out;
         }
-        Properties p = new Properties();
-        BufferedReader br = null;
-        try {
-            br = new BufferedReader(new InputStreamReader(
-                    new FileInputStream(file), "UTF-8"));
-            p.load(br);
-        } catch (Exception e) {
+        String text = AtomicFiles.read(file, StandardCharsets.UTF_8);
+        if (text == null) {
+            reportCorrupt();
             return out;
-        } finally {
-            close(br);
+        }
+        Properties p = new Properties();
+        try {
+            p.load(new StringReader(text));
+        } catch (Exception e) {
+            reportCorrupt();
+            return out;
         }
 
         String version = p.getProperty(K_VERSION);
         if (FORMAT_VERSION.equals(version)) {
-            int n = parseInt(p.getProperty(K_ENTRY_COUNT), 0);
+            String countText = p.getProperty(K_ENTRY_COUNT);
+            int n = countText == null ? 0 : countOf(countText);
+            if (n < 0 || n > MAX_ENTRIES) {
+                reportCorrupt();
+                return out;
+            }
+            // 计数来自文件，先验一遍再用它当循环上界。
+            for (int i = 0; i < n; i++) {
+                if (!toolsWithinBounds(p, "e" + i + ".")) {
+                    reportCorrupt();
+                    return out;
+                }
+            }
             for (int i = 0; i < n; i++) {
                 Data d = readEntry(p, "e" + i + ".");
                 if (d != null) {
@@ -228,14 +257,54 @@ public final class DiscoveryCache {
                 }
             }
         } else if ("2".equals(version)) {
+            if (!toolsWithinBounds(p, "")) {
+                reportCorrupt();
+                return out;
+            }
             Data d = readEntry(p, "");
             if (d != null) {
                 out.add(d);
             }
+        } else {
+            // 不是我们认识的格式（更旧、或更新的版本写的）。以前一律当空缓存，
+            // 而下一次保存就会把它覆盖掉——可这份文件里可能存着用户改过的帮助原文。
+            // 先留一份 .bak，再按空缓存重扫。
+            reportCorrupt();
         }
-        // Anything else was written by an incompatible version; ignored on
-        // purpose, because a rescan is cheap and a misread is not.
         return out;
+    }
+
+    /**
+     * 文件在、但读不出来（或其中的计数不可信）：先备份成 {@code .bak}，再报一次，
+     * 然后按空缓存继续。
+     *
+     * <p>缓存丢了可以重扫，但它同时是用户改过的帮助原文（rawHelp/originalHelp）
+     * 唯一的落盘位置，所以"当它不存在"之前必须把原文件留下来。
+     */
+    private void reportCorrupt() {
+        ConfigWarnings.readFailed(file, AtomicFiles.backup(file));
+    }
+
+    /** 条目里的 toolCount 是否可信（缺失表示没有这个条目，不算坏）。 */
+    private static boolean toolsWithinBounds(Properties p, String pre) {
+        String countText = p.getProperty(pre + K_TOOL_COUNT);
+        if (countText == null) {
+            return true;
+        }
+        int count = countOf(countText);
+        return count >= 0 && count <= MAX_TOOLS_PER_ENTRY;
+    }
+
+    /** 严格解析一个计数；不是整数时返回 -1（调用方据此判坏，而不是当成 0）。 */
+    private static int countOf(String text) {
+        if (text == null) {
+            return -1;
+        }
+        try {
+            return Integer.parseInt(text.trim());
+        } catch (NumberFormatException e) {
+            return -1;
+        }
     }
 
     /** Reads one entry; null when the entry is absent or unusable. */
@@ -301,20 +370,15 @@ public final class DiscoveryCache {
             i++;
         }
 
-        BufferedWriter bw = null;
+        StringWriter sw = new StringWriter();
         try {
-            File parent = file.getParentFile();
-            if (parent != null && !parent.exists()) {
-                parent.mkdirs();
-            }
-            bw = new BufferedWriter(new OutputStreamWriter(
-                    new FileOutputStream(file), "UTF-8"));
-            p.store(bw, "BioEnv Caller discovery cache");
-        } catch (Exception ignored) {
-            // A cache that cannot be written simply is not used next time.
-        } finally {
-            close(bw);
+            p.store(sw, "BioEnv Caller discovery cache");
+        } catch (Exception e) {
+            ConfigWarnings.writeFailed(file, e);
+            return;
         }
+        // 建目录、临时文件、原子替换都在 AtomicFiles 里；失败时它已经报过。
+        AtomicFiles.write(file, sw.toString(), StandardCharsets.UTF_8);
     }
 
     /** Deletes every channel's entry, forcing a rescan on the next start. */
@@ -396,6 +460,21 @@ public final class DiscoveryCache {
     }
 
     private static Schema readSchema(Properties p, String prefix) {
+        return readSchema(p, prefix, 0);
+    }
+
+    /**
+     * 带深度保护的读取。
+     *
+     * <p>子命令 schema 是递归存的（{@code sub.0.schema.sub.0.schema...}），一个
+     * 手工编辑出来的深层文件能把递归推得很深，最后以 StackOverflowError 结束——
+     * 那是 Error，不在"坏文件按空缓存处理"的 catch 范围内。超过
+     * {@link #MAX_SCHEMA_DEPTH} 就当这一支读不出来。
+     */
+    private static Schema readSchema(Properties p, String prefix, int depth) {
+        if (depth > MAX_SCHEMA_DEPTH) {
+            return null;
+        }
         String countText = p.getProperty(prefix + "optionCount");
         if (countText == null && p.getProperty(prefix + "parsed") == null) {
             return null; // this tool was never probed
@@ -418,6 +497,10 @@ public final class DiscoveryCache {
         addAll(s.groups, split(orEmpty(p.getProperty(prefix + "groups"))));
 
         int count = parseInt(p.getProperty(prefix + "optionCount"), 0);
+        if (count > MAX_OPTIONS) {
+            // 计数来自文件；宁可截断循环也不拿它当上界，否则一个手误就能卡住启动。
+            count = MAX_OPTIONS;
+        }
         for (int i = 0; i < count; i++) {
             String q = prefix + "opt." + i + ".";
             String flag = orEmpty(p.getProperty(q + "flag"));
@@ -439,12 +522,15 @@ public final class DiscoveryCache {
         }
 
         int subCount = parseInt(p.getProperty(prefix + "subCount"), 0);
+        if (subCount > MAX_SUBCOMMANDS) {
+            subCount = MAX_SUBCOMMANDS;
+        }
         for (int j = 0; j < subCount; j++) {
             String q = prefix + "sub." + j + ".";
             Schema.Subcommand sc = new Schema.Subcommand();
             sc.name = orEmpty(p.getProperty(q + "name"));
             sc.description = orEmpty(p.getProperty(q + "description"));
-            sc.schema = readSchema(p, q + "schema.");
+            sc.schema = readSchema(p, q + "schema.", depth + 1);
             s.subcommands.add(sc);
         }
         return s;
@@ -543,15 +629,5 @@ public final class DiscoveryCache {
 
     private static String orEmpty(String s) {
         return s == null ? "" : s;
-    }
-
-    private static void close(java.io.Closeable c) {
-        if (c != null) {
-            try {
-                c.close();
-            } catch (Exception ignored) {
-                // nothing useful to do
-            }
-        }
     }
 }

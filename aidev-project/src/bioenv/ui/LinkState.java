@@ -2,9 +2,9 @@ package bioenv.ui;
 
 import java.io.File;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+
+import bioenv.core.AtomicFiles;
+import bioenv.core.ConfigWarnings;
 
 /**
  * 「这台机器上是否成功连接过 Linux 虚拟机」的持久记录。
@@ -86,11 +86,23 @@ final class LinkState {
     /**
      * 是否曾经连接成功过。
      *
-     * @return true 表示连成功过（标记文件存在）；任何读取异常都返回 false
+     * <p>判断依据仍然是"标记文件在不在"（见类注释：内容没有信息量）。但
+     * "文件在却读不出来"是另一回事：按"没连过"处理，同时报一次并留一份
+     * {@code .bak}，而不是静默把用户送回引导流程。
+     *
+     * @return true 表示连成功过（标记文件存在且可读）；任何读取异常都返回 false
      */
     static boolean hasEverConnected() {
         try {
-            return file != null && file.isFile();
+            File f = file;
+            if (f == null || !f.isFile()) {
+                return false;
+            }
+            if (AtomicFiles.read(f, StandardCharsets.UTF_8) != null) {
+                return true;
+            }
+            ConfigWarnings.readFailed(f, AtomicFiles.backup(f));
+            return false;
         } catch (RuntimeException e) {
             return false;
         }
@@ -99,7 +111,8 @@ final class LinkState {
     /**
      * 记录"连接成功过"。
      *
-     * <p>幂等：重复调用只是重复写同一个空文件。写失败不影响本次会话。
+     * <p>幂等：重复调用只是重复写同一个标记文件。写失败不影响本次会话——
+     * 原子替换与失败提示由 {@link AtomicFiles} 负责，不会再无声无息。
      */
     static void markConnected() {
         try {
@@ -107,15 +120,10 @@ final class LinkState {
             if (f == null) {
                 return;
             }
-            File dir = f.getParentFile();
-            if (dir != null && !dir.exists()) {
-                dir.mkdirs();
-            }
-            Path p = Paths.get(f.getAbsolutePath());
-            // 内容为空且带一行换行：文件是给人看的，空文件在某些编辑器里会被
+            // 内容带一行换行：文件是给人看的，空文件在某些编辑器里会被
             // 当成"没能写入"。用 UTF-8 显式写出，避免平台默认编码参与。
-            Files.write(p, "linked\n".getBytes(StandardCharsets.UTF_8));
-        } catch (Exception ignored) {
+            AtomicFiles.write(f, "linked\n", StandardCharsets.UTF_8);
+        } catch (RuntimeException ignored) {
             // 见类注释：写不进去只影响下次启动的引导。
         }
     }

@@ -1,15 +1,12 @@
 package bioenv.ai;
 
-import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
-import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+
+import bioenv.core.AtomicFiles;
+import bioenv.core.ConfigWarnings;
 
 /**
  * AI 模型列表：用户配好的若干个 OpenAI 兼容接口。
@@ -30,6 +27,15 @@ import java.util.List;
 public final class AiModelStore {
 
     private static final String FILE_NAME = "ai-models.properties";
+
+    /**
+     * 文件里允许出现的模型条数上限。
+     *
+     * <p>解析时下标直接决定分配多少个对象。一次截断或一个手误（{@code m50000000.name=x}）
+     * 就能让打开设置窗口时分配上千万个对象、直接 OOM；真实使用不可能配这么多条，
+     * 所以超限只能意味着"这个文件不是我们写的"：备份、报一次、按没配过继续。
+     */
+    private static final int MAX_MODELS = 1000;
 
     /** 一条配置。 */
     public static final class Model {
@@ -159,14 +165,17 @@ public final class AiModelStore {
         if (f == null || !f.isFile()) {
             return out;
         }
-        BufferedReader r = null;
+        String text = AtomicFiles.read(f, StandardCharsets.UTF_8);
+        if (text == null) {
+            corrupted(f);
+            return new AiModelStore();
+        }
         try {
-            r = new BufferedReader(new InputStreamReader(
-                    new FileInputStream(f), StandardCharsets.UTF_8));
-            String line;
+            String[] lines = text.split("\r?\n");
             int count = -1;
             List<Model> buf = new ArrayList<Model>();
-            while ((line = r.readLine()) != null) {
+            for (int li = 0; li < lines.length; li++) {
+                String line = lines[li];
                 int eq = line.indexOf('=');
                 if (eq < 0) {
                     continue;
@@ -174,11 +183,12 @@ public final class AiModelStore {
                 String k = line.substring(0, eq).trim();
                 String v = unescape(line.substring(eq + 1));
                 if ("count".equals(k)) {
-                    try {
-                        count = Integer.parseInt(v.trim());
-                    } catch (NumberFormatException e) {
-                        count = -1;
+                    int declared = strictInt(v);
+                    if (declared < 0 || declared > MAX_MODELS) {
+                        corrupted(f);
+                        return new AiModelStore();
                     }
+                    count = declared;
                     continue;
                 }
                 if (!k.startsWith("m")) {
@@ -192,7 +202,13 @@ public final class AiModelStore {
                 try {
                     idx = Integer.parseInt(k.substring(1, dot));
                 } catch (NumberFormatException e) {
+                    // 不是我们写的字段（例如将来加的 mN.xxx 之外的键），忽略即可。
                     continue;
+                }
+                if (idx < 0 || idx > MAX_MODELS) {
+                    // 计数来自文件，不能拿它当分配上界。
+                    corrupted(f);
+                    return new AiModelStore();
                 }
                 while (idx >= buf.size()) {
                     buf.add(new Model());
@@ -218,44 +234,58 @@ public final class AiModelStore {
                 out.models.add(buf.get(i));
             }
         } catch (Exception e) {
-            // 读不出来就当没配过 —— 配置是锦上添花，不能是唯一的失败点。
+            // 读不出来就当没配过 —— 但先把原文件留一份 .bak，并报一次。
+            corrupted(f);
             return new AiModelStore();
-        } finally {
-            close(r);
         }
         return out;
     }
 
-    /** 写盘。失败不抛，设置改不动比存不下更让人困惑。 */
+    /**
+     * 文件在、但读不出来（或其中的数字不可信）：先备份成 {@code .bak}，再报一次。
+     *
+     * <p>这一份文件里是用户的接口地址、模型名和 key，不能像以前那样"读不出来就当
+     * 没配过"，然后在下一次保存时把原文件覆盖掉。
+     */
+    private static void corrupted(File f) {
+        ConfigWarnings.readFailed(f, AtomicFiles.backup(f));
+    }
+
+    /** 严格解析一个整数；不是整数时返回 -1（调用方据此判坏，而不是当成 0）。 */
+    private static int strictInt(String s) {
+        if (s == null) {
+            return -1;
+        }
+        try {
+            return Integer.parseInt(s.trim());
+        } catch (NumberFormatException e) {
+            return -1;
+        }
+    }
+
+    /**
+     * 写盘。失败不抛（设置改不动比存不下更让人困惑），但会由 {@link AtomicFiles}
+     * 报一次，并且旧文件在新内容完整落盘前不受影响。
+     */
     public void save() {
         File f = file();
         if (f == null) {
             return;
         }
-        File dir = f.getParentFile();
-        if (dir != null && !dir.isDirectory() && !dir.mkdirs()) {
-            return;
+        StringBuilder sb = new StringBuilder();
+        sb.append("# BioEnv Caller AI models\n");
+        sb.append("count=").append(models.size()).append('\n');
+        for (int i = 0; i < models.size(); i++) {
+            Model m = models.get(i);
+            sb.append("m").append(i).append(".name=").append(escape(m.name)).append('\n');
+            sb.append("m").append(i).append(".baseUrl=").append(escape(m.baseUrl)).append('\n');
+            sb.append("m").append(i).append(".apiKey=").append(escape(m.apiKey)).append('\n');
+            sb.append("m").append(i).append(".model=").append(escape(m.model)).append('\n');
+            sb.append("m").append(i).append(".maxOut=").append(m.maxOut).append('\n');
+            sb.append("m").append(i).append(".maxIn=").append(m.maxIn).append('\n');
         }
-        Writer w = null;
-        try {
-            w = new OutputStreamWriter(new FileOutputStream(f), StandardCharsets.UTF_8);
-            w.write("# BioEnv Caller AI models\n");
-            w.write("count=" + models.size() + "\n");
-            for (int i = 0; i < models.size(); i++) {
-                Model m = models.get(i);
-                w.write("m" + i + ".name=" + escape(m.name) + "\n");
-                w.write("m" + i + ".baseUrl=" + escape(m.baseUrl) + "\n");
-                w.write("m" + i + ".apiKey=" + escape(m.apiKey) + "\n");
-                w.write("m" + i + ".model=" + escape(m.model) + "\n");
-                w.write("m" + i + ".maxOut=" + m.maxOut + "\n");
-                w.write("m" + i + ".maxIn=" + m.maxIn + "\n");
-            }
-            w.flush();
-        } catch (Exception e) {
-            // 同上。
-        } finally {
-            close(w);
-        }
+        // 建目录、临时文件、原子替换都在 AtomicFiles 里；失败时它已经报过。
+        AtomicFiles.write(f, sb.toString(), StandardCharsets.UTF_8);
     }
 
     /**
@@ -353,16 +383,6 @@ public final class AiModelStore {
             }
         }
         return b.toString();
-    }
-
-    private static void close(java.io.Closeable c) {
-        if (c != null) {
-            try {
-                c.close();
-            } catch (Exception ignored) {
-                // 关不上没什么可做的。
-            }
-        }
     }
 
     private static File file() {

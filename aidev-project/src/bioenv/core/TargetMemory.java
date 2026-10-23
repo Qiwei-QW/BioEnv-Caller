@@ -1,10 +1,9 @@
 package bioenv.core;
 
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.InputStream;
-import java.io.OutputStream;
+import java.io.StringReader;
+import java.io.StringWriter;
+import java.nio.charset.StandardCharsets;
 import java.util.Properties;
 
 /**
@@ -54,14 +53,24 @@ public final class TargetMemory {
         return file;
     }
 
-    /** 上次用的 WSL 发行版；没有则返回空串。 */
+    /** 上次用的 WSL 发行版；没有或读不出来则返回空串。 */
     public String wslDistro() {
-        return read().getProperty(KEY_WSL, "").trim();
+        Properties p = read();
+        if (p == null) {
+            reportUnreadable();
+            return "";
+        }
+        return p.getProperty(KEY_WSL, "").trim();
     }
 
-    /** 上次用的虚拟机配置名；没有则返回空串。 */
+    /** 上次用的虚拟机配置名；没有或读不出来则返回空串。 */
     public String vmProfile() {
-        return read().getProperty(KEY_VM, "").trim();
+        Properties p = read();
+        if (p == null) {
+            reportUnreadable();
+            return "";
+        }
+        return p.getProperty(KEY_VM, "").trim();
     }
 
     /** 记住这次用的 WSL 发行版。 */
@@ -74,58 +83,62 @@ public final class TargetMemory {
         put(KEY_VM, name);
     }
 
+    /**
+     * 读全部记录。
+     *
+     * <p>这里把"文件不存在"和"文件在但读不出来"分开：前者是全新环境（空记录），
+     * 后者必须让调用方知道，否则一次读失败之后的那次写入会把另一个键一起抹掉。
+     *
+     * @return 记录；文件不存在时是空 Properties，文件在但读不出来时是 null
+     */
     private Properties read() {
-        Properties p = new Properties();
         if (file == null || !file.isFile()) {
-            return p;
-        }
-        InputStream in = null;
-        try {
-            in = new FileInputStream(file);
-            p.load(in);
-        } catch (Exception e) {
-            // 读不出来就当没记住：多问用户一次，好过按一个读坏的记录乱挑。
             return new Properties();
-        } finally {
-            close(in);
+        }
+        String text = AtomicFiles.read(file, StandardCharsets.UTF_8);
+        if (text == null) {
+            return null;
+        }
+        Properties p = new Properties();
+        try {
+            p.load(new StringReader(text));
+        } catch (Exception e) {
+            return null;
         }
         return p;
+    }
+
+    /** 文件在、但读不出来：留一份 .bak 并报一次，读的一方按"没记住"继续。 */
+    private void reportUnreadable() {
+        ConfigWarnings.readFailed(file, AtomicFiles.backup(file));
     }
 
     /**
      * 写入一个键，另一个键原样保留 —— 换 WSL 发行版不该把虚拟机的记录抹掉。
      *
-     * <p>写失败静默放弃：记不住只是下次多问一次，不该让界面报错。
+     * <p>读不出来时<b>不写</b>：拿一份空的 Properties 去写，等于把另一个键一起抹掉，
+     * 而"另一个键"很可能正是用户上次选的虚拟机。改成留 .bak、报一次、放弃这次记忆。
      */
     private void put(String key, String value) {
         if (file == null) {
             return;
         }
         Properties p = read();
-        p.setProperty(key, value == null ? "" : value.trim());
-
-        File dir = file.getParentFile();
-        if (dir != null && !dir.isDirectory() && !dir.mkdirs()) {
+        if (p == null) {
+            reportUnreadable();
+            ConfigWarnings.reportOnce("配置读不出来，这次选中的目标没有记住（未覆盖原文件）："
+                    + file.getAbsolutePath());
             return;
         }
-        OutputStream out = null;
+        p.setProperty(key, value == null ? "" : value.trim());
+        StringWriter sw = new StringWriter();
         try {
-            out = new FileOutputStream(file);
-            p.store(out, "BioEnv Caller last used target");
+            p.store(sw, "BioEnv Caller last used target");
         } catch (Exception e) {
-            // 见方法注释
-        } finally {
-            close(out);
+            ConfigWarnings.writeFailed(file, e);
+            return;
         }
-    }
-
-    private static void close(java.io.Closeable c) {
-        if (c != null) {
-            try {
-                c.close();
-            } catch (Exception ignored) {
-                // 没别的可做
-            }
-        }
+        // 建目录、临时文件、原子替换都在 AtomicFiles 里；失败时它已经报过。
+        AtomicFiles.write(file, sw.toString(), StandardCharsets.UTF_8);
     }
 }
