@@ -10,7 +10,7 @@
 |---|---|
 | 系统 | Windows 10 / 11 x64 |
 | TBtools | **2.558 以上**（AI 助手依赖内置模型桥） |
-| JDK | **11**，直接用 TBtools 自带的 `jre`（`build.ps1` 按 `TBTOOLS_HOME` → `JAVA_HOME` → 常见路径查找；TBtools 不在 D 盘时设 `TBTOOLS_HOME`） |
+| JDK | **11** —— 用 TBtools 自带的 `jre` 即可；`build.ps1` 自动定位（`TBTOOLS_HOME` → `JAVA_HOME` → 常见安装位置），并校验 `javac` 确实是 11 |
 | 运行环境 | 本机 WSL，或一台能 SSH 的 Linux 主机 |
 
 ## 构建与测试

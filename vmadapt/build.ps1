@@ -4,10 +4,10 @@
 #  Standalone module. It is NOT part of the BioEnv Caller plugin and it
 #  never touches that tree; it compiles on its own classpath.
 #
-#  Deliberately compiles with the JDK bundled with TBtools (D:\TBtools\jre,
-#  javac 11.0.6) so the class-file version is 55 by construction. A JAR
-#  built by a newer javac (this machine also has JDK 26) would be refused
-#  at load time by TBtools' runtime with UnsupportedClassVersionError.
+#  Compiles with a JDK 11 toolchain -- normally the jre/ that ships with
+#  TBtools, but any JDK 11 will do (see the search below). The class-file
+#  version must stay 55: a JAR built by a newer javac would be refused at
+#  load time by TBtools' runtime with UnsupportedClassVersionError.
 #
 #  Usage:  powershell -ExecutionPolicy Bypass -File .\build.ps1
 # =====================================================================
@@ -19,21 +19,39 @@ $SrcDir     = Join-Path $Root 'src'
 $BuildDir   = Join-Path $Root 'build'
 $ClassesDir = Join-Path $BuildDir 'classes'
 
-# --- locate the JDK 11 toolchain -------------------------------------
-$Candidates = @(
+# --- locate a Java 11 toolchain -------------------------------------
+# Same search as the root build.ps1: TBTOOLS_HOME (the folder that holds jre\),
+# then JAVA_HOME, then the usual install locations, so TBtools installed
+# somewhere other than D:\ still works. A candidate only wins if its javac
+# really reports version 11 -- a stray JDK 17 must not be picked up, or every
+# class would come out as major 61.
+$Candidates = @()
+if ($env:TBTOOLS_HOME) { $Candidates += (Join-Path $env:TBTOOLS_HOME 'jre') }
+if ($env:JAVA_HOME)    { $Candidates += $env:JAVA_HOME }
+$Candidates += @(
     'D:\TBtools\jre',
+    'C:\TBtools\jre',
     'C:\Program Files\Eclipse Adoptium\jdk-11*',
-    'C:\Program Files\Java\jdk-11*'
+    'C:\Program Files\Java\jdk-11*',
+    'C:\Program Files\Microsoft\jdk-11*'
 )
 $JdkHome = $null
 foreach ($c in $Candidates) {
-    $resolved = Get-Item $c -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($resolved) {
+    if (-not $c) { continue }
+    foreach ($resolved in (Get-Item $c -ErrorAction SilentlyContinue)) {
         $javac = Join-Path $resolved.FullName 'bin\javac.exe'
-        if (Test-Path $javac) { $JdkHome = $resolved.FullName; break }
+        if (-not (Test-Path $javac)) { continue }
+        if (((& $javac -version 2>&1) -join ' ') -match 'javac 11\.') {
+            $JdkHome = $resolved.FullName
+            break
+        }
     }
+    if ($JdkHome) { break }
 }
-if (-not $JdkHome) { throw "No JDK 11 found. TBtools ships one at D:\TBtools\jre." }
+if (-not $JdkHome) {
+    throw ("No JDK 11 found. Set TBTOOLS_HOME to your TBtools folder (it ships jre\), " +
+           "or set JAVA_HOME to a JDK 11.")
+}
 
 $Javac = Join-Path $JdkHome 'bin\javac.exe'
 $Java  = Join-Path $JdkHome 'bin\java.exe'

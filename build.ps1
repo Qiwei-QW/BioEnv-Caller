@@ -14,15 +14,10 @@
 #  vendoring a second implementation. Its classes are also packaged into
 #  the output JAR so the plugin stays self-contained.
 #
-#  Compiles with TBtools' bundled JDK 11 (D:\TBtools\jre, javac 11.0.6) so
-#  the class-file version is 55 by construction. A JAR built by the JDK 26
-#  also installed on this machine would be refused at load time with
-#  UnsupportedClassVersionError.
-#
-#  Compiles with TBtools' bundled JDK 11 (D:\TBtools\jre, javac 11.0.6) so
-#  the class-file version is 55 by construction. A JAR built by the JDK 26
-#  also installed on this machine would be refused at load time with
-#  UnsupportedClassVersionError.
+#  Compiles with a JDK 11 toolchain -- normally the jre/ that ships with
+#  TBtools, but any JDK 11 will do (see the search below). The class-file
+#  version must stay 55: a JAR built by a newer javac would be refused at
+#  load time with UnsupportedClassVersionError.
 #
 #  Usage:  powershell -ExecutionPolicy Bypass -File .\build.ps1
 # =====================================================================

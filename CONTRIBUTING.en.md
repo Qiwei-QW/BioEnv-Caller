@@ -10,7 +10,7 @@ Issues and pull requests are welcome. The goal is to let people who are not comf
 |---|---|
 | OS | Windows 10 / 11 x64 |
 | TBtools | **2.558 or newer** (the AI assistant needs the built-in model bridge) |
-| JDK | **11** — use the `jre` that ships with TBtools; `build.ps1` looks in `TBTOOLS_HOME`, then `JAVA_HOME`, then the usual paths (set `TBTOOLS_HOME` if TBtools is not at `D:\TBtools`) |
+| JDK | **11** — the `jre` bundled with TBtools is fine; `build.ps1` locates it automatically (`TBTOOLS_HOME` → `JAVA_HOME` → usual install locations) and checks that `javac` really is 11 |
 | Runtime | local WSL, or a Linux host reachable over SSH |
 
 ## Build and test
