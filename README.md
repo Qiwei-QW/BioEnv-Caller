@@ -4,7 +4,7 @@
 
 **通用性**：插件包内不含任何工具清单。装了什么就能用什么，加新工具不需要改代码。
 
-> **版本** v1.0.0 ｜ **许可证** [MIT](LICENSE) ｜ **下载** [Releases](../../releases) ｜ **使用说明** [使用说明.md](使用说明.md) ｜ **更新日志** [CHANGELOG.md](CHANGELOG.md)
+> **版本** v1.0.0 ｜ **许可证** [MIT](LICENSE) ｜ **下载** [Releases](../../releases) ｜ **使用说明** [help.md](help.md) ｜ **更新日志** [CHANGELOG.md](CHANGELOG.md)
 >
 > 只想装上用：下载 Release 里的 `BioEnvCaller.plugin`，解压到 TBtools 插件目录即可（见[安装](#安装)）。
 > 想改代码：`build.ps1` 是唯一入口，详见[构建](#构建)。
@@ -115,8 +115,8 @@ BioEnvCaller\
 │       ├─ test\                自带测试，全部纳入构建门禁（纯 main()，不依赖 JUnit）
 │       └─ tools\               调查/调试用 main()，编译但不打包、不入门禁
 ├─ vmadapt\                     SSH 传输模块（独立可编译，产物并入同一 JAR）
-├─ docs\img\                    使用说明里的十张标注图
-├─ 使用说明.md                   完整图文使用手册
+├─ docs\img\                    使用帮助里的十张标注图（help.md 已内嵌一份）
+├─ help.md                      完整图文使用帮助
 ├─ DESIGN.md                    设计决策记录（为什么这样解析、这样排版）
 ├─ CHANGELOG.md                 版本更新日志
 └─ LICENSE                      MIT
