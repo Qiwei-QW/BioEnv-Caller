@@ -264,6 +264,14 @@ public final class MainPanel extends JPanel {
      * 那个是"跑一段、收输出"，这个要能来回。
      */
     private volatile Process interactiveProcess;
+    /**
+     * 交互运行的代次：停止、开始新一轮都会 +1。
+     *
+     * <p>启动交互要先把脚本写进远端，那一步是异步的。用户完全可能「点了交互运行，
+     * 还没等进程起来就点停止」——那时 {@link #interactiveProcess} 还是 null，
+     * 不记代次的话写脚本的 worker 回来照样把进程拉起来，停止就等于没点。
+     */
+    private int interactiveGeneration;
     /** "输出"标题：和清空按钮同处一行。 */
     private JLabel logTitle;
     /**
@@ -334,6 +342,37 @@ public final class MainPanel extends JPanel {
     private Tool selected;
     private Runner.Job currentJob;
     private boolean introspecting;
+
+    /**
+     * 最近一次跑完的非交互运行：退出码 + 输出尾部。给 AI 上下文用；没跑过是 null。
+     *
+     * <p>页面 {@code ctxText()} 会读 {@code lastRun}，以前这一项根本没有 ——
+     * 于是"解释上次为什么失败"那个入口永远没有素材。这里在 {@code done()} 里
+     * 把结果记下来，并立刻再推一次上下文。
+     */
+    private volatile bioenv.ai.AiContext.RunInfo lastRun;
+
+    /** 本次运行已经产生的输出尾部；只留最后 {@link #RUN_TAIL_KEEP} 字符。 */
+    private final StringBuilder runOutputTail = new StringBuilder();
+
+    /** 交给 AI 的输出尾部上限（字符）；与 {@code AiContext.RUN_TAIL_MAX} 同一量级。 */
+    private static final int RUN_TAIL_KEEP = 4000;
+
+    /**
+     * 预览改动后延迟重推一次 AI 上下文。
+     *
+     * <p>只在"工具选中"和"运行结束"时推，用户改完参数再问"这条命令对吗"，
+     * 模型看到的还是上一次推过去的命令与参数表——而"当前拼出的命令"恰恰是这个
+     * 插件最该说清楚的东西。逐键推又太贵（上下文里有整段 help，最长 18000 字符），
+     * 所以在最后一次改动之后等一会儿再推。
+     */
+    private final javax.swing.Timer aiContextPushTimer = new javax.swing.Timer(1200,
+            new java.awt.event.ActionListener() {
+                @Override
+                public void actionPerformed(java.awt.event.ActionEvent e) {
+                    pushAiContext();
+                }
+            });
 
     /**
      * SSH 方式下用户选中的连接；WSL 方式下为 null。
@@ -433,6 +472,25 @@ public final class MainPanel extends JPanel {
      * 输出没跑东西时是空的，那四十像素在它那里闲着，在参数区却正好是一行。
      */
     private static final int LOG_HEIGHT_PX = 120;
+
+    /**
+     * 输出文档的硬上限（字符）。超过就裁掉最前面一段，见 {@link #trimLogIfNeeded()}。
+     *
+     * <p>不设上限的话，一次长比对能往 {@code JTextArea} 里 append 几十兆字符：
+     * document 越大，每次插入和重绘越慢，最后界面会卡到没法操作，而用户真正要看的
+     * 只是最后那几屏。
+     */
+    private static final int LOG_MAX_CHARS = 400000;
+
+    /** 裁剪之后保留的末尾字符数。留得比上限小，免得每 append 一行就裁一次。 */
+    private static final int LOG_KEEP_CHARS = 300000;
+
+    /** 裁剪时插在最前面的那一行：截断这件事必须让用户看见，不能悄悄发生。 */
+    private static final String LOG_TRIM_NOTICE =
+            "…（前面的输出已截断，保留最后 300,000 字符）";
+
+    /** 对话框里"这一格填错了"的颜色；正常提示仍跟主题走（灰）。 */
+    private static final java.awt.Color ERROR_FG = new java.awt.Color(0xC0, 0x39, 0x2B);
 
     /** 一个组件在某个方向上的最小尺寸；没设就是 0。 */
     private static int minimumOf(java.awt.Component c, boolean horizontal) {
@@ -692,6 +750,10 @@ public final class MainPanel extends JPanel {
     }
 
     public MainPanel() {
+        // 配置写盘失败的提示要能从这一刻起就出现在输出面板里：构造期间就会读缓存/
+        // 配置，读不出来或写不进去时，用户不该只在 stderr 里才看得到原因。
+        bioenv.core.ConfigWarnings.setSink(configWarningSink);
+        aiContextPushTimer.setRepeats(false);
         setLayout(new BorderLayout(6, 6));
         UiTheme.loadOnce();
         setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
@@ -971,6 +1033,12 @@ public final class MainPanel extends JPanel {
      * stale entry would still be invoked on every language switch.
      */
     public void dispose() {
+        // 交互进程不属于 currentJob（它没有 marker、也不走 Runner），窗口关掉之后
+        // 再没有人能停它；留着就是后台一直挂着一个工具进程。
+        stopInteractiveRun();
+        // 面板已经没了，配置失败的消息不该再往这套组件里写。
+        bioenv.core.ConfigWarnings.setSink(null);
+        aiContextPushTimer.stop();
         I18n.removeListener(languageRefresh);
         langToggle.dispose();
     }
@@ -2166,6 +2234,34 @@ public final class MainPanel extends JPanel {
         final javax.swing.JTextField maxOutF = new javax.swing.JTextField(
                 bioenv.ai.AiModelStore.formatLen(m.maxOut), 10);
         final boolean[] ok = {false};
+        // 地址填错时就地显示在这一行，不弹第二个窗：用户正在填的就是上面那一格，
+        // 弹窗还得先关掉它才能改。
+        final JLabel urlError = new JLabel(" ");
+        UiTheme.role(urlError, "muted");
+        urlError.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+        // 一改地址就把旧提示清掉 —— 否则用户已经改对了，屏幕上还挂着刚才那句错。
+        urlF.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            @Override
+            public void insertUpdate(javax.swing.event.DocumentEvent e) {
+                clearUrlError();
+            }
+
+            @Override
+            public void removeUpdate(javax.swing.event.DocumentEvent e) {
+                clearUrlError();
+            }
+
+            @Override
+            public void changedUpdate(javax.swing.event.DocumentEvent e) {
+                clearUrlError();
+            }
+
+            private void clearUrlError() {
+                if (urlError.getText() != null && !urlError.getText().trim().isEmpty()) {
+                    urlError.setText(" ");
+                }
+            }
+        });
 
         JPanel form = new JPanel();
         form.setLayout(new javax.swing.BoxLayout(form, javax.swing.BoxLayout.Y_AXIS));
@@ -2179,6 +2275,7 @@ public final class MainPanel extends JPanel {
         form.add(javax.swing.Box.createVerticalStrut(6));
         form.add(mutedLabel(I18n.t(Strings.AI_MODEL_URL)));
         form.add(urlF);
+        form.add(urlError);
         form.add(javax.swing.Box.createVerticalStrut(6));
         form.add(mutedLabel(I18n.t(Strings.AI_MODEL_KEY)));
         form.add(keyF);
@@ -2208,8 +2305,26 @@ public final class MainPanel extends JPanel {
         save.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
+                // 接口地址：填了就校验并归一化；空着仍可以保存 —— 灰点已经表示
+                // "配置不完整"，很多人是先建一条再回来补地址。
+                //
+                // 不自动补协议：补 https 还是 http 是用户的决定，猜错等于把 API key
+                // 发到另一个协议上。校验失败只更新这一行提示，不弹窗、不关闭对话框，
+                // 也不写回 m。
+                String urlRaw = urlF.getText();
+                if (urlRaw.trim().length() > 0) {
+                    String urlProblem = bioenv.ai.EndpointUrl.error(urlRaw);
+                    if (urlProblem != null) {
+                        urlError.setText(urlProblem);
+                        urlError.setForeground(ERROR_FG);
+                        urlF.requestFocusInWindow();
+                        return;
+                    }
+                    m.baseUrl = bioenv.ai.EndpointUrl.normalize(urlRaw);
+                } else {
+                    m.baseUrl = "";
+                }
                 m.name = nameF.getText().trim();
-                m.baseUrl = urlF.getText().trim();
                 m.apiKey = new String(keyF.getPassword()).trim();
                 m.model = modelF.getText().trim();
                 int inVal = bioenv.ai.AiModelStore.parseLen(maxInF.getText());
@@ -2402,16 +2517,19 @@ public final class MainPanel extends JPanel {
         commandArea.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
             @Override
             public void insertUpdate(javax.swing.event.DocumentEvent e) {
+                scheduleAiContextPush();
                 noteEdited();
             }
 
             @Override
             public void removeUpdate(javax.swing.event.DocumentEvent e) {
+                scheduleAiContextPush();
                 noteEdited();
             }
 
             @Override
             public void changedUpdate(javax.swing.event.DocumentEvent e) {
+                scheduleAiContextPush();
                 noteEdited();
             }
         });
@@ -3111,10 +3229,15 @@ public final class MainPanel extends JPanel {
         stopButton.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
+                // 交互运行不走 Runner.Job，所以原来的实现点了停止对它是空操作：
+                // 进程继续跑，用户以为停了。两种运行都要停。
+                boolean stoppedInteractive = stopInteractiveRun();
                 Runner.Job job = currentJob;
                 if (job != null) {
                     job.cancel();
                     setStatusKey(Strings.STATUS_CANCELLING);
+                } else if (stoppedInteractive) {
+                    setStatusKey(Strings.STATUS_CANCELLED);
                 }
             }
         });
@@ -4100,14 +4223,6 @@ public final class MainPanel extends JPanel {
     }
 
     /**
-     * 把当前工具的原始帮助 / 工作目录推给最左侧的 AI 助手。
-     *
-     * <p>帮助文本是这个插件<b>独有</b>的上下文：网页版 AI 拿不到，而
-     * {@code DiscoveryCache} 里现成缓存着。用户以前得手工粘贴，现在换工具就有。
-     *
-     * <p>整个方法吞掉所有异常：AI 那一栏拿不到上下文，<b>不能影响选工具本身</b>。
-     */
-    /**
      * 这台机器上可用的工具名，一行。还没扫描时返回空串。
      *
      * <p>用 {@code Tool.command} 而不是映像的键：名字就是用户会输进命令行的
@@ -4138,8 +4253,28 @@ public final class MainPanel extends JPanel {
         }
     }
 
-    private void pushAiContext() {
-        if (aiAssist == null || formPanel == null) {
+    /** 预览改动之后把"重推上下文"排到 1.2 秒后；连续输入只会推最后一次。 */
+    private void scheduleAiContextPush() {
+        if (aiAssist == null) {
+            return;
+        }
+        aiContextPushTimer.restart();
+    }
+
+    /**
+     * 把当前工具、命令、参数、上次运行推给最左侧的 AI 助手。
+     *
+     * <p>帮助文本是这个插件<b>独有</b>的上下文：网页版 AI 拿不到，而
+     * {@code DiscoveryCache} 里现成缓存着。用户以前得手工粘贴，现在换工具就有。
+     *
+     * <p>页面 {@code ctxText()} 还会读 {@code command / options / lastRun / mode}。
+     * 这几项以前要么传空串、要么根本不存在，于是文档承诺的"命令、参数表、上次运行
+     * 会自动带上"没有兑现。这里补齐；参数只带用户真正表达过的（{@code contributes()}），
+     * 没填的默认值不该被当成命令的一部分（DESIGN.md P12）。
+     *
+     * <p>整个方法吞掉所有异常：AI 那一栏拿不到上下文，<b>不能影响选工具本身</b>。
+     */
+    private void pushAiContext() {        if (aiAssist == null || formPanel == null) {
             return;
         }
         try {
@@ -4155,13 +4290,32 @@ public final class MainPanel extends JPanel {
                         + "\n（只列了名字。用户问到别的工具时，只能从这个清单里挑；"
                         + "清单里没有的，就说这台机器上没有，不要编。）");
             }
+            // 已填/已选的参数。单独 try 一层：表单还没建好或已经拆掉时，
+            // 参数表不带就是，帮助和命令这些照推。
+            java.util.List<bioenv.ai.AiContext.Chosen> chosen =
+                    new java.util.ArrayList<bioenv.ai.AiContext.Chosen>();
+            try {
+                Map<String, bioenv.core.ParamValue> values = formPanel.collect();
+                for (bioenv.core.ParamValue pv : values.values()) {
+                    if (pv == null || pv.option == null || !pv.contributes()) {
+                        continue;
+                    }
+                    chosen.add(new bioenv.ai.AiContext.Chosen(
+                            pv.option.flag, pv.commandText(), pv.option.description));
+                }
+            } catch (Throwable ignored) {
+                // 表单不可用就只少了参数表，不影响其余字段。
+            }
             aiAssist.pushContext(bioenv.ai.AiContext.build(
                     selected == null ? "" : selected.command,
                     selected == null ? "" : selected.envName,
                     formPanel.rawHelpText(),
-                    "",
-                    "",
+                    // 命令预览就是用户当下会执行的那一行（手工改过的也算）。
+                    commandArea == null ? "" : commandArea.getText(),
+                    isSshMode() ? "SSH" : "WSL",
                     formPanel.rawWorkdir(),
+                    chosen,
+                    lastRun,
                     extras));
         } catch (Throwable ignored) {
             // 故意吞掉：AI 是附加功能，坏了也只该是它自己不显示。
@@ -4185,9 +4339,13 @@ public final class MainPanel extends JPanel {
      * {@link bioenv.core.TerminalLaunch#wslInteractiveArgv}。
      */
     private void startInteractive() {
-        if (selected == null || interactiveProcess != null) {
+        if (selected == null) {
             return;
         }
+        // 上一次的交互进程若还活着（用户没点停止就换了命令），先收掉再起新的：
+        // 它继续占着输出区，输入行也会被下一次运行接管，界面上就分不清这行字
+        // 是发给谁的。
+        stopInteractiveRun();
         final String typed = expandPreviewText(commandArea.getText());
         final String condaRoot = scanner == null ? null : scanner.getCondaRoot();
         // 用原样值，别用会把 Windows 路径滤成 null 的那个。
@@ -4229,6 +4387,7 @@ public final class MainPanel extends JPanel {
             appendLog(I18n.t(Strings.LOG_TERMINAL_NO_TRANSCRIPT));
             return;
         }
+        final int mine = ++interactiveGeneration;
         new javax.swing.SwingWorker<Boolean, Void>() {
             @Override
             protected Boolean doInBackground() {
@@ -4239,6 +4398,11 @@ public final class MainPanel extends JPanel {
 
             @Override
             protected void done() {
+                // 脚本还没写完，用户已经点了停止（或又起了新的一轮）：这次不再拉起
+                // 进程，否则"停止"等于没点。
+                if (mine != interactiveGeneration) {
+                    return;
+                }
                 boolean written;
                 try {
                     written = Boolean.TRUE.equals(get());
@@ -4329,6 +4493,14 @@ public final class MainPanel extends JPanel {
                     FileDialogs.onEdt(new Runnable() {
                         @Override
                         public void run() {
+                            // 只有这个进程还是"当前"那个时才收尾。
+                            //
+                            // 被 stopInteractiveRun() 停掉、或者用户已经起了下一次
+                            // 交互运行时，这里再清一遍会把新进程的引用和输入行一起
+                            // 关掉 —— 表现就是"刚起的新运行立刻没反应了"。
+                            if (interactiveProcess != proc) {
+                                return;
+                            }
                             interactiveProcess = null;
                             interactiveInput.setEnabled(false);
                             interactiveInput.setText("");
@@ -4341,6 +4513,71 @@ public final class MainPanel extends JPanel {
         }, "bioenv-interactive");
         reader.setDaemon(true);
         reader.start();
+    }
+
+    /**
+     * 结束正在跑的交互进程，并把输入行恢复成"没有交互在跑"的样子。
+     *
+     * <p>交互进程不在 {@link Runner.Job} 里 —— 它没有 marker、也不走 {@code Runner}，
+     * 所以 Stop 按钮原来只取消 {@code currentJob}，对它是空操作：用户点了停止，
+     * 进程还在跑。这里负责真正结束它。
+     *
+     * <p>引用<b>立刻</b>清空，而不是像正常结束那样等读线程回来：读线程可能正卡在
+     * {@code read()} 上，等它就只能看着输入行卡住、下一次运行也起不来。
+     *
+     * <p>两阶段：先 {@code destroy()} 请它结束，短等之后仍活着再 {@code destroyForcibly()}。
+     * 强杀是最后手段，因为有些工具被杀时来不及把缓冲区里的输出交出来。
+     *
+     * @return 真的停掉了一个进程时返回 true（Stop 按钮据此决定状态栏写什么）
+     */
+    private boolean stopInteractiveRun() {
+        // 先作废"正在写脚本、还没起进程"的那一轮：见 interactiveGeneration 的说明。
+        interactiveGeneration++;
+        final Process p = interactiveProcess;
+        interactiveProcess = null;
+        if (p == null) {
+            resetInteractiveRow();
+            return false;
+        }
+        try {
+            p.destroy();
+        } catch (Throwable ignored) {
+            // 进程可能已经退出，destroy() 也可能不支持。
+        }
+        // 等待与强杀放在独立线程：这是事件线程，不能在这里 sleep。
+        Thread killer = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    p.waitFor(800, java.util.concurrent.TimeUnit.MILLISECONDS);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                }
+                if (p.isAlive()) {
+                    try {
+                        p.destroyForcibly();
+                    } catch (Throwable ignored) {
+                        // 只剩"杀不动"这一种可能，没有更硬的手段。
+                    }
+                }
+            }
+        }, "bioenv-interactive-stop");
+        killer.setDaemon(true);
+        killer.start();
+        resetInteractiveRow();
+        appendLog(I18n.t(Strings.LOG_INTERACTIVE_ENDED));
+        return true;
+    }
+
+    /** 输入行回到"没有交互在跑"的状态：藏起来、禁掉、清空。 */
+    private void resetInteractiveRow() {
+        if (interactiveRow != null) {
+            interactiveRow.setVisible(false);
+        }
+        if (interactiveInput != null) {
+            interactiveInput.setEnabled(false);
+            interactiveInput.setText("");
+        }
     }
 
     /** 把输入行里的内容发给那个还活着的进程；回车触发。 */
@@ -4538,6 +4775,9 @@ public final class MainPanel extends JPanel {
         if (selected == null || runner == null) {
             return;
         }
+        // 输出区只有一块：交互进程若还活着，先收掉。否则两条运行的输出交织在一起，
+        // 而 Stop 只停得掉其中一条。
+        stopInteractiveRun();
         // The run is not gated on any option being filled in.
         //
         // Whether an option is mandatory is the program's own determination, so
@@ -4569,6 +4809,8 @@ public final class MainPanel extends JPanel {
 
         final Runner.Job job = new Runner.Job();
         currentJob = job;
+        // 新一轮的输出尾巴重新开始记；上一次的 lastRun 留到这次结束再换。
+        runOutputTail.setLength(0);
         runButton.setEnabled(false);
         stopButton.setEnabled(true);
         setStatusKey(Strings.STATUS_RUNNING, tool.command);
@@ -4604,6 +4846,7 @@ public final class MainPanel extends JPanel {
                     sb.append(c[0]).append('\n');
                 }
                 appendLogRaw(sb.toString());
+                appendRunTail(sb.toString());
             }
 
             @Override
@@ -4613,6 +4856,10 @@ public final class MainPanel extends JPanel {
                 currentJob = null;
                 try {
                     Runner.RunResult r = get();
+                    // 先记下结果，再写日志：AI 上下文要的正是这两样东西
+                    // （退出码 + 输出尾部），而用户最常问的就是"刚才为什么失败"。
+                    lastRun = new bioenv.ai.AiContext.RunInfo(
+                            r.exitCode, runOutputTail.toString());
                     String secs = String.format("%.1f", r.elapsedMillis / 1000.0);
                     if (r.cancelled) {
                         appendLog(I18n.t(Strings.LOG_RUN_CANCELLED, secs));
@@ -4629,11 +4876,35 @@ public final class MainPanel extends JPanel {
                     }
                 } catch (Exception ex) {
                     Throwable c = ex.getCause() == null ? ex : ex.getCause();
+                    // 连结果都拿不到时，退出码如实记 -1，尾部还是已经收到的那些。
+                    lastRun = new bioenv.ai.AiContext.RunInfo(
+                            -1, runOutputTail.toString());
                     appendLog(I18n.t(Strings.LOG_ERROR_PREFIX) + c);
                     setStatusKey(Strings.STATUS_FAILED, c.getMessage());
                 }
+                // 运行结束时再推一次上下文。原来只在"运行按钮状态变化"时推，
+                // 于是页面里的上次运行永远是空的 —— 文档承诺的那一项没有兑现。
+                pushAiContext();
             }
         }.execute();
+    }
+
+    /**
+     * 记下本次运行的输出尾部，供 AI 上下文使用。
+     *
+     * <p>只留最后 {@link #RUN_TAIL_KEEP} 字符：一次比对能刷出几十兆，而模型
+     * 要的是"最后报了什么错"，不是全文。{@code AiContext} 那边还会再按
+     * {@code RUN_TAIL_MAX} 裁一次并写明省略了多少。
+     */
+    private void appendRunTail(String text) {
+        if (text == null || text.isEmpty()) {
+            return;
+        }
+        runOutputTail.append(text);
+        int over = runOutputTail.length() - RUN_TAIL_KEEP;
+        if (over > 0) {
+            runOutputTail.delete(0, over);
+        }
     }
 
     /**
@@ -4958,6 +5229,25 @@ public final class MainPanel extends JPanel {
     }
 
     /**
+     * 配置写盘失败的界面接收器。
+     *
+     * <p>所有 store 的 {@code save()} 以前都是静默失败：编辑关掉了、状态栏写着成功，
+     * 重启后改动全没了，用户没有任何线索。{@link bioenv.core.ConfigWarnings} 现在把
+     * 这类消息集中起来（同一条只报一次），这里负责把它们送进输出面板。
+     *
+     * <p>构造时注册、{@link #dispose()} 时撤销，见 {@code ConfigWarnings.setSink}。
+     */
+    private final bioenv.core.ConfigWarnings.Sink configWarningSink =
+            new bioenv.core.ConfigWarnings.Sink() {
+                @Override
+                public void warn(String message) {
+                    // 写盘失败可能来自任何线程；appendLog 内部会经
+                    // FileDialogs.onEdt 排到事件线程，这里不用自己判断线程。
+                    appendLog(message);
+                }
+            };
+
+    /**
      * 待写入日志的行：{@code [是否先换行, 文本]}。
      *
      * <p><b>必须用队列，不能用单个槽位。</b>连续两次 appendLog 都发生在事件线程
@@ -4976,9 +5266,38 @@ public final class MainPanel extends JPanel {
                 }
                 logArea.append(item[1]);
             }
+            trimLogIfNeeded();
             logArea.setCaretPosition(logArea.getDocument().getLength());
         }
     };
+
+    /**
+     * 输出文档超过上限就砍掉最前面一段。
+     *
+     * <p>以前只往 {@code JTextArea} 里 append：跑一次长比对能刷出几十兆字符，
+     * document 越大，每次插入和重绘越慢，最后整个界面卡住。裁剪只留尾巴 ——
+     * 用户要看的是最后报了什么；但"前面的没了"必须写在最上面，不能悄悄丢。
+     *
+     * <p>触发点是 40 万字符，所以平常的日志（以及测试里读日志的断言）都碰不到它；
+     * 只有真的跑出长输出时才会发生，而且每次裁剪只插一行提示。
+     */
+    private void trimLogIfNeeded() {
+        try {
+            javax.swing.text.Document doc = logArea.getDocument();
+            int len = doc.getLength();
+            if (len <= LOG_MAX_CHARS) {
+                return;
+            }
+            int cut = len - LOG_KEEP_CHARS;
+            if (cut <= 0) {
+                return;
+            }
+            doc.remove(0, cut);
+            doc.insertString(0, LOG_TRIM_NOTICE + "\n", null);
+        } catch (javax.swing.text.BadLocationException ignored) {
+            // 文档正被别处改写（比如「清空」）时可能越界；下次 append 会再检查一遍。
+        }
+    }
 
     private void appendLog(String text) {
         logQueue.add(new String[]{"1", text == null ? "" : text});

@@ -4,6 +4,14 @@
 
 ## 未发布 / Unreleased
 
+- **超时不再是死代码（P0）**：探测与运行以前先在 stdout 上读到 EOF、再去 `waitFor(超时)`，于是子进程只要不关 stdout，超时永远轮不到，界面只能停在"检测中"。现在两个流各一个泵线程、先等待后收尾：WSL 探测的 25 秒、SSH 运行的 300 秒真的会触发并强制结束，并说明是超时；扫描脚本（`find /` 找 conda、`conda env list`）也补上了 `timeout 20`。SSH 超时的提示明确说明**本机 ssh 客户端已终止、远端进程树可能仍在运行**（标记不在传输层契约里，不能假装杀了）。
+- **配置写盘安全**：10 个 store 全部改为"临时文件 + 原子替换"，写成半截不再毁掉旧文件；文件损坏/被截断时先备份成 `.bak` 再按空配置继续；写盘失败会在输出面板里说一句（`ConfigWarnings`），不再出现"界面说保存了、重启后没了"。文件里的 `count`/`index` 有了上限，一个手改坏的数字不会再让设置页 OOM。
+- **输出有上限**：保留的输出按 20 万行 / 800 万字符截断，并在末尾写"已丢弃 N 行"；输出面板本身超过 40 万字符时裁到最近 30 万字符并留一行提示。
+- **交互运行能停**：停止按钮、开始新运行、关闭面板都会结束交互进程（先 destroy，800 毫秒后 destroyForcibly），不会再堵住下一次交互运行。
+- **AI 上下文补齐**：命令、连接方式、参数表、上次运行的退出码与输出尾部现在真的随上下文发给模型（文档早就这么写，实现此前只发了工具、环境、help 和工作目录）；预览改动 1.2 秒后自动重推一次，问"这条命令对吗"看到的是当前命令。
+- **AI 面板**：请求加了 60 秒空闲超时；停止不再把空/半截回答记成已完成；CRLF 的流式响应实时显示；内置桥的请求裁到 20 条消息，而面板、持久化与导出保留全部；自定义接口地址在保存时校验并归一化（缺协议、多贴 `/chat/completions`、含空格）。
+- **文档**：README / help.md 里"只保留最近 24 条消息"改为与实际行为一致的说法。
+- **测试**：新增 `AtomicFilesTest`、`OutputCapTest`、`ScannerTimeoutTest`、`AiContextTest`、`EndpointUrlTest`、`ProcessCaptureTest`，全部纳入 `build.ps1` 门禁。
 - **构建脚本不再假定 TBtools 装在 `D:\TBtools`**：根目录与 `vmadapt\` 下的两个 `build.ps1` 都按 `TBTOOLS_HOME` → `JAVA_HOME` → 常见安装位置查找 JDK 11，并逐个校验 `javac -version` 确实是 11；`TBTOOLS_JAR` / `TBTOOLS_HOME` 也可指定宿主 jar。找不到时给出可直接照做的提示。
 - **文档**：README、CONTRIBUTING 与新增的 DESIGN / CHANGELOG 都拆成中英两个文件，顶部一行可点击切换；README 图片改走 jsDelivr（`raw.githubusercontent.com` 在国内常不可达）。
 - **测试修正**：`ConnectionLayoutTest.findSource()` 的回退分支写死了 `ConnectionPanel.java`，从 `vmadapt\` 目录跑测试时会把它的源码当成 `UiText` 交给文案检查，3 条断言无故变红。

@@ -32,6 +32,8 @@ public final class AiContextTest {
         fields();
         escaping();
         truncation();
+        optionsAndLastRun();
+        budget();
 
         System.out.println("");
         System.out.println("passed: " + passed + "   failed: " + failed);
@@ -106,8 +108,115 @@ public final class AiContextTest {
         check("null 帮助给空串", "".equals(AiContext.prepareHelp(null)));
     }
 
-    private static void check(String label, boolean ok) {
-        if (ok) {
+    /**
+     * 参数表与上次运行。
+     *
+     * <p>这两项是本轮补上的：页面 {@code ctxText()} 一直在读 {@code context.options}
+     * 和 {@code context.lastRun}，而 Java 侧从来没有发过——于是"解释上次为什么失败"
+     * 那个入口永远不出现，文档里写的"命令/参数表/上次运行"也一直是空话。
+     * 这里把字段形状钉住：字段名、类型、尾部裁剪、空值不出现。
+     */
+    private static void optionsAndLastRun() {
+        List<AiContext.Chosen> options = new ArrayList<AiContext.Chosen>();
+        options.add(new AiContext.Chosen("-M", "msa", "merge mode"));
+        options.add(new AiContext.Chosen("-o", "/home/demo/out.fa", null));
+        String json = AiContext.build("mafft", "bio", null, "conda run -n bio mafft -M msa",
+                "WSL", "/home/demo", options,
+                new AiContext.RunInfo(2, "Traceback ...\ncommand not found"), null);
+        check("参数表在里面", json.contains("\"options\":["));
+        check("flag 与值都在", json.contains("\"flag\":\"-M\"")
+                && json.contains("\"arg\":\"msa\""));
+        check("描述也在", json.contains("\"description\":\"merge mode\""));
+        check("没有描述就不写这个键", !json.contains("\"description\":null"));
+        check("上次运行在里面", json.contains("\"lastRun\":{\"exit\":2"));
+        check("输出尾部在里面", json.contains("command not found"));
+        check("命令行真的进去了", json.contains("conda run -n bio mafft -M msa"));
+
+        List<AiContext.Chosen> none = new ArrayList<AiContext.Chosen>();
+        String bare = AiContext.build("x", null, null, null, null, null, none, null, null);
+        check("空参数表不出现", !bare.contains("options"));
+        check("没有上次运行就不出现", !bare.contains("lastRun"));
+
+        StringBuilder tail = new StringBuilder();
+        for (int i = 0; i < 2000; i++) {
+            tail.append("line").append(i).append('\n');
+        }
+        String big = AiContext.build("x", null, null, null, null, null, null,
+                new AiContext.RunInfo(1, tail.toString()), null);
+        check("超长尾部被裁到上限内", big.length() < tail.length());
+        check("★ 裁完保留的是结尾", big.contains("line1999"));
+        check("★ 说明省略了多少", big.contains("省略"));
+    }
+
+    /**
+     * 预算。
+     *
+     * <p>参数表和上次运行也吃预算，所以帮助的额度必须跟着缩小；否则"补上字段"这件事
+     * 会把请求推过桥的上限，反而让默认模型开始报错。
+     */
+    private static void budget() {
+        StringBuilder help = new StringBuilder();
+        for (int i = 0; i < 5000; i++) {
+            help.append("-o").append(i).append("  description here\n");
+        }
+        List<AiContext.Chosen> options = new ArrayList<AiContext.Chosen>();
+        for (int i = 0; i < 200; i++) {
+            options.add(new AiContext.Chosen("-o" + i, "value" + i, "description " + i));
+        }
+        StringBuilder tail = new StringBuilder();
+        for (int i = 0; i < 5000; i++) {
+            tail.append("out ").append(i).append('\n');
+        }
+        String json = AiContext.build("t", null, help.toString(), "cmd", "WSL", "/w",
+                options, new AiContext.RunInfo(0, tail.toString()), null);
+        check("总长度受预算约束", json.length() <= AiContext.BUDGET + 1000);
+        check("★ 帮助仍明确说是节选", json.contains("节选") || json.contains("前 "));
+        check("参数表有上限", countOccurrences(json, "\"flag\":") <= AiContext.OPTIONS_MAX);
+        check("括号配平（页面 JSON.parse 失败就是「AI 不理我」）", balanced(json));
+    }
+
+    private static int countOccurrences(String s, String needle) {
+        int n = 0;
+        int from = 0;
+        while ((from = s.indexOf(needle, from)) >= 0) {
+            n++;
+            from += needle.length();
+        }
+        return n;
+    }
+
+    /** 粗检：花括号/方括号配平，字符串不悬空。不需要完整 JSON 解析。 */
+    private static boolean balanced(String s) {
+        int depth = 0;
+        boolean inString = false;
+        boolean escaped = false;
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (inString) {
+                if (escaped) {
+                    escaped = false;
+                } else if (c == '\\') {
+                    escaped = true;
+                } else if (c == '"') {
+                    inString = false;
+                }
+                continue;
+            }
+            if (c == '"') {
+                inString = true;
+            } else if (c == '{' || c == '[') {
+                depth++;
+            } else if (c == '}' || c == ']') {
+                depth--;
+                if (depth < 0) {
+                    return false;
+                }
+            }
+        }
+        return depth == 0 && !inString;
+    }
+
+    private static void check(String label, boolean ok) {        if (ok) {
             passed++;
             System.out.println("  PASS  " + label);
         } else {

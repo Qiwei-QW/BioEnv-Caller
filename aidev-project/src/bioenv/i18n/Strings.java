@@ -247,6 +247,17 @@ public final class Strings {
     public static final String AI_MODEL_MAX_IN = "ai.model.maxin";
     public static final String AI_MODEL_LEN_NOTE = "ai.model.lennote";
     public static final String AI_MODEL_LEN_BAD = "ai.model.lenbad";
+    /**
+     * 自定义接口地址的校验消息。
+     *
+     * <p>这些消息以前是 {@code EndpointUrl} 里写死的中文，于是英文界面里弹出一句
+     * 中文；地址填错本来就够难查了，再换一种语言就更没线索。
+     */
+    public static final String AI_URL_EMPTY = "ai.url.empty";
+    public static final String AI_URL_SPACE = "ai.url.space";
+    public static final String AI_URL_BAD_SCHEME = "ai.url.badscheme";
+    public static final String AI_URL_MISSING_SCHEME = "ai.url.missingscheme";
+    public static final String AI_URL_NO_HOST = "ai.url.nohost";
     /** 把对话导出成 Markdown：保存对话框的标题、文件类型，以及成功/失败两句话。 */
     public static final String AI_EXPORT_TITLE = "ai.export.title";
     public static final String AI_EXPORT_FILTER = "ai.export.filter";
@@ -1247,15 +1258,32 @@ public final class Strings {
                 "最大输出长度（token，max_tokens）",
                 "Max output (tokens; max_tokens)");
         put(ZH_TEXT, EN_TEXT, AI_MODEL_LEN_NOTE,
-                "输入长度只在本地决定丢多少历史（面板本来就只留最近 24 条消息），"
+                "输入长度只在本地决定丢多少历史（面板与导出保留全部；内置桥一次最多带 20 条消息），"
                 + "不发往服务端；输出长度原样作为 max_tokens 发出去。",
-                "Max input only decides locally how much history to drop (the panel "
-                + "keeps just the last 24 messages) and is never sent; max output goes "
-                + "out as max_tokens.");
+                "Max input only decides locally how much history to send (the panel and the "
+                + "export keep everything; the built-in bridge carries at most 20 messages per "
+                + "request) and is never sent; max output goes out as max_tokens.");
         put(ZH_TEXT, EN_TEXT, AI_MODEL_LEN_BAD,
                 "\u8bf7\u586b token \u6570\uff0c\u5982 4096\u30011024K\u30011M\uff1b\u7559\u7a7a\u8868\u793a\u4e0d\u9650\u3002",
                 "Length must be a number. Leave it blank for no limit.");
         put(ZH_TEXT, EN_TEXT, AI_MODEL_SHOW_KEY, "显示", "Show");
+        put(ZH_TEXT, EN_TEXT, AI_URL_EMPTY,
+                "接口地址不能为空。",
+                "The endpoint URL cannot be empty.");
+        put(ZH_TEXT, EN_TEXT, AI_URL_SPACE,
+                "接口地址中间不能有空格。",
+                "The endpoint URL cannot contain spaces.");
+        put(ZH_TEXT, EN_TEXT, AI_URL_BAD_SCHEME,
+                "接口地址只支持 http:// 或 https://。",
+                "The endpoint URL must start with http:// or https://.");
+        put(ZH_TEXT, EN_TEXT, AI_URL_MISSING_SCHEME,
+                "接口地址要以 http:// 或 https:// 开头。",
+                "The endpoint URL must start with http:// or https:// — "
+                + "for example https://api.deepseek.com/v1.");
+        put(ZH_TEXT, EN_TEXT, AI_URL_NO_HOST,
+                "接口地址缺少主机名，例如 https://api.deepseek.com/v1。",
+                "The endpoint URL is missing a host name — "
+                + "for example https://api.deepseek.com/v1.");
         put(ZH_TEXT, EN_TEXT, AI_MODEL_KEY_NOTE,
                 "API key 不会写入日志、提示或错误文字；"
                 + "但请求由页面发出，所以请求期间它存在页面内存里。",
