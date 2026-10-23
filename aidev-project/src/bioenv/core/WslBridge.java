@@ -1,15 +1,13 @@
 package bioenv.core;
 
-import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
+
+import vmadapt.core.ProcessCapture;
 
 /**
  * Transport to the WSL side. Every external command the plugin runs goes through
@@ -202,11 +200,18 @@ public final class WslBridge implements Transport {
             ProcessBuilder pb = new ProcessBuilder("wsl.exe", "-l", "-q");
             pb.redirectErrorStream(true);
             Process p = pb.start();
-            String raw = readAll(p.getInputStream());
-            p.waitFor(15, TimeUnit.SECONDS);
+            // 15 秒上限现在真的能到：输出在 pump 线程上读，本线程只 waitFor。
+            // 以前是「先读到 EOF，再 waitFor」，wsl.exe 一卡住超时就永远轮不到。
+            final StringBuilder raw = new StringBuilder();
+            ProcessCapture.run(p, 15, new ProcessCapture.LineSink() {
+                @Override
+                public void line(String text, boolean isError) {
+                    raw.append(text).append('\n');
+                }
+            }, null);
 
             // wsl.exe emits UTF-16LE; strip NULs and any BOM, then split.
-            String cleaned = raw.replace("\u0000", "").replace("\uFEFF", "");
+            String cleaned = raw.toString().replace("\u0000", "").replace("\uFEFF", "");
             for (String line : cleaned.split("\\r?\\n")) {
                 String t = line.trim();
                 if (!t.isEmpty() && !t.startsWith("Windows")) {
@@ -291,16 +296,35 @@ public final class WslBridge implements Transport {
      */
     public Result runBashCapture(String script) {
         Result r = new Result();
+        final OutputCap out = new OutputCap();
+        final OutputCap err = new OutputCap();
         try {
             Process p = startBash(script);
-            Thread errPump = pump(p.getErrorStream(), r.stderr);
-            r.stdout.addAll(readLines(p.getInputStream()));
-            errPump.join(3000);
-            if (!p.waitFor(PROBE_TIMEOUT_S, TimeUnit.SECONDS)) {
+            // 两个流各由 ProcessCapture 的读取线程排空，本线程只做 waitFor(25s)。
+            // 关键是顺序：以前先 readLines 到 EOF 才 waitFor，而卡住的子进程不会关闭
+            // stdout，超时那一行于是永远执行不到。现在时间一到就强制结束，timedOut
+            // 为 true、退出码保持 -1（见 Transport.Result 的契约）。
+            ProcessCapture.Outcome o = ProcessCapture.run(p, PROBE_TIMEOUT_S,
+                    new ProcessCapture.LineSink() {
+                        @Override
+                        public void line(String text, boolean isError) {
+                            out.add(AnsiText.strip(text));
+                        }
+                    },
+                    new ProcessCapture.LineSink() {
+                        @Override
+                        public void line(String text, boolean isError) {
+                            err.add(AnsiText.strip(text));
+                        }
+                    });
+            r.stdout.addAll(out.lines());
+            r.stderr.addAll(err.lines());
+            if (o.timedOut) {
                 r.timedOut = true;
-                p.destroyForcibly();
+                r.stderr.add("命令在 " + PROBE_TIMEOUT_S
+                        + " 秒内没有结束，已强制终止本次调用。");
             } else {
-                r.exitCode = p.exitValue();
+                r.exitCode = o.exitCode;
             }
         } catch (Exception e) {
             r.stderr.add("WSL invocation failed: " + e.getMessage());
@@ -320,18 +344,43 @@ public final class WslBridge implements Transport {
      * 放宽之后，{@code Runner} 里传的 {@code Transport.LineSink} 匿名类
      * 与任何 {@code WslBridge.LineSink} 实例都能直接传入。
      */
-    public Result runBashStreaming(String script, Transport.LineSink sink) {
+    public Result runBashStreaming(String script, final Transport.LineSink sink) {
         Result r = new Result();
+        final OutputCap out = new OutputCap();
+        final OutputCap err = new OutputCap();
         try {
             Process p = startBash(script);
-            Thread errPump = pumpStreaming(p.getErrorStream(), sink, r.stderr);
-            List<String> outLines = readLinesStreaming(p.getInputStream(), sink, r.stdout);
-            errPump.join(3000);
-            p.waitFor();
-            r.exitCode = p.exitValue();
-            // keep references alive for the compiler's benefit
-            if (outLines == null) {
-                r.stdout.add("");
+            // 运行类命令不设时间上限（分析任务动辄几十分钟），但两个流仍然各用一个
+            // 读取线程：以前 stdout 在本线程读到 EOF、stderr 才用 pump，任一侧卡住都
+            // 收不了尾。回调照旧收到每一行，只有「留下的那份」受 OutputCap 约束。
+            ProcessCapture.Outcome o = ProcessCapture.run(p, 0,
+                    new ProcessCapture.LineSink() {
+                        @Override
+                        public void line(String text, boolean isError) {
+                            String clean = AnsiText.strip(text);
+                            out.add(clean);
+                            if (sink != null) {
+                                sink.line(clean, false);
+                            }
+                        }
+                    },
+                    new ProcessCapture.LineSink() {
+                        @Override
+                        public void line(String text, boolean isError) {
+                            String clean = AnsiText.strip(text);
+                            err.add(clean);
+                            if (sink != null) {
+                                sink.line(clean, true);
+                            }
+                        }
+                    });
+            r.stdout.addAll(out.lines());
+            r.stderr.addAll(err.lines());
+            if (o.timedOut) {
+                r.timedOut = true;
+                r.stderr.add("命令在限定时间内没有结束，已强制终止本次调用。");
+            } else {
+                r.exitCode = o.exitCode;
             }
         } catch (Exception e) {
             r.stderr.add("WSL invocation failed: " + e.getMessage());
@@ -532,79 +581,6 @@ public final class WslBridge implements Transport {
             return false;
         }
         return p.length() >= 2 && p.charAt(1) == ':';
-    }
-
-    private static Thread pump(final InputStream in, final List<String> into) {
-        Thread t = new Thread(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    into.addAll(readLines(in));
-                } catch (Exception ignored) {
-                    // stream closed
-                }
-            }
-        }, "wsl-stderr-pump");
-        t.setDaemon(true);
-        t.start();
-        return t;
-    }
-
-    // 形参类型跟着 runBashStreaming 放宽为 Transport.LineSink：这两个是私有
-    // 转发点，必须能承载接口形状的回调，否则公开方法收到的 sink 传不进来。
-    private static Thread pumpStreaming(final InputStream in, final Transport.LineSink sink,
-                                        final List<String> into) {
-        Thread t = new Thread(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    readLinesStreaming(in, sink, into);
-                } catch (Exception ignored) {
-                    // stream closed
-                }
-            }
-        }, "wsl-stderr-pump");
-        t.setDaemon(true);
-        t.start();
-        return t;
-    }
-
-    private static List<String> readLines(InputStream in) throws IOException {
-        List<String> lines = new ArrayList<String>();
-        BufferedReader br = new BufferedReader(new InputStreamReader(in, UTF8));
-        String line;
-        while ((line = br.readLine()) != null) {
-            // Stripped here, at the boundary: everything downstream — the help
-            // parser, the log, the schema cache — then deals in plain text and
-            // none of them has to know about terminal codes.
-            lines.add(AnsiText.strip(line));
-        }
-        return lines;
-    }
-
-    private static List<String> readLinesStreaming(InputStream in, Transport.LineSink sink,
-                                                   List<String> into) throws IOException {
-        BufferedReader br = new BufferedReader(new InputStreamReader(in, UTF8));
-        String line;
-        while ((line = br.readLine()) != null) {
-            line = AnsiText.strip(line);
-            into.add(line);
-            if (sink != null) {
-                sink.line(line, false);
-            }
-        }
-        return into;
-    }
-
-    private static String readAll(InputStream in) throws IOException {
-        StringBuilder sb = new StringBuilder();
-        BufferedReader br = new BufferedReader(new InputStreamReader(in, UTF8));
-        char[] buf = new char[4096];
-        int n;
-        while ((n = br.read(buf)) != -1) {
-            sb.append(buf, 0, n);
-        }
-        return AnsiText.strip(sb.toString());
     }
 
     // ------------------------------------------------------------------

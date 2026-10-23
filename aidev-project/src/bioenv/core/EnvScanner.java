@@ -34,6 +34,25 @@ public final class EnvScanner {
     };
 
     /**
+     * 一个扫描步骤自己的等待上限（秒），由远端 GNU coreutils 的 {@code timeout} 执行
+     * （WSL 与 Linux 虚拟机都自带）。
+     *
+     * <h2>为什么扫描脚本需要它</h2>
+     *
+     * <p>发现过程的头几条命令是瞬时的（{@code echo}、{@code uname}、{@code command -v}），
+     * 但有两条不是：{@code find / -maxdepth 5} 会跨过 {@code /mnt/c} 和网络挂载，
+     * {@code conda env list} 会等 conda 的包缓存锁。它们慢起来是分钟级的，
+     * 而当时传输层那个 25 秒超时本身又够不到（读取先跑到了 EOF，见
+     * {@code ProcessCapture} 的说明）。结果是用户点了「扫描」之后没有上限地等下去。
+     *
+     * <p>用 {@code timeout} 而不是把上限交给 Java 一侧：这两个命令即使被强杀，
+     * 造成的也只是「这次扫描少了一条线索」，不会留下半写状态；而在远端杀，
+     * 连 ssh/wsl 这条连接都不用动。退出码保持不变（127 仍是「命令没找到」，
+     * 124 是超时），所以调用方原来靠退出码区分的东西还在。
+     */
+    private static final int STEP_TIMEOUT_S = 20;
+
+    /**
      * @param wsl how to reach the Linux side. Typed as {@link Transport} rather
      *            than {@code WslBridge} so the same discovery works over SSH;
      *            discovery itself never needs to know which one it has.
@@ -179,7 +198,8 @@ public final class EnvScanner {
               + "    */bin/conda) echo \"FOUND:$(dirname \"$(dirname \"$f\")\")\"; exit 0;; "
               + "  esac; "
               + "fi; "
-              + "d=$(find / -maxdepth 5 -type f -name conda -path '*/bin/conda' 2>/dev/null | head -1); "
+              + "d=$(timeout " + STEP_TIMEOUT_S + " find / -maxdepth 5 -type f -name conda "
+              + "-path '*/bin/conda' 2>/dev/null | head -1); "
               + "if [ -n \"$d\" ]; then echo \"FOUND:$(dirname \"$(dirname \"$d\")\")\"; fi";
 
         Transport.Result r = wsl.runBashCapture(script);
@@ -195,7 +215,10 @@ public final class EnvScanner {
     private Transport.Result runConda(String args) {
         StringBuilder sb = new StringBuilder();
         sb.append("export PATH=").append(WslBridge.quote(condaRoot + "/bin")).append(":$PATH\n");
-        sb.append("conda ").append(args).append(" 2>&1\n");
+        // 上限放在 conda 自己身上：它可能卡在包缓存锁上。timeout 原样保留退出码
+        // （命令不存在仍是 127，超时是 124），所以这段的退出码还能照旧读。
+        sb.append("timeout ").append(STEP_TIMEOUT_S).append(" conda ").append(args)
+          .append(" 2>&1\n");
         return wsl.runBashCapture(sb.toString());
     }
 
