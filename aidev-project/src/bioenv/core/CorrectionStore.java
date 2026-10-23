@@ -1,12 +1,9 @@
 package bioenv.core;
 
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
+import java.io.StringReader;
+import java.io.StringWriter;
+import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Properties;
@@ -246,68 +243,65 @@ public final class CorrectionStore {
         if (file == null || !file.isFile()) {
             return;
         }
-        BufferedReader br = null;
-        try {
-            br = new BufferedReader(new InputStreamReader(
-                    new FileInputStream(file), "UTF-8"));
-            Properties p = new Properties();
-            p.load(br);
-            for (String name : p.stringPropertyNames()) {
-                Schema.Option.Kind kind;
-                try {
-                    kind = Schema.Option.Kind.valueOf(p.getProperty(name).trim());
-                } catch (IllegalArgumentException ignored) {
-                    // A kind that no longer exists is skipped, not fatal.
-                    continue;
-                }
-                // Entries written by an earlier version may include generalised
-                // rules, whose keys carry a "pattern:" prefix. Those applied
-                // across tools, which is exactly what this store no longer does,
-                // so they are dropped rather than honoured.
-                if (name.startsWith("pattern:")) {
-                    continue;
-                }
-                corrections.put(name, kind);
-            }
-        } catch (Exception ignored) {
-            // An unreadable store just means no corrections; never fatal.
-        } finally {
-            close(br);
+        String text = AtomicFiles.read(file, StandardCharsets.UTF_8);
+        if (text == null) {
+            reportCorrupt();
+            return;
         }
+        Properties p = new Properties();
+        try {
+            p.load(new StringReader(text));
+        } catch (Exception e) {
+            reportCorrupt();
+            return;
+        }
+        for (String name : p.stringPropertyNames()) {
+            Schema.Option.Kind kind;
+            try {
+                kind = Schema.Option.Kind.valueOf(p.getProperty(name).trim());
+            } catch (IllegalArgumentException ignored) {
+                // A kind that no longer exists is skipped, not fatal.
+                continue;
+            }
+            // Entries written by an earlier version may include generalised
+            // rules, whose keys carry a "pattern:" prefix. Those applied
+            // across tools, which is exactly what this store no longer does,
+            // so they are dropped rather than honoured.
+            if (name.startsWith("pattern:")) {
+                continue;
+            }
+            corrections.put(name, kind);
+        }
+    }
+
+    /**
+     * 文件在、但读不出来：先留一份 {@code .bak}，再报一次，然后按"没有记录"继续。
+     *
+     * <p>以前这里是一个空的 catch，用户学到一半的类型设置会静默消失；现在原文件
+     * 至少还在 {@code .bak} 里，界面也会有一行提示。
+     */
+    private void reportCorrupt() {
+        ConfigWarnings.readFailed(file, AtomicFiles.backup(file));
     }
 
     private void save() {
         if (file == null || !dirty) {
             return;
         }
-        BufferedWriter bw = null;
-        try {
-            File parent = file.getParentFile();
-            if (parent != null && !parent.exists()) {
-                parent.mkdirs();
-            }
-            Properties p = new Properties();
-            for (Map.Entry<String, Schema.Option.Kind> e : corrections.entrySet()) {
-                p.setProperty(e.getKey(), e.getValue().name());
-            }
-            bw = new BufferedWriter(new OutputStreamWriter(
-                    new FileOutputStream(file), "UTF-8"));
-            p.store(bw, "BioEnv Caller parameter types, per tool");
-            dirty = false;
-        } catch (Exception ignored) {
-            // Failing to persist must not break the session.
-        } finally {
-            close(bw);
+        Properties p = new Properties();
+        for (Map.Entry<String, Schema.Option.Kind> e : corrections.entrySet()) {
+            p.setProperty(e.getKey(), e.getValue().name());
         }
-    }
-
-    private static void close(java.io.Closeable c) {
-        if (c != null) {
-            try {
-                c.close();
-            } catch (Exception ignored) {
-                // nothing useful to do
-            }
+        StringWriter sw = new StringWriter();
+        try {
+            p.store(sw, "BioEnv Caller parameter types, per tool");
+        } catch (Exception e) {
+            ConfigWarnings.writeFailed(file, e);
+            return;
+        }
+        // 建目录、临时文件、原子替换都在 AtomicFiles 里；失败时它已经报过。
+        if (AtomicFiles.write(file, sw.toString(), StandardCharsets.UTF_8)) {
+            dirty = false;
         }
     }
 }

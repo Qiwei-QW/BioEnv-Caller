@@ -1,12 +1,9 @@
 package bioenv.core;
 
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
+import java.io.StringReader;
+import java.io.StringWriter;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -424,57 +421,64 @@ public final class CustomOptionStore {
         if (file == null || !file.isFile()) {
             return;
         }
-        BufferedReader br = null;
-        try {
-            Properties p = new Properties();
-            br = new BufferedReader(new InputStreamReader(
-                    new FileInputStream(file), "UTF-8"));
-            p.load(br);
-            for (String name : p.stringPropertyNames()) {
-                String value = p.getProperty(name, "");
-                if (name.startsWith(HIDDEN_PREFIX)) {
-                    hidden.put(name, split(value));
-                } else if (name.startsWith(ORDER_PREFIX)) {
-                    order.put(name, split(value));
-                } else {
-                    options.put(name, value);
-                }
-            }
-        } catch (Exception ignored) {
-            // An unreadable store means no edits; never fatal.
-        } finally {
-            close(br);
+        String text = AtomicFiles.read(file, StandardCharsets.UTF_8);
+        if (text == null) {
+            reportCorrupt();
+            return;
         }
+        Properties p = new Properties();
+        try {
+            p.load(new StringReader(text));
+        } catch (Exception e) {
+            reportCorrupt();
+            return;
+        }
+        for (String name : p.stringPropertyNames()) {
+            String value = p.getProperty(name, "");
+            if (name.startsWith(HIDDEN_PREFIX)) {
+                hidden.put(name, split(value));
+            } else if (name.startsWith(ORDER_PREFIX)) {
+                order.put(name, split(value));
+            } else {
+                options.put(name, value);
+            }
+        }
+    }
+
+    /**
+     * 文件在、但读不出来：先留一份 {@code .bak}，再报一次，然后按"没有改动"继续。
+     *
+     * <p>用户手工加的参数、隐藏的决定、拖出来的顺序都在这一个文件里，所以原文件
+     * 必须留下来，而不是被下一次保存直接覆盖。
+     */
+    private void reportCorrupt() {
+        ConfigWarnings.readFailed(file, AtomicFiles.backup(file));
     }
 
     private void save() {
         if (file == null || !dirty) {
             return;
         }
-        BufferedWriter bw = null;
+        Properties p = new Properties();
+        for (Map.Entry<String, String> e : options.entrySet()) {
+            p.setProperty(e.getKey(), e.getValue());
+        }
+        for (Map.Entry<String, List<String>> e : hidden.entrySet()) {
+            p.setProperty(e.getKey(), join(e.getValue()));
+        }
+        for (Map.Entry<String, List<String>> e : order.entrySet()) {
+            p.setProperty(e.getKey(), join(e.getValue()));
+        }
+        StringWriter sw = new StringWriter();
         try {
-            File parent = file.getParentFile();
-            if (parent != null && !parent.exists()) {
-                parent.mkdirs();
-            }
-            Properties p = new Properties();
-            for (Map.Entry<String, String> e : options.entrySet()) {
-                p.setProperty(e.getKey(), e.getValue());
-            }
-            for (Map.Entry<String, List<String>> e : hidden.entrySet()) {
-                p.setProperty(e.getKey(), join(e.getValue()));
-            }
-            for (Map.Entry<String, List<String>> e : order.entrySet()) {
-                p.setProperty(e.getKey(), join(e.getValue()));
-            }
-            bw = new BufferedWriter(new OutputStreamWriter(
-                    new FileOutputStream(file), "UTF-8"));
-            p.store(bw, "BioEnv Caller parameter edits, per tool");
+            p.store(sw, "BioEnv Caller parameter edits, per tool");
+        } catch (Exception e) {
+            ConfigWarnings.writeFailed(file, e);
+            return;
+        }
+        // 建目录、临时文件、原子替换都在 AtomicFiles 里；失败时它已经报过。
+        if (AtomicFiles.write(file, sw.toString(), StandardCharsets.UTF_8)) {
             dirty = false;
-        } catch (Exception ignored) {
-            // Failing to persist must not break the session.
-        } finally {
-            close(bw);
         }
     }
 
@@ -500,15 +504,5 @@ public final class CustomOptionStore {
             }
         }
         return out;
-    }
-
-    private static void close(java.io.Closeable c) {
-        if (c != null) {
-            try {
-                c.close();
-            } catch (Exception ignored) {
-                // nothing useful to do
-            }
-        }
     }
 }

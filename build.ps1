@@ -355,7 +355,29 @@ try {
         # 深色期间给滚动条设过深色底，切回经典时只换了 UI 委托、没把底色还回去，
         # 而细滚动条的滑道什么都不画，露出的正是那个底色——命令树两侧于是各挂
         # 一根黑条。断言用"从没进过深色的同类控件"作基准，而不是写死某个颜色。
-        'bioenv.test.ThemeSwitchResidueTest'
+        'bioenv.test.ThemeSwitchResidueTest',
+
+        # --- robustness: config writes, reachable timeouts, bounded output ---
+        # These guard things that LOOK protected but were not:
+        #   AtomicFilesTest    - a failed or corrupt write must not destroy the
+        #                        previous copy, and the failure has to be said
+        #                        (ConfigWarnings); counts read from a file must
+        #                        not decide how much memory is allocated.
+        #   OutputCapTest      - retained output needs a bound and an honest
+        #                        count of what was dropped.
+        #   ScannerTimeoutTest - scanner scripts need `timeout`, because the
+        #                        old readLines-to-EOF-before-waitFor shape made
+        #                        every timeout unreachable.
+        #   AiContextTest      - the options/lastRun fields the page reads are
+        #                        really produced, and the total stays inside the
+        #                        bridge budget.
+        #   EndpointUrlTest    - a bad custom endpoint is rejected when saved,
+        #                        not surfaced later as 'Failed to fetch'.
+        'bioenv.test.AtomicFilesTest',
+        'bioenv.test.OutputCapTest',
+        'bioenv.test.ScannerTimeoutTest',
+        'bioenv.test.AiContextTest',
+        'bioenv.test.EndpointUrlTest'
     )
 
     foreach ($t in $regression) {
@@ -488,7 +510,12 @@ if ($vmTestSources.Count -gt 0) {
         #
         # 需要服务器的一半通过 TBVM_LIVE_HOST/PORT/USER/PASSWORD 指定；没配时会明确
         # 打印"本次没有验证"，并以 0 退出，不把"没测"说成"测过了"。
-        'vmadapt.test.KeyInstallLiveTest'
+        'vmadapt.test.KeyInstallLiveTest',
+
+        # The transport layer's收尾: one pump thread per stream, waitFor before
+        # the join, so a timeout can actually be reached. This case starts a
+        # 30-second child and asserts it is killed within ~2 seconds.
+        'vmadapt.test.ProcessCaptureTest'
     )
     $vmPassed = @()
     $vmFailed = @()

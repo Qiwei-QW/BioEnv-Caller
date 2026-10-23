@@ -366,6 +366,11 @@ var T = {
     statTotal: "累计", statBits: "已带上", statItems: "项",
     yes: "删除", no: "取消",
     busyHint: "正在回答…按 Esc 停止",
+    idleTimeout: "%s 秒没有收到任何数据，已停止 — 可重试",
+    stoppedNote: "（已停止）",
+    trimNotice: "已省略最早的 %n 轮对话（仍保留在面板与导出中）",
+    urlBad: "接口地址要以 http:// 或 https:// 开头（例如 https://api.deepseek.com/v1）。当前填的是：%u",
+    netFail: "连不上 %h（或连接中途断了）。可能是：离线、跨域(CORS)被拦、证书(TLS)不对，或地址写错了。",
     storeDrop: "存储满了，丢掉了 %n 个旧会话",
     storeFull: "存储写不进去了：之后的对话不会再保存",
     popManage: "管理模型…（在设置里）",
@@ -410,6 +415,11 @@ var T = {
     statTotal: "total", statBits: "carried", statItems: "items",
     yes: "Delete", no: "Cancel",
     busyHint: "Answering… press Esc to stop",
+    idleTimeout: "No data received for %s s; stopped — retry available",
+    stoppedNote: "(stopped)",
+    trimNotice: "Omitted the oldest %n round(s) from this request (kept in the panel and in the export)",
+    urlBad: "The endpoint must start with http:// or https:// (e.g. https://api.deepseek.com/v1). Currently: %u",
+    netFail: "Cannot reach %h (or the connection dropped). Likely: offline, blocked by CORS, a TLS/certificate problem, or a wrong address.",
     storeDrop: "Storage was full - dropped %n old conversation(s)",
     storeFull: "Storage is full: conversations will no longer be saved",
     popManage: "Manage models… (in Settings)",
@@ -669,6 +679,18 @@ var turns = [];              // 当前会话的对话（与 sessions 里那一�
 
 var el = function (id) { return document.getElementById(id); };
 var storeOk = true;          // file:// 下 localStorage 可能直接抛，那就退化成"这次运行内有效"
+
+/**
+ * 请求的空闲超时（毫秒）。
+ *
+ * <p>从请求发出到响应头、以及每两段数据之间，都不能超过这个时间；
+ * 超时就当作卡死（网关完全可以接了连接然后一个字节都不发）。
+ * 自检会临时把这个数改小，见 window.tbvAi.idleTimeout。
+ */
+var IDLE_TIMEOUT_MS = 60000;
+
+/** 桥那一路的消息上限：AiContext.java:19 记录的实测值约 20 条。 */
+var BRIDGE_MAX_MESSAGES = 20;
 
 /* ================================================================
  * Markdown 渲染
@@ -1109,6 +1131,8 @@ function buildMarkdown() {
     rows.push(x.role === "user" ? "## " + t("expMe") : "## " + t("expAi"));
     rows.push("");
     rows.push(questionOf(x));
+    // 被停下的一轮：导出里也要写明白，别让半截回答看起来是完整的。
+    if (x.role === "assistant" && x.stopped) { rows.push(""); rows.push("> " + t("stoppedNote")); }
     rows.push("");
   }
   return { name: title + " " + fileNameStamp(), text: rows.join("\n") };
@@ -1219,8 +1243,7 @@ function renderLog() {
       if (m.failed) { bubble("e", m.err || ""); }
     } else {
       var bb = bubble("a", "");
-      bb.innerHTML = md(m.content);
-      wireCopy(bb);
+      renderAnswer(bb, m);
       // 动作按钮只挂在最新那条回答下面。重绘（切语言、收起再展开）之后
       // 它们不该凭空消失 —— 复制/重试正是这时候最需要。
       if (i === turns.length - 1) { addActions(bb, ask, m.content); }
@@ -1279,6 +1302,38 @@ function bubble(kind, text) {
   d.textContent = text == null ? "" : text;
   el("log").appendChild(d);
   el("log").scrollTop = el("log").scrollHeight;
+  return d;
+}
+
+/**
+ * 画一条回答：正文 + （如果被用户停掉）一行"（已停止）"。
+ *
+ * <p>实时路径和整体重绘都走这里 —— 两处画法必须一样，否则"收起再展开"之后，
+ * 被停掉的那条会看起来像一条完整的回答。
+ */
+function renderAnswer(box, m) {
+  box.innerHTML = md(m && m.content);
+  wireCopy(box);
+  if (m && m.stopped) {
+    var note = document.createElement("div");
+    note.className = "m s";
+    note.textContent = t("stoppedNote");
+    box.appendChild(note);
+  }
+  return box;
+}
+
+/** 在对话区插一条灰色系统提示；给了 before 就插在它前面。 */
+function noteBefore(before, text) {
+  var d = document.createElement("div");
+  d.className = "m s";
+  d.textContent = text;
+  var log = el("log");
+  if (before && before.parentNode === log && typeof log.insertBefore === "function") {
+    log.insertBefore(d, before);
+  } else {
+    log.appendChild(d);
+  }
   return d;
 }
 
@@ -1419,7 +1474,14 @@ window.tbvAi = {
   /** 给自检用：Markdown 渲染函数本身（表格/代码块这些要看输出）。 */
   render: md,
   /** 给自检用：估算函数本身。 */
-  estTokens: estTokens
+  estTokens: estTokens,
+  /**
+   * 给自检用：把空闲超时改短（不传就恢复默认 60 秒）。
+   * 生产代码不会调它；只为了让自检在几百毫秒内验到"卡死"那条分支。
+   */
+  idleTimeout: function (ms) {
+    IDLE_TIMEOUT_MS = (typeof ms === "number" && ms > 0) ? ms : 60000;
+  }
 };
 
 /* ---------------- 上下文 ---------------- */
@@ -1593,10 +1655,92 @@ function trimToBudget(msgs, maxIn) {
     return out;
   }
 
+/**
+ * baseUrl → 真正要请求的地址。
+ *
+ * <p>设置里允许填 "https://host/v1"，也允许把完整地址贴进来（"…/v1/chat/completions"）。
+ * 两种都要能用，而且 /chat/completions 只拼一次。没写 http(s):// 的返回 null ——
+ * 由调用方立刻报错，而不是让 fetch 把相对地址解析到 file:// 上，再吐一句看不懂的
+ * "Failed to fetch"。
+ */
+function endpointUrl(baseUrl) {
+  var u = String(baseUrl == null ? "" : baseUrl).trim();
+  u = u.replace(/\/+$/, "");
+  u = u.replace(/\/chat\/completions$/i, "");
+  u = u.replace(/\/+$/, "");
+  if (!/^https?:\/\//i.test(u)) { return null; }
+  return u + "/chat/completions";
+}
+
+/** 从请求地址里取主机名，只为了把错误说清楚（不解析 URL，畸形地址也不会抛）。 */
+function hostOf(url) {
+  var m = String(url || "").match(/^https?:\/\/([^\/?#]+)/i);
+  return m ? m[1] : String(url || "");
+}
+
+/**
+ * 桥那一路的消息预算：最多 {@link BRIDGE_MAX_MESSAGES} 条（AiContext.java:19 的实测值）。
+ *
+ * <p>只裁<b>这一次请求</b>的消息数组，<b>不动 turns</b> —— 面板、localStorage 里的会话
+ * 和导出的 Markdown 因此都还是完整的。按整轮丢（一条问句连同它的回答），免得模型
+ * 看到半轮对话。返回 {@code {msgs, dropped}}，dropped 是丢掉的轮数。
+ */
+function fitBridgeMessages(msgs) {
+  var out = msgs.slice();
+  var dropped = 0;
+  // out[0] 是 system，最后一条是这次的问题，两头都不动。
+  while (out.length > BRIDGE_MAX_MESSAGES && out.length > 2) {
+    if (out.length >= 3 && out[1].role === "user" && out[2].role === "assistant") {
+      out.splice(1, 2);
+      dropped++;
+    } else {
+      out.splice(1, 1);
+    }
+  }
+  // 万一前面删得只剩半轮（回答没有配套的问句），也一起去掉。
+  if (out.length > 2 && out[1].role === "assistant") { out.splice(1, 1); }
+  return { msgs: out, dropped: dropped };
+}
+
   function sendExternal(msgs, box, cfg) {
   var ctrl = new AbortController();
   var acc = "";
   var trimmed = trimToBudget(msgs, cfg.maxIn);
+
+  /* ---------------- 空闲超时 ----------------
+   * fetch 自己的网络超时挡不住"网关接了连接然后一个字节都不发"。
+   * 所以这里自己计时：请求发出时开始、响应头到达时重置、每来一段数据再重置；
+   * 超时就 abort，并且让外面拿到一个明确的错误（不是永远挂着）。
+   *
+   * 计时器的结果放在 idle 这个 promise 里，和真正的请求 race ——
+   * 哪怕某个环境下 abort 没能把 fetch 弄挂，面板也不会永远停在 busy。
+   */
+  var timedOut = false;
+  var idleTimer = 0;
+  var failIdle = null;
+  var idle = new Promise(function (ok, fail) { failIdle = fail; });
+
+  function timeoutError() {
+    var secs = Math.max(1, Math.round(IDLE_TIMEOUT_MS / 1000));
+    var err = new Error(t("idleTimeout").replace("%s", secs));
+    err.timedOut = true;
+    return err;
+  }
+
+  function armIdle() {
+    if (timedOut) { return; }
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(function () {
+      if (timedOut) { return; }
+      timedOut = true;
+      try { ctrl.abort(); } catch (e) {}
+      failIdle(timeoutError());
+    }, Math.max(1, IDLE_TIMEOUT_MS));
+  }
+
+  function disarmIdle() {
+    if (idleTimer) { clearTimeout(idleTimer); idleTimer = 0; }
+  }
 
   /**
    * 服务端回来的真实用量。
@@ -1642,7 +1786,12 @@ function trimToBudget(msgs, maxIn) {
     }
   }
 
-  var url = String(cfg.baseUrl).replace(/\/+$/, "") + "/chat/completions";
+  // 地址先在这里归一化：没写 scheme 的立刻说清楚，别把相对地址丢给 fetch。
+  var url = endpointUrl(cfg.baseUrl);
+  if (!url) {
+    throw new Error(t("urlBad").replace("%u",
+      String(cfg.baseUrl == null ? "" : cfg.baseUrl).trim() || t("none")));
+  }
 
   /* 请求体：输出上限填了才发（否则用服务端默认）。
      真实用量要服务端带 usage，这由 stream_options 打开 —— 但它不是所有
@@ -1698,11 +1847,16 @@ function trimToBudget(msgs, maxIn) {
           if (buf.trim().length) { onEvent(buf); }
           return acc;
         }
+        // 收到数据就说明连接还活着 —— 重新开始算空闲时间。
+        armIdle();
         buf += dec.decode(r.value, { stream: true });
-        var idx;
-        while ((idx = buf.indexOf("\n\n")) >= 0) {
-          onEvent(buf.slice(0, idx));
-          buf = buf.slice(idx + 2);
+        // SSE 的事件之间是空行，而空行既可能是 "\n\n" 也可能是 "\r\n\r\n"。
+        // 以前只找 "\n\n"，CRLF 的服务器就会把整段回答攒到流结束才渲染。
+        var m = buf.match(/\r?\n\r?\n/);
+        while (m) {
+          onEvent(buf.slice(0, m.index));
+          buf = buf.slice(m.index + m[0].length);
+          m = buf.match(/\r?\n\r?\n/);
         }
         return pump();
       });
@@ -1715,12 +1869,15 @@ function trimToBudget(msgs, maxIn) {
   //   （模型名写错、额度用完）会被当成"它不支持用量"，之后永远拿不到真数，
   //   而且界面上看不出来。这类静默降级在这个项目里已经出现过好几次了。
   var wantUsage = !usageRefused(cfg.baseUrl);
-  var p = post(wantUsage).then(function (res) {
+  armIdle();                       // 等响应头这段也算空闲，必须能超时
+  var run = post(wantUsage).then(function (res) {
+    armIdle();                     // 响应头到了：重新计时
     if (!res.ok && wantUsage
             && (res.status === 400 || res.status === 422 || res.status === 501)) {
       return post(false).then(function (again) {
         if (again.ok) {
           usageRefuse(cfg.baseUrl);
+          armIdle();
           return consume(again);
         }
         return httpError(again);
@@ -1730,13 +1887,34 @@ function trimToBudget(msgs, maxIn) {
   }).then(function (text) {
     return (typeof text === "string" && text) ? text : acc;
   }, function (e) {
-    if (e && e.name === "AbortError") { return acc; }
+    if (e && e.name === "AbortError") {
+      // 用户按了停止，或者空闲超时已经把 ctrl 断了。半截内容交给外面：
+      // 停止由 send() 那边按"已停止"处理，超时由下面 race 里的 idle 报错。
+      return acc;
+    }
+    if (e && e.name === "TypeError") {
+      // fetch 的网络层失败全在这里：离线、CORS、证书、地址写错。
+      // 浏览器只给一句 "Failed to fetch"，换成人话，并点名是哪台主机。
+      var netErr = new Error(t("netFail").replace("%h", hostOf(url)));
+      netErr.partial = acc;          // 已经流出来的字别丢，停止时还要显示
+      throw netErr;
+    }
     throw e;
   });
 
+  // run 结束（成功或失败）就把计时器撤掉，别让它一直挂着。
+  var settle = function () { disarmIdle(); };
+  run.then(settle, settle);
+
+  // 超时和真正结束两条路一起 race：即使某个环境里 abort 没能把 fetch 弄挂，
+  // 面板也不会永远停在 busy。
+  var out = Promise.race([run, idle]);
   // abortFn 靠这个下手。
-  p.abort = function () { try { ctrl.abort(); } catch (e) {} };
-  return p;
+  out.abort = function () {
+    disarmIdle();
+    try { ctrl.abort(); } catch (e) {}
+  };
+  return out;
 }
 
 loadSel();
@@ -1756,6 +1934,9 @@ loadSel();
   if (busy) { stop(); return; }
   // 自定义模式下不需要桥 —— 请求是页面自己发的。
   if (!bridge && !currentModel()) { return; }
+
+  /** 用户按过停止按钮/ Esc：这次的需求要当"被停下"处理，不能当正常回答。 */
+  var stoppedByUser = false;
 
   var q = el("ask").value.trim();
   // 只带附件、不写字也得能发 —— 否则传个文件问它是什么这件事就做不了。
@@ -1801,6 +1982,7 @@ loadSel();
   for (var i = 0; i < turns.length; i++) {
     var tr = turns[i];
     if (tr.failed) { continue; }      // 失败的那一轮不算对话，不进模型历史
+    if (tr.stopped) { continue; }     // 被停掉的那一轮也不重发：回答只有半截
     if (tr.role === "user") {
       msgs.push({ role: "user", content: questionOf(tr) });
     } else if (tr.role === "assistant") {
@@ -1848,7 +2030,13 @@ loadSel();
     } else if (cur) {
       p = sendExternal(msgs, box, cur);
     } else {
-    p = bridge.chat(msgs, {
+    // 桥对请求有实测上限（约 20 条消息 / 32000 字符，见 AiContext.java:19）。
+    // 这里只裁这一次请求，turns 一个字都不动 —— 面板、存盘和导出都保持完整。
+    var fit = fitBridgeMessages(msgs);
+    if (fit.dropped > 0) {
+      noteBefore(box, t("trimNotice").replace("%n", fit.dropped));
+    }
+    p = bridge.chat(fit.msgs, {
       onDelta: function (s) {
         s = s || "";
         // s 到底是“增量”还是“到目前为止的全文” —— 两种都见过。
@@ -1891,6 +2079,7 @@ loadSel();
   }
 
   abortFn = function () {
+    stoppedByUser = true;
     try {
       // 自定义模型走 AbortController；内置走桥的 requestId。
       if (p && typeof p.abort === "function") { p.abort(); }
@@ -1898,8 +2087,37 @@ loadSel();
     } catch (e) {}
   };
 
+  /**
+   * 用户按了停止：把已经出来的字留在气泡里，标成"已停止"。
+   *
+   * <p>关键点：<b>不能</b>走正常成功那条路 —— 以前这里把 acc 当最终回答，
+   * 于是一个字都没来时 push 了一条 content 空的 assistant，之后每次请求都
+   * 把它当历史再发一遍；半截回答也被当成完整的存下来、导出去。
+   * 现在被停掉的一轮标记 stopped，不再进模型历史，但面板和导出里都留着。
+   */
+  function stoppedTurn(text) {
+    if (text) {
+      box.className = "m a";
+      renderAnswer(box, { content: text, stopped: true });
+      addActions(box, q, text);
+      turns.push({ role: "user", content: q, q: q, stopped: true });
+      turns.push({ role: "assistant", content: text, stopped: true });
+    } else {
+      // 一个字都没来：连一条空的 assistant 都不要 push。
+      // 这一轮同时算"停下的"和"失败的"：stopped 说明为什么没有回答，
+      // failed 让它在重绘时走"问题 + 错误提示"那条画法，并且不进模型历史。
+      box.className = "m e";
+      box.textContent = t("stoppedNote");
+      addActions(box, q, null);
+      turns.push({ role: "user", content: q, q: q, stopped: true, failed: true,
+                   err: t("stoppedNote") });
+    }
+    touchTitle();
+  }
+
   Promise.resolve(p).then(function (r) {
     var text = (typeof r === "string" && r) ? r : base;
+    if (stoppedByUser) { stoppedTurn(text); return; }
     box.innerHTML = md(text);
       wireCopy(box);
     // 结束时用<b>整段平均</b>收尾：窗口里最后一小段常常偏低，收尾的数字会难看。
@@ -1912,10 +2130,13 @@ loadSel();
     // 存进历史只会让它跟着每一条记录一起重发。
     turns.push({ role: "user", content: q, q: q });
     turns.push({ role: "assistant", content: text });
-    // 历史太长会挤爆请求预算，留最近若干轮就够。
-    if (turns.length > 24) { turns.splice(0, turns.length - 24); }
+    // 历史在这里<b>不再</b>裁：面板、存盘和导出都应该保留完整对话。
+    // 请求装不下时只裁"发出去的那一份"（内置走 fitBridgeMessages，自定义走 trimToBudget）。
     touchTitle();
   }).catch(function (e) {
+    // 如果这一轮是被用户停下的：把还看得见的半截文字留下（内置桥在 base 里，
+    // 自定义模型在 acc 里；自定义这条路出错时把 acc 挂在 e.partial 上带过来）。
+    if (stoppedByUser) { stoppedTurn(base || (e && e.partial) || ""); return; }
     // 失败的那一轮要留在<b>对话里</b> —— 以前什么都不存，于是一收起面板，
     // 这个问题和错误提示就一起消失了。但标成 failed：它不会被当成上下文
     // 再发给模型（见 msgs 那段），"失败的问题"对模型没有意义。

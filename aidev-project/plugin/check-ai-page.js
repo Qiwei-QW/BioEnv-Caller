@@ -10,7 +10,18 @@
 "use strict";
 const fs = require("fs");
 
-const script = fs.readFileSync(process.argv[2], "utf8");
+/**
+ * 传进来的通常是 ai.html 本身（页面的脚本在 <script> 里），也可能是一份已经
+ * 抽好的 .js。两种都收：拿不到 <script> 就把整份当脚本。
+ *
+ * <p>以前这里是直接 eval 整个文件的 —— 页面还叫 .js 时没问题，改成 .html 之后
+ * 每次都在第一步抛 "Unexpected token '<'"，于是自检实际上从来没跑起来过。
+ */
+const page = fs.readFileSync(process.argv[2], "utf8");
+const script = (function (src) {
+  const m = src.match(/<script[^>]*>([\s\S]*?)<\/script>/i);
+  return m ? m[1] : src;
+})(page);
 
 const calls = [];
 const errors = [];
@@ -62,6 +73,9 @@ function get(id) {
   return byId[id];
 }
 
+/** 内置模型桥的调用记录：桥那一路的"消息条数预算"就靠它来验。 */
+const bridgeCalls = [];
+
 const documentStub = {
   documentElement: makeEl("html"),
   body: makeEl("body"),
@@ -74,8 +88,20 @@ const documentStub = {
 };
 
 const windowStub = {
-  // 这是要验的一个关键分支：桥不在时页面应该显示"不可用"，而不是卡住。
-  tbtools: undefined,
+  // 桥在不在，页面要走两条完全不同的路。这里给一个能回话的桩：
+  // 自定义模型那几段仍然走 fetch，只有"内置模型"那一段会用到它。
+  tbtools: {
+    ai: {
+      chat: function (msgs, opts) {
+        bridgeCalls.push(msgs.slice());
+        var text = "桥的回答";
+        if (opts && typeof opts.onDelta === "function") { opts.onDelta(text); }
+        return Promise.resolve(text);
+      },
+      chatImage: function () { return Promise.resolve("(图片)"); },
+      abort: function () {},
+    },
+  },
   location: { href: "file:///.../ai.html" },
   addEventListener() {},
 };
@@ -287,6 +313,95 @@ function sendOnce(text) {
 /** 会话下拉里第一项的名字。 */
 function firstOption() {
   return String((byId["sessSel"].children[0] || {}).textContent || "");
+}
+
+/* ---------------- 鲁棒性那段用的小工具 ---------------- */
+
+function enc(s) { return new TextEncoder().encode(s); }
+
+/** 桩元素的文字：textContent + 子节点的文字（"（已停止）"是子节点）。 */
+function nodeText(n) {
+  var s = String((n && n.textContent) || "");
+  var kids = (n && n.children) || [];
+  for (var i = 0; i < kids.length; i++) { s += " " + nodeText(kids[i]); }
+  return s;
+}
+
+/** 对话区里最后一条<b>回答</b>的文字。 */
+function lastAnswerText() {
+  var kids = byId["log"].children;
+  for (var i = kids.length - 1; i >= 0; i--) {
+    if (String(kids[i].className || "") === "m a") { return nodeText(kids[i]); }
+  }
+  return "";
+}
+
+/** 对话区里最后一条回答渲染出来的 HTML（重绘之后正文只在这里）。 */
+function lastAnswerHtml() {
+  var kids = byId["log"].children;
+  for (var i = kids.length - 1; i >= 0; i--) {
+    if (String(kids[i].className || "") === "m a") { return String(kids[i].innerHTML || ""); }
+  }
+  return "";
+}
+
+/** 对话区里最后一条<b>错误/停止提示</b>的文字。 */
+function lastErrorText() {
+  var kids = byId["log"].children;
+  for (var i = kids.length - 1; i >= 0; i--) {
+    if (String(kids[i].className || "") === "m e") { return String(kids[i].textContent || ""); }
+  }
+  return "";
+}
+
+function isBusy() { return String(byId["go"].className || "").indexOf("busy") >= 0; }
+
+/** 请求体里的 messages（解析不出来就给空数组）。 */
+function sentMessages() {
+  if (!requests.length) { return []; }
+  var body = {};
+  try { body = JSON.parse(requests[requests.length - 1].body); } catch (e) {}
+  return body.messages || [];
+}
+
+/**
+ * 一个"响应头立刻回来、body 先给几段、然后一直挂着"的 fetch 桩。
+ * 收到 abort 时让 read() 以 AbortError 拒绝 —— 真实 fetch 就是这个行为。
+ */
+function stuckFetch(chunks) {
+  return function (url, opts) {
+    var signal = opts && opts.signal;
+    var i = 0;
+    function abortErr() {
+      var e = new Error("The operation was aborted.");
+      e.name = "AbortError";
+      return e;
+    }
+    return Promise.resolve({
+      ok: true, status: 200,
+      body: {
+        getReader: function () {
+          return {
+            read: function () {
+              if (i < chunks.length) {
+                return Promise.resolve({ value: enc(chunks[i++]), done: false });
+              }
+              return new Promise(function (res, rej) {
+                if (!signal) { return; }
+                if (signal.aborted) { rej(abortErr()); return; }
+                signal.addEventListener("abort", function () { rej(abortErr()); });
+              });
+            }
+          };
+        }
+      }
+    });
+  };
+}
+
+/** 一个永远等不到响应头的 fetch 桩（模拟网关接了连接但不说话）。 */
+function hangingFetch() {
+  return function () { return new Promise(function () { /* 永远不 settle */ }); };
 }
 
 function runNetwork() {
@@ -547,8 +662,265 @@ want("表格没被包进 <p>", tableHtml.indexOf("<p><div class='tbl'>") < 0);
 var notTable = String(windowStub.tbvAi.render("| a | b |\n| 1 | 2 |"));
 want("没有分隔行就不当表格", notTable.indexOf("<table>") < 0, notTable.slice(0, 80));
 
+/* ================================================================
+ * 鲁棒性：接口地址 / CRLF 流 / 停止语义 / 空闲超时 / 桥的消息预算
+ *
+ * 这一段验的都是"不报错但会安静地坏掉"的地方：每个断言都盯着用户看得见的
+ * 结果（气泡里有什么字、busy 有没有清、请求里到底装了什么）。
+ * ================================================================ */
+function runHardening() {
+  var p = Promise.resolve();
+
+  // ---------- 接口地址 ----------
+  p = p.then(function () {
+    console.log("");
+    console.log("=== 接口地址：归一化 ===");
+    byId["sessNew"].onclick();
+    requests = [];
+    global.fetch = function (url, opts) {
+      requests.push({ url: String(url), body: String((opts && opts.body) || "") });
+      return Promise.resolve(sseResponse([
+        'data: {"choices":[{"delta":{"content":"ok"}}]}\n\n',
+        "data: [DONE]\n\n"
+      ]));
+    };
+    // 1) 没写 scheme：立刻报错，一个请求都不该发出去。
+    windowStub.tbvAi.setModels(JSON.stringify([{
+      id: "m1", label: "No scheme", baseUrl: "api.example.invalid/v1",
+      apiKey: "k", model: "x", maxIn: 0, maxOut: 0, ok: true
+    }]));
+    sendOnce("bad endpoint");
+    return wait(80).then(function () {
+      want("没写 http(s):// 时不发请求", requests.length === 0, "requests=" + requests.length);
+      want("报错说明要补 http(s):// 并点名地址",
+          lastErrorText().indexOf("http") >= 0
+          && lastErrorText().indexOf("api.example.invalid") >= 0,
+          lastErrorText());
+      // 2) 贴了完整地址：/chat/completions 只能出现一次。
+      windowStub.tbvAi.setModels(JSON.stringify([{
+        id: "m1", label: "Full", baseUrl: "https://example.invalid/v1/chat/completions/",
+        apiKey: "k", model: "x", maxIn: 0, maxOut: 0, ok: true
+      }]));
+      sendOnce("full endpoint");
+      return wait(100).then(function () {
+        want("末尾的 /chat/completions 只保留一份",
+            requests.length === 1
+            && requests[0].url === "https://example.invalid/v1/chat/completions",
+            requests.length ? requests[0].url : "(没发)");
+        want("归一化之后正常收尾", !isBusy(), byId["go"].className);
+      });
+    });
+  });
+
+  // ---------- CRLF 的 SSE ----------
+  p = p.then(function () {
+    console.log("");
+    console.log("=== CRLF 的 SSE：流没结束就要渲染 ===");
+    byId["sessNew"].onclick();
+    windowStub.tbvAi.setModels(MODEL_JSON);
+    var reads = 0;
+    global.fetch = function () {
+      return Promise.resolve({
+        ok: true, status: 200,
+        body: { getReader: function () { return { read: function () {
+          reads++;
+          if (reads === 1) {
+            return Promise.resolve({
+              value: enc('data: {"choices":[{"delta":{"content":"CRLF 到了"}}]}\r\n\r\n'),
+              done: false
+            });
+          }
+          if (reads === 2) {
+            // 先挂一会儿：这段时间里页面上必须已经能看到第一段。
+            return new Promise(function (res) {
+              setTimeout(function () {
+                res({ value: enc("data: [DONE]\r\n\r\n"), done: false });
+              }, 250);
+            });
+          }
+          return Promise.resolve({ value: undefined, done: true });
+        } }; } }
+      });
+    };
+    sendOnce("crlf");
+    return wait(90).then(function () {
+      want("流还没结束就已经渲染出内容",
+          lastAnswerText().indexOf("CRLF 到了") >= 0, lastAnswerText());
+      return wait(350);
+    }).then(function () {
+      want("流结束之后内容仍在", lastAnswerText().indexOf("CRLF 到了") >= 0, lastAnswerText());
+      want("CRLF 的流结束后也清掉 busy", !isBusy(), byId["go"].className);
+    });
+  });
+
+  // ---------- 停止：半截回答 ----------
+  p = p.then(function () {
+    console.log("");
+    console.log("=== 停止：保留半截、不留空回答 ===");
+    byId["sessNew"].onclick();
+    windowStub.tbvAi.setModels(MODEL_JSON);
+    global.fetch = stuckFetch(['data: {"choices":[{"delta":{"content":"半截回答"}}]}\n\n']);
+    sendOnce("半截问题");
+    return wait(80).then(function () {
+      want("停止前已经显示半截", lastAnswerText().indexOf("半截回答") >= 0, lastAnswerText());
+      byId["go"].onclick();            // 忙的时候这个按钮就是停止
+      return wait(150);
+    }).then(function () {
+      want("停止后 busy 清掉", !isBusy(), byId["go"].className);
+      want("半截文字还在", lastAnswerText().indexOf("半截回答") >= 0, lastAnswerText());
+      want("标成了已停止", lastAnswerText().indexOf("已停止") >= 0, lastAnswerText());
+      // 收起再展开（Java 重推语言）走的就是整块重绘 —— 标记必须存进历史里。
+      windowStub.tbvAi.setLang("zh");
+      want("重绘后仍带着「已停止」",
+          lastAnswerText().indexOf("已停止") >= 0, lastAnswerText());
+      want("重绘后半截正文还在", lastAnswerHtml().indexOf("半截回答") >= 0,
+          lastAnswerHtml());
+      // 下一问：被停掉的半截回答不能进模型历史。
+      requests = [];
+      global.fetch = function (url, opts) {
+        requests.push({ url: String(url), body: String((opts && opts.body) || "") });
+        return Promise.resolve(sseResponse([
+          'data: {"choices":[{"delta":{"content":"下一个回答"}}]}\n\n',
+          "data: [DONE]\n\n"
+        ]));
+      };
+      sendOnce("下一个问题");
+      return wait(120).then(function () {
+        var msgs = sentMessages();
+        var hasPartial = msgs.some(function (m) {
+          return m.role === "assistant" && String(m.content || "").indexOf("半截回答") >= 0;
+        });
+        var hasEmpty = msgs.some(function (m) {
+          return m.role === "assistant" && String(m.content || "") === "";
+        });
+        var hasStoppedQuestion = msgs.some(function (m) {
+          return m.role === "user" && String(m.content || "").indexOf("半截问题") >= 0;
+        });
+        want("被停掉的半截回答没进模型历史", !hasPartial, JSON.stringify(msgs));
+        want("历史里没有空的 assistant 消息", !hasEmpty, JSON.stringify(msgs));
+        want("被停掉的那一问也不重发", !hasStoppedQuestion, JSON.stringify(msgs));
+        want("下一问正常收尾", !isBusy() && lastAnswerText().indexOf("下一个回答") >= 0,
+            lastAnswerText());
+      });
+    });
+  });
+
+  // ---------- 停止：一个字都没来 ----------
+  p = p.then(function () {
+    console.log("");
+    console.log("=== 停止：一个字都没来 ===");
+    byId["sessNew"].onclick();
+    windowStub.tbvAi.setModels(MODEL_JSON);
+    global.fetch = stuckFetch([]);      // 响应头回来了，body 一个字节都不给
+    sendOnce("空白问题");
+    return wait(50).then(function () {
+      byId["go"].onclick();
+      return wait(150);
+    }).then(function () {
+      want("停止后 busy 清掉", !isBusy(), byId["go"].className);
+      want("一个字都没来时显示已停止", lastErrorText().indexOf("已停止") >= 0, lastErrorText());
+      windowStub.tbvAi.setLang("zh");   // 整块重绘
+      want("重绘后仍是已停止，而不是空回答",
+          lastErrorText().indexOf("已停止") >= 0, lastErrorText());
+      requests = [];
+      global.fetch = function (url, opts) {
+        requests.push({ url: String(url), body: String((opts && opts.body) || "") });
+        return Promise.resolve(sseResponse([
+          'data: {"choices":[{"delta":{"content":"好"}}]}\n\n',
+          "data: [DONE]\n\n"
+        ]));
+      };
+      sendOnce("再问一次");
+      return wait(120).then(function () {
+        var msgs = sentMessages();
+        want("没有把空的 assistant 再发出去", msgs.every(function (m) {
+          return !(m.role === "assistant" && String(m.content || "") === "");
+        }), JSON.stringify(msgs));
+      });
+    });
+  });
+
+  // ---------- 空闲超时 ----------
+  p = p.then(function () {
+    console.log("");
+    console.log("=== 空闲超时：不能永远 busy ===");
+    byId["sessNew"].onclick();
+    windowStub.tbvAi.setModels(MODEL_JSON);
+    windowStub.tbvAi.idleTimeout(80);   // 自检里把 60 秒改短
+    global.fetch = hangingFetch();
+    var t0 = Date.now();
+    sendOnce("卡死的请求");
+    return wait(400).then(function () {
+      var ms = Date.now() - t0;
+      windowStub.tbvAi.idleTimeout();   // 恢复默认 60 秒
+      want("超时后 busy 清掉", !isBusy(), byId["go"].className);
+      want("说明没有收到任何数据",
+          lastErrorText().indexOf("没有收到任何数据") >= 0, lastErrorText());
+      want("超时是自己结束的，不是一直挂着", ms < 3000, "after " + ms + "ms");
+      // 超时那一轮进了历史，而且还能再发下一问。
+      requests = [];
+      global.fetch = function (url, opts) {
+        requests.push({ url: String(url), body: String((opts && opts.body) || "") });
+        return Promise.resolve(sseResponse([
+          'data: {"choices":[{"delta":{"content":"恢复"}}]}\n\n',
+          "data: [DONE]\n\n"
+        ]));
+      };
+      sendOnce("超时之后");
+      return wait(120).then(function () {
+        want("超时之后还能正常提问", !isBusy() && lastAnswerText().indexOf("恢复") >= 0,
+            lastAnswerText());
+      });
+    });
+  });
+
+  // ---------- 桥的消息预算 ----------
+  p = p.then(function () {
+    console.log("");
+    console.log("=== 桥那一路：消息预算 ===");
+    byId["sessNew"].onclick();
+    windowStub.tbvAi.setModels("[]");   // 没有自定义模型 → 走内置桥
+    bridgeCalls.length = 0;
+    var chain = Promise.resolve();
+    for (var n = 1; n <= 11; n++) {
+      (function (k) {
+        chain = chain.then(function () {
+          sendOnce("桥问题" + k);
+          return wait(30);
+        });
+      })(n);
+    }
+    return chain.then(function () {
+      want("桥被调用了 11 次", bridgeCalls.length === 11, "calls=" + bridgeCalls.length);
+      var last = bridgeCalls[bridgeCalls.length - 1] || [];
+      want("最后一次请求不超过 20 条消息", last.length <= 20 && last.length > 1,
+          "len=" + last.length);
+      var hasNotice = false;
+      byId["log"].children.forEach(function (c) {
+        if (String(c.className || "") === "m s"
+            && String(c.textContent || "").indexOf("已省略") >= 0) { hasNotice = true; }
+      });
+      want("提示了省略多少轮", hasNotice, "没有提示");
+      // 裁的只是请求：面板和导出必须还是完整的。
+      windowStub.tbvAi.setLang("zh");
+      var users = byId["log"].children.filter(function (c) {
+        return String(c.className || "") === "m u";
+      });
+      want("重绘后面板仍保留最早一问",
+          users.length > 0 && nodeText(users[0]).indexOf("桥问题1") >= 0,
+          users.length ? nodeText(users[0]) : "(没有)");
+      var doc = windowStub.tbvAi.markdown();
+      want("导出里仍保留最早一问",
+          doc !== null && String(doc.text || "").indexOf("桥问题1") >= 0,
+          doc ? doc.name : "(没有)");
+    });
+  });
+
+  return p;
+}
+
 console.log("");
-runNetwork().then(function () {
+runNetwork().then(runHardening).then(function () {
   console.log("");
   console.log(problems.length === 0
     ? "PASS " + checks + " checks"

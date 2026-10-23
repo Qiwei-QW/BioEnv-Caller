@@ -8,16 +8,16 @@ import java.awt.GraphicsEnvironment;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
-import java.io.Writer;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+
+import bioenv.core.AtomicFiles;
 
 import javax.swing.AbstractButton;
 import javax.swing.JComponent;
@@ -949,26 +949,8 @@ public final class UiTheme {
         if (System.getProperty("bioenv.theme.readonly") != null) {
             return;              // 出图/自检用：只在本会话生效，不写用户的配置
         }
-        Writer w = null;
-        try {
-            File f = defaultFile();
-            File dir = f.getParentFile();
-            if (dir != null && !dir.isDirectory()) {
-                dir.mkdirs();
-            }
-            w = new OutputStreamWriter(new FileOutputStream(f),
-                    Charset.forName("UTF-8"));
-            w.write(id);
-        } catch (Exception ignored) {
-            // 存不下就只在本次会话生效，不打扰用户
-        } finally {
-            if (w != null) {
-                try {
-                    w.close();
-                } catch (Exception ignored) {
-                    // 同上
-                }
-            }
-        }
+        // 建目录、临时文件、原子替换都在 AtomicFiles 里；失败时它已经报过，
+        // 行为仍然是"本次会话照常生效"。
+        AtomicFiles.write(defaultFile(), id, StandardCharsets.UTF_8);
     }
 }

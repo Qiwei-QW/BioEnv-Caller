@@ -1,17 +1,17 @@
 package bioenv.i18n;
 
 import java.io.BufferedReader;
-import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import javax.swing.SwingUtilities;
+
+import bioenv.core.AtomicFiles;
 
 /**
  * 界面语言的中枢：当前语言、文案查询、切换通知、磁盘持久化。
@@ -434,34 +434,22 @@ public final class I18n {
     }
 
     /**
-     * 把语言写到磁盘。失败静默。
+     * 把语言写到磁盘。
      *
-     * <p>为什么失败要静默：写不进去最常见的原因是目录只读或被杀软锁住，
+     * <p>失败不抛、不弹窗：写不进去最常见的原因是目录只读或被杀软锁住，
      * 这两种情况下用户仍然可以正常用完这一次会话，只是下次启动回到中文。
-     * 为此弹一个错误框，代价远大于收益。
+     * 但不再是"静默"——原子替换与失败提示交给 {@link AtomicFiles}，
+     * 用户下次打开时不必再猜语言为什么变了。
      */
     private static void save(Lang lang) {
         File f = file;
         if (f == null || lang == null) {
             return;
         }
-        BufferedWriter bw = null;
-        try {
-            File parent = f.getParentFile();
-            if (parent != null && !parent.exists()) {
-                parent.mkdirs();
-            }
-            bw = new BufferedWriter(new OutputStreamWriter(
-                    new FileOutputStream(f), "UTF-8"));
-            // 只写代码，不写枚举名，也不写任何其它内容：这个文件要能被用户
-            // 手工改成 en 或 zh，所以格式越简单越好。
-            bw.write(lang.code());
-            bw.write("\n");
-        } catch (Exception ignored) {
-            // 见方法注释：写不进去不影响本次会话可用。
-        } finally {
-            close(bw);
-        }
+        // 只写代码，不写枚举名，也不写任何其它内容：这个文件要能被用户
+        // 手工改成 en 或 zh，所以格式越简单越好。
+        // 建目录、临时文件、原子替换都在 AtomicFiles 里；失败时它已经报过。
+        AtomicFiles.write(f, lang.code() + "\n", StandardCharsets.UTF_8);
     }
 
     private static void close(java.io.Closeable c) {

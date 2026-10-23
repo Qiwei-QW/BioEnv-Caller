@@ -1,14 +1,10 @@
 package vmadapt.core;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 /**
  * 一台虚拟机的 SSH 传输通道，基于 Windows 自带的 OpenSSH 客户端。
@@ -252,7 +248,7 @@ public final class SshTransport {
      * @param sink   行回调，可为 null（此时只收集不回调）
      * @return 结果
      */
-    public Result runBashStreaming(String script, LineSink sink) {
+    public Result runBashStreaming(String script, final LineSink sink) {
         Result r = new Result();
         String invalid = validateForRun();
         if (invalid != null) {
@@ -263,39 +259,86 @@ public final class SshTransport {
             return r;
         }
         Process p = null;
+        final ProcessCapture.CappedOutput out = new ProcessCapture.CappedOutput();
+        final ProcessCapture.CappedOutput err = new ProcessCapture.CappedOutput();
         try {
             String[] cmd = SshCommand.build(target);
             r.commandLine = SshCommand.toDisplayString(cmd);
             p = startProcess(cmd, script);
 
-            // 两个流各起一个线程。顺序读会死锁：管道缓冲区（Windows 上约 4KB）
-            // 写满后远端会阻塞，而我们还在等另一个流。
-            Thread errPump = pumpStreaming(p.getErrorStream(), sink, r.stderr);
-            readLinesStreaming(p.getInputStream(), sink, r.stdout, false);
-            // 等 stderr 收尾，但别无限等：远端某些工具会留着 fd 不放。
-            errPump.join(3000);
+            // 执行与收尾都交给 ProcessCapture：两个流各一个读取线程（顺序读会在
+            // 管道写满时死锁），本线程只负责 waitFor(runTimeoutSeconds)。
+            //
+            // 以前是「先把 stdout 读到 EOF，再 waitFor 超时」——远端命令只要不关闭
+            // stdout，waitFor 那一行就永远执行不到，300 秒的 runTimeoutSeconds 于是
+            // 形同虚设，用户看到的是界面永远停在「运行中」。
+            ProcessCapture.Outcome o = ProcessCapture.run(p, runTimeoutSeconds,
+                    new ProcessCapture.LineSink() {
+                        @Override
+                        public void line(String text, boolean isError) {
+                            String clean = clamp(Shell.stripAnsi(text));
+                            out.add(clean);
+                            if (sink != null) {
+                                // 实时回调：每一行都交出去，界面自己裁剪；
+                                // CappedOutput 只约束"留下来的那一份"。
+                                sink.line(clean, false);
+                            }
+                        }
+                    },
+                    new ProcessCapture.LineSink() {
+                        @Override
+                        public void line(String text, boolean isError) {
+                            String clean = clamp(Shell.stripAnsi(text));
+                            err.add(clean);
+                            if (sink != null) {
+                                sink.line(clean, true);
+                            }
+                        }
+                    });
+            r.stdout.addAll(out.lines());
+            r.stderr.addAll(err.lines());
 
-            if (!p.waitFor(runTimeoutSeconds, TimeUnit.SECONDS)) {
+            if (o.timedOut) {
                 r.timedOut = true;
-                p.destroyForcibly();
-                String msg = "The remote command did not finish within " + runTimeoutSeconds + " seconds and was terminated."
-                        + " If this is a normally long-running task, raise the timeout.";
+                String msg = timeoutMessage(runTimeoutSeconds);
                 r.stderr.add(msg);
                 if (sink != null) {
                     sink.line(msg, true);
                 }
             } else {
-                r.exitCode = p.exitValue();
+                r.exitCode = o.exitCode;
             }
         } catch (Exception e) {
             r.stderr.add(describeLaunchFailure(e));
             if (sink != null) {
                 sink.line(r.stderr.get(r.stderr.size() - 1), true);
             }
-        } finally {
-            closeQuietly(p);
         }
         return r;
+    }
+
+    /**
+     * 超时时给用户看的一句话。
+     *
+     * <h2>为什么只说「本地 ssh 客户端被终止」</h2>
+     *
+     * <p>超时后 {@code destroyForcibly} 杀的是本机的 {@code ssh.exe}。远端那条
+     * {@code conda run} 进程树会不会跟着结束，取决于远端的 sshd 与终端语义，
+     * 这里<b>没有</b>把它杀掉——所以不能写「远端已终止」。
+     *
+     * <p>为什么不顺手把远端也杀掉：本次运行的 marker（{@code BIOENV_JOB}）不在
+     * {@code runBashStreaming(script, sink)} 的契约里，而生成 kill 脚本的
+     * {@code CommandBuilder.killScript(marker)} 属于插件模块（bioenv）。
+     * 模块只允许单向依赖（插件依赖 vmadapt，编译顺序见根目录 build.ps1：先编
+     * vmadapt、且不带任何 classpath），所以这里拿不到——更不该去猜 script 的文本。
+     * 真要杀掉远端，需要把 marker 提到通道接口并一路传下来，那是另一处设计改动。
+     * 在那之前，措辞必须如实说明远端可能还在跑。
+     */
+    private String timeoutMessage(int seconds) {
+        return "The remote command did not finish within " + seconds + " seconds. "
+                + "The local ssh client was terminated, but the remote process tree may "
+                + "still be running on " + safeHost() + ". If the task is genuinely long, "
+                + "raise the timeout.";
     }
 
     /**
@@ -427,7 +470,13 @@ public final class SshTransport {
     // 内部实现
     // ------------------------------------------------------------------
 
-    /** 内部捕获实现，允许指定超时（探测用短的，执行用长的）。 */
+    /**
+     * 内部捕获实现，允许指定超时（探测用短的，执行用长的）。
+     *
+     * <p>两个流都交给 {@link ProcessCapture} 排空，本线程只等超时。以前是
+     * 「先把 stdout 读到 EOF，再 waitFor(超时)」：远端命令只要不关闭 stdout，
+     * 超时那一行就永远执行不到，探测（{@link #probe()} 的 25 秒）会一直挂住。
+     */
     private Result runCapture(String script, int timeoutSeconds) {
         Result r = new Result();
         String invalid = validateForRun();
@@ -439,26 +488,37 @@ public final class SshTransport {
             script = "";
         }
         Process p = null;
+        final ProcessCapture.CappedOutput out = new ProcessCapture.CappedOutput();
+        final ProcessCapture.CappedOutput err = new ProcessCapture.CappedOutput();
         try {
             String[] cmd = SshCommand.build(target);
             r.commandLine = SshCommand.toDisplayString(cmd);
             p = startProcess(cmd, script);
 
-            Thread errPump = pump(p.getErrorStream(), r.stderr);
-            readLines(p.getInputStream(), r.stdout);
-            errPump.join(3000);
-
             int t = timeoutSeconds > 0 ? timeoutSeconds : runTimeoutSeconds;
-            if (!p.waitFor(t, TimeUnit.SECONDS)) {
+            ProcessCapture.Outcome o = ProcessCapture.run(p, t,
+                    new ProcessCapture.LineSink() {
+                        @Override
+                        public void line(String text, boolean isError) {
+                            out.add(clamp(Shell.stripAnsi(text)));
+                        }
+                    },
+                    new ProcessCapture.LineSink() {
+                        @Override
+                        public void line(String text, boolean isError) {
+                            err.add(clamp(Shell.stripAnsi(text)));
+                        }
+                    });
+            r.stdout.addAll(out.lines());
+            r.stderr.addAll(err.lines());
+            if (o.timedOut) {
                 r.timedOut = true;
-                p.destroyForcibly();
+                r.stderr.add(timeoutMessage(t));
             } else {
-                r.exitCode = p.exitValue();
+                r.exitCode = o.exitCode;
             }
         } catch (Exception e) {
             r.stderr.add(describeLaunchFailure(e));
-        } finally {
-            closeQuietly(p);
         }
         return r;
     }
@@ -512,76 +572,10 @@ public final class SshTransport {
         return h.isEmpty() ? "(no host)" : h;
     }
 
-    private static void closeQuietly(Process p) {
-        if (p == null) {
-            return;
-        }
-        try {
-            p.getInputStream().close();
-        } catch (Exception ignored) {
-            // 已经关了
-        }
-        try {
-            p.getErrorStream().close();
-        } catch (Exception ignored) {
-            // 已经关了
-        }
-    }
-
-    private static Thread pump(final InputStream in, final List<String> into) {
-        Thread t = new Thread(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    readLines(in, into);
-                } catch (Exception ignored) {
-                    // 流已关闭
-                }
-            }
-        }, "vmadapt-stderr-pump");
-        t.setDaemon(true);
-        t.start();
-        return t;
-    }
-
-    private static Thread pumpStreaming(final InputStream in, final LineSink sink,
-                                       final List<String> into) {
-        Thread t = new Thread(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    readLinesStreaming(in, sink, into, true);
-                } catch (Exception ignored) {
-                    // 流已关闭
-                }
-            }
-        }, "vmadapt-stderr-pump");
-        t.setDaemon(true);
-        t.start();
-        return t;
-    }
-
-    private static void readLines(InputStream in, List<String> into) throws IOException {
-        BufferedReader br = new BufferedReader(new InputStreamReader(in, UTF8));
-        String line;
-        while ((line = br.readLine()) != null) {
-            into.add(clamp(Shell.stripAnsi(line)));
-        }
-    }
-
-    private static void readLinesStreaming(InputStream in, LineSink sink,
-                                           List<String> into, boolean isError) throws IOException {
-        BufferedReader br = new BufferedReader(new InputStreamReader(in, UTF8));
-        String line;
-        while ((line = br.readLine()) != null) {
-            String clean = clamp(Shell.stripAnsi(line));
-            into.add(clean);
-            if (sink != null) {
-                // 实时回调：readLine 一返回就立刻交出去，不攒批、不等待进程结束。
-                sink.line(clean, isError);
-            }
-        }
-    }
+    // 原来这里有一个 closeQuietly(Process)：关闭它的 stdout/stderr 两个流。
+    // 现在不做了——超时之后 ssh.exe 是被强杀的，从等待线程里 close 管道可能一直
+    // 阻塞到远端那条连接真正结束（Windows 上本机实测过同类情形，见 ProcessCapture
+    // 的说明）。两个读取线程由 ProcessCapture 管理，是 daemon，读到 EOF 时自己收尾。
 
     private static String clamp(String s) {
         if (s == null || s.length() <= MAX_LINE_CHARS) {
