@@ -5,8 +5,10 @@ import java.io.StringReader;
 import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
@@ -45,10 +47,18 @@ public final class CorrectionStore {
     /** Marker for a rule that applies to every command. */
     public static final String ANY_COMMAND = "*";
     private final File file;
-    /** Chosen kinds: {@code command\toption} to kind. */
+    /** Chosen kinds: {@code command\toption} to kind (this instance's view). */
     private final Map<String, Schema.Option.Kind> corrections =
             new LinkedHashMap<String, Schema.Option.Kind>();
-    private boolean dirty;
+    /**
+     * 本实例自上次成功写盘以来设置/修改过的键：{@code command\toption} 到类型名。
+     *
+     * <p>保存时先读回磁盘再叠上这一小份改动，这样另一个面板实例（TBtools 可能建
+     * 不止一个，见 {@code PluginInject}）刚保存的设置不会被过期快照删掉。
+     */
+    private final Map<String, String> changed = new LinkedHashMap<String, String>();
+    /** 本实例删掉的键；删除也要记下来，否则别人删过的会被人写回去。 */
+    private final Set<String> removed = new LinkedHashSet<String>();
 
     public CorrectionStore() {
         this(defaultFile());
@@ -137,19 +147,21 @@ public final class CorrectionStore {
         if (storedKey == null) {
             return false;
         }
-        boolean removed = corrections.remove(storedKey) != null;
-        if (removed) {
-            dirty = true;
-            save();
+        if (corrections.remove(storedKey) == null) {
+            return false;
         }
-        return removed;
+        tombstone(storedKey);
+        save();
+        return true;
     }
 
     /** Forgets every remembered choice. */
     public int forgetAll() {
         int n = corrections.size();
+        for (String key : corrections.keySet()) {
+            tombstone(key);
+        }
         corrections.clear();
-        dirty = true;
         save();
         return n;
     }
@@ -159,12 +171,23 @@ public final class CorrectionStore {
         Map<String, Schema.Option.Kind> own = forCommand(command);
         for (String k : own.keySet()) {
             corrections.remove(k);
+            tombstone(k);
         }
         if (!own.isEmpty()) {
-            dirty = true;
             save();
         }
         return own.size();
+    }
+
+    /**
+     * 记下"这个键被删了"。
+     *
+     * <p>删掉的键不能同时留在 {@link #changed} 里：合并时"改"会把"删"覆盖掉，
+     * 而删除必须是删除。
+     */
+    private void tombstone(String storedKey) {
+        changed.remove(storedKey);
+        removed.add(storedKey);
     }
 
     /**
@@ -218,8 +241,10 @@ public final class CorrectionStore {
         if (option == null || kind == null) {
             return;
         }
-        corrections.put(key(command == null ? ANY_COMMAND : command, option), kind);
-        dirty = true;
+        String k = key(command == null ? ANY_COMMAND : command, option);
+        corrections.put(k, kind);
+        changed.put(k, kind.name());
+        removed.remove(k);
         save();
     }
 
@@ -284,24 +309,81 @@ public final class CorrectionStore {
         ConfigWarnings.readFailed(file, AtomicFiles.backup(file));
     }
 
+    /**
+     * 把这一份改动合并到磁盘上的当前内容里，再原子地写回去。
+     *
+     * <p>先读磁盘（拿别人刚写的）→ 应用删除（{@link #removed}）→ 应用本实例的修改
+     * （{@link #changed}）→ 写盘。合并用的是磁盘上的原始键值，所以本版本读不懂的
+     * 条目（旧版留下的 {@code pattern:}、已删除的类型名）不会被这次保存顺手抹掉。
+     * 写失败时两本账都留着，下一次保存自动重试。
+     */
     private void save() {
-        if (file == null || !dirty) {
+        if (file == null) {
             return;
         }
+        if (changed.isEmpty() && removed.isEmpty()) {
+            return;
+        }
+        Map<String, String> merged = readForMerge();
+        if (merged == null) {
+            return;   // 读不出来/解析不了：reportCorrupt 已上报，保留待写改动重试。
+        }
+        for (String key : removed) {
+            merged.remove(key);
+        }
+        for (Map.Entry<String, String> e : changed.entrySet()) {
+            merged.put(e.getKey(), e.getValue());
+        }
+        if (!writeMerged(merged)) {
+            return;   // AtomicFiles 已上报；保留待写改动，等下一次保存。
+        }
+        changed.clear();
+        removed.clear();
+        // 视图刻意不按磁盘重建：getter 的约定是"本实例读到的东西 + 本实例的改动"。
+    }
+
+    /**
+     * 读回磁盘当前内容，用于合并。
+     *
+     * @return 键值表；文件不存在时是空表，文件在但读不出来时是 null（已上报）
+     */
+    private Map<String, String> readForMerge() {
+        Map<String, String> out = new LinkedHashMap<String, String>();
+        String text = AtomicFiles.read(file, StandardCharsets.UTF_8);
+        if (text == null) {
+            if (file.isFile()) {
+                reportCorrupt();
+                return null;
+            }
+            return out;
+        }
         Properties p = new Properties();
-        for (Map.Entry<String, Schema.Option.Kind> e : corrections.entrySet()) {
-            p.setProperty(e.getKey(), e.getValue().name());
+        try {
+            p.load(new StringReader(text));
+        } catch (Exception e) {
+            reportCorrupt();
+            return null;
+        }
+        for (String name : p.stringPropertyNames()) {
+            out.put(name, p.getProperty(name, ""));
+        }
+        return out;
+    }
+
+    /** 把合并结果写盘；失败时 AtomicFiles 已上报，返回 false。 */
+    private boolean writeMerged(Map<String, String> merged) {
+        Properties p = new Properties();
+        for (Map.Entry<String, String> e : merged.entrySet()) {
+            p.setProperty(e.getKey(), e.getValue());
         }
         StringWriter sw = new StringWriter();
         try {
             p.store(sw, "BioEnv Caller parameter types, per tool");
         } catch (Exception e) {
             ConfigWarnings.writeFailed(file, e);
-            return;
+            return false;
         }
         // 建目录、临时文件、原子替换都在 AtomicFiles 里；失败时它已经报过。
-        if (AtomicFiles.write(file, sw.toString(), StandardCharsets.UTF_8)) {
-            dirty = false;
-        }
+        return AtomicFiles.write(file, sw.toString(), StandardCharsets.UTF_8);
     }
 }

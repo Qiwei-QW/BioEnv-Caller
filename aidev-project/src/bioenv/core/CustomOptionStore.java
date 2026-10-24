@@ -6,9 +6,11 @@ import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 
 /**
  * The user's own edits to a tool's parameter list, per tool and subcommand.
@@ -63,7 +65,16 @@ public final class CustomOptionStore {
     private final Map<String, List<String>> hidden = new LinkedHashMap<String, List<String>>();
     /** Key: {@code order:scope} to the order the parameters are shown in. */
     private final Map<String, List<String>> order = new LinkedHashMap<String, List<String>>();
-    private boolean dirty;
+    /**
+     * 本实例自上次成功写盘以来改过/新增的键（原始属性键值）。
+     *
+     * <p>保存时先读回磁盘再叠上这一小份，而不是把内存里的三张表整体写回去：
+     * 另一个面板实例（TBtools 可能建不止一个，见 {@code PluginInject}）刚保存的
+     * 参数编辑不会被过期快照删掉。
+     */
+    private final Map<String, String> changed = new LinkedHashMap<String, String>();
+    /** 本实例删掉的键；删除也必须记住，否则别人删掉的会被写回来。 */
+    private final Set<String> removed = new LinkedHashSet<String>();
 
     public CustomOptionStore() {
         this(defaultFile());
@@ -106,11 +117,13 @@ public final class CustomOptionStore {
         // Adding a name that was hidden means the user changed their mind about it,
         // so the hiding is lifted as part of the same action.
         boolean wasHidden = unhide(scope, name);
-        String previous = options.put(key(scope, name), desc);
+        String optionKey = key(scope, name);
+        String previous = options.put(optionKey, desc);
         if (previous != null && previous.equals(desc)) {
             return wasHidden;
         }
-        dirty = true;
+        changed.put(optionKey, desc);
+        removed.remove(optionKey);
         save();
         return true;
     }
@@ -120,11 +133,17 @@ public final class CustomOptionStore {
         if (scope == null || flag == null) {
             return false;
         }
-        if (options.remove(key(scope, flag.trim())) == null) {
+        String optionKey = key(scope, flag.trim());
+        if (options.remove(optionKey) == null) {
             return false;
         }
-        forgetInOrder(scope, flag.trim());
-        dirty = true;
+        removed.add(optionKey);
+        changed.remove(optionKey);
+        if (forgetInOrder(scope, flag.trim())) {
+            String orderKey = ORDER_PREFIX + scope;
+            changed.put(orderKey, join(order.get(orderKey)));
+            removed.remove(orderKey);
+        }
         save();
         return true;
     }
@@ -168,7 +187,9 @@ public final class CustomOptionStore {
             return false;
         }
         list.add(name);
-        dirty = true;
+        String hiddenKey = HIDDEN_PREFIX + scope;
+        changed.put(hiddenKey, join(list));
+        removed.remove(hiddenKey);
         save();
         return true;
     }
@@ -178,11 +199,13 @@ public final class CustomOptionStore {
         if (scope == null || flag == null) {
             return false;
         }
-        List<String> list = hidden.get(HIDDEN_PREFIX + scope);
+        String hiddenKey = HIDDEN_PREFIX + scope;
+        List<String> list = hidden.get(hiddenKey);
         if (list == null || !list.remove(flag.trim())) {
             return false;
         }
-        dirty = true;
+        changed.put(hiddenKey, join(list));
+        removed.remove(hiddenKey);
         save();
         return true;
     }
@@ -224,12 +247,14 @@ public final class CustomOptionStore {
             return false;
         }
         List<String> copy = new ArrayList<String>(flags);
-        List<String> previous = order.get(ORDER_PREFIX + scope);
+        String orderKey = ORDER_PREFIX + scope;
+        List<String> previous = order.get(orderKey);
         if (previous != null && previous.equals(copy)) {
             return false;
         }
-        order.put(ORDER_PREFIX + scope, copy);
-        dirty = true;
+        order.put(orderKey, copy);
+        changed.put(orderKey, join(copy));
+        removed.remove(orderKey);
         save();
         return true;
     }
@@ -240,11 +265,10 @@ public final class CustomOptionStore {
         return list == null ? new ArrayList<String>() : new ArrayList<String>(list);
     }
 
-    private void forgetInOrder(String scope, String flag) {
+    /** Removes one name from the recorded order; true when the order actually changed. */
+    private boolean forgetInOrder(String scope, String flag) {
         List<String> list = order.get(ORDER_PREFIX + scope);
-        if (list != null) {
-            list.remove(flag);
-        }
+        return list != null && list.remove(flag);
     }
 
     // ------------------------------------------------------------------
@@ -400,13 +424,27 @@ public final class CustomOptionStore {
     public int reset(String scope) {
         int n = forScope(scope).size() + hiddenFor(scope).size()
                 + orderFor(scope).size();
+        boolean touched = false;
         for (String flag : new ArrayList<String>(forScope(scope).keySet())) {
-            options.remove(key(scope, flag));
+            String optionKey = key(scope, flag);
+            options.remove(optionKey);
+            changed.remove(optionKey);
+            removed.add(optionKey);
+            touched = true;
         }
-        hidden.remove(HIDDEN_PREFIX + scope);
-        order.remove(ORDER_PREFIX + scope);
-        if (n > 0) {
-            dirty = true;
+        String hiddenKey = HIDDEN_PREFIX + scope;
+        if (hidden.remove(hiddenKey) != null) {
+            changed.remove(hiddenKey);
+            removed.add(hiddenKey);
+            touched = true;
+        }
+        String orderKey = ORDER_PREFIX + scope;
+        if (order.remove(orderKey) != null) {
+            changed.remove(orderKey);
+            removed.add(orderKey);
+            touched = true;
+        }
+        if (touched) {
             save();
         }
         return n;
@@ -455,31 +493,81 @@ public final class CustomOptionStore {
         ConfigWarnings.readFailed(file, AtomicFiles.backup(file));
     }
 
+    /**
+     * 把这一份改动合并到磁盘上的当前内容里，再原子地写回去。
+     *
+     * <p>先读磁盘（拿别人刚写的）→ 应用删除（{@link #removed}）→ 应用本实例的修改
+     * （{@link #changed}）→ 写盘。合并用原始属性键值，因此本版本读不懂的条目也不会
+     * 被这次保存顺手抹掉。写失败时两本账都留着，下一次保存自动重试。
+     */
     private void save() {
-        if (file == null || !dirty) {
+        if (file == null) {
             return;
         }
+        if (changed.isEmpty() && removed.isEmpty()) {
+            return;
+        }
+        Map<String, String> merged = readForMerge();
+        if (merged == null) {
+            return;   // 读不出来/解析不了：reportCorrupt 已上报，保留待写改动重试。
+        }
+        for (String key : removed) {
+            merged.remove(key);
+        }
+        for (Map.Entry<String, String> e : changed.entrySet()) {
+            merged.put(e.getKey(), e.getValue());
+        }
+        if (!writeMerged(merged)) {
+            return;   // AtomicFiles 已上报；保留待写改动，等下一次保存。
+        }
+        changed.clear();
+        removed.clear();
+        // 视图刻意不按磁盘重建：getter 的约定是"本实例读到的东西 + 本实例的改动"。
+    }
+
+    /**
+     * 读回磁盘当前内容，用于合并。
+     *
+     * @return 键值表；文件不存在时是空表，文件在但读不出来时是 null（已上报）
+     */
+    private Map<String, String> readForMerge() {
+        Map<String, String> out = new LinkedHashMap<String, String>();
+        String text = AtomicFiles.read(file, StandardCharsets.UTF_8);
+        if (text == null) {
+            if (file.isFile()) {
+                reportCorrupt();
+                return null;
+            }
+            return out;
+        }
         Properties p = new Properties();
-        for (Map.Entry<String, String> e : options.entrySet()) {
+        try {
+            p.load(new StringReader(text));
+        } catch (Exception e) {
+            reportCorrupt();
+            return null;
+        }
+        for (String name : p.stringPropertyNames()) {
+            out.put(name, p.getProperty(name, ""));
+        }
+        return out;
+    }
+
+    /** 把合并结果写盘；失败时 AtomicFiles 已上报，返回 false。 */
+    private boolean writeMerged(Map<String, String> merged) {
+        Properties p = new Properties();
+        for (Map.Entry<String, String> e : merged.entrySet()) {
             p.setProperty(e.getKey(), e.getValue());
-        }
-        for (Map.Entry<String, List<String>> e : hidden.entrySet()) {
-            p.setProperty(e.getKey(), join(e.getValue()));
-        }
-        for (Map.Entry<String, List<String>> e : order.entrySet()) {
-            p.setProperty(e.getKey(), join(e.getValue()));
         }
         StringWriter sw = new StringWriter();
         try {
             p.store(sw, "BioEnv Caller parameter edits, per tool");
         } catch (Exception e) {
             ConfigWarnings.writeFailed(file, e);
-            return;
+            return false;
         }
         // 建目录、临时文件、原子替换都在 AtomicFiles 里；失败时它已经报过。
-        if (AtomicFiles.write(file, sw.toString(), StandardCharsets.UTF_8)) {
-            dirty = false;
-        }
+        return AtomicFiles.write(file, sw.toString(), StandardCharsets.UTF_8);
     }
 
     private static String join(List<String> list) {
