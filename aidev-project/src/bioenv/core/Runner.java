@@ -192,6 +192,11 @@ public final class Runner {
         if (job != null) {
             job.useBridge(wsl, wsl.getDistro());
         }
+        // 这次运行的「结束方式」随脚本一起交给传输层：SSH 侧超时之后要靠它在远端
+        // 把进程树停掉（杀本地 ssh.exe 碰不到远端）。与用户点「停止」用的是同一个
+        // 生成函数、同一个标记，所以这里不复制任何 kill 逻辑；job 为空表示这次调用
+        // 没有可用的结束方式，传输层必须如实说明远端可能还在跑。
+        String killScript = job == null ? null : CommandBuilder.killScript(job.marker());
         try {
             r = wsl.runBashStreaming(script, new Transport.LineSink() {
                 @Override
@@ -205,7 +210,7 @@ public final class Runner {
                         sink.line(text, isError);
                     }
                 }
-            });
+            }, killScript);
         } catch (Exception e) {
             if (sink != null) {
                 sink.line("Failed to start WSL process: " + e.getMessage(), true);
