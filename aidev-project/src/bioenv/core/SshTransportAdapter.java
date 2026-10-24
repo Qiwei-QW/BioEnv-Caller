@@ -131,20 +131,44 @@ public final class SshTransportAdapter implements Transport {
 
     @Override
     public Result runBashStreaming(String script, final LineSink sink) {
-        // LineSink 的形状在两侧完全一致（void line(String, boolean)），
-        // 但它们是两个互不相关的接口类型，所以这里仍然需要一个桥接对象
-        // 把 bioenv 侧的回调转成 vmadapt 侧的回调。
-        // sink 允许为 null，此时 SSH 侧「只收集不回调」（它自己也做 null 检查）。
-        SshTransport.LineSink bridged = null;
-        if (sink != null) {
-            bridged = new SshTransport.LineSink() {
-                @Override
-                public void line(String text, boolean isError) {
-                    sink.line(text, isError);
-                }
-            };
+        return runBashStreaming(script, sink, null);
+    }
+
+    /**
+     * 三参数版本：除流式执行外，还带上「结束本次运行的远端命令」。
+     *
+     * <h2>为什么原样转发，而不在这里拼命令</h2>
+     *
+     * <p>那段脚本是按<b>本次运行</b>的标记生成的（{@code CommandBuilder.killScript(marker)}），
+     * 生成它需要标记，而标记在 {@code Runner} 那一层。适配器的职责只是把三个参数
+     * 搬过去，顺便把两侧形状相同的回调桥接起来；它不该知道标记、也不该拼 shell。
+     *
+     * <h2>为什么两参数版本转调这里</h2>
+     *
+     * <p>让执行路径只有一条：有没有 {@code killScript} 是数据差异，不是两条逻辑。
+     * 两参数版本等价于「调用方没有结束方式」，与接口默认方法给出的语义一致。
+     *
+     * <p>LineSink 的形状在两侧完全一致（{@code void line(String, boolean)}），
+     * 但它们是两个互不相关的接口类型，所以这里仍然需要一个桥接对象；
+     * sink 允许为 null，此时 SSH 侧「只收集不回调」（它自己也做 null 检查）。
+     */
+    @Override
+    public Result runBashStreaming(String script, final LineSink sink, String killScript) {
+        return new SshResultAdapter(
+                delegate.runBashStreaming(script, bridged(sink), killScript));
+    }
+
+    /** 把插件侧的回调桥成 vmadapt 侧的回调；{@code sink} 为 null 时返回 null。 */
+    private static SshTransport.LineSink bridged(final LineSink sink) {
+        if (sink == null) {
+            return null;
         }
-        return new SshResultAdapter(delegate.runBashStreaming(script, bridged));
+        return new SshTransport.LineSink() {
+            @Override
+            public void line(String text, boolean isError) {
+                sink.line(text, isError);
+            }
+        };
     }
 
     /**

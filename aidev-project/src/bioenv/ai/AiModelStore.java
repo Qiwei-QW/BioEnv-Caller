@@ -7,6 +7,7 @@ import java.util.List;
 
 import bioenv.core.AtomicFiles;
 import bioenv.core.ConfigWarnings;
+import bioenv.core.FilePerms;
 
 /**
  * AI 模型列表：用户配好的若干个 OpenAI 兼容接口。
@@ -285,7 +286,11 @@ public final class AiModelStore {
             sb.append("m").append(i).append(".maxIn=").append(m.maxIn).append('\n');
         }
         // 建目录、临时文件、原子替换都在 AtomicFiles 里；失败时它已经报过。
-        AtomicFiles.write(f, sb.toString(), StandardCharsets.UTF_8);
+        if (AtomicFiles.write(f, sb.toString(), StandardCharsets.UTF_8)) {
+            // 这份文件里是明文 API key：写成功后尽量收窄到"只有本人可读写"。
+            // 收不了（FAT、网络盘、无 ACL）只会在本进程提示一次，绝不影响保存。
+            FilePerms.restrictToOwner(f);
+        }
     }
 
     /**

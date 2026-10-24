@@ -2,6 +2,16 @@
 
 [中文](CHANGELOG.md) ｜ **English**
 
+## Unreleased
+
+- **An SSH timeout now asks the remote process tree to stop**: the transport contract gained a far-side "stop command" argument (`runBashStreaming(script, sink, killScript)`, with a default that keeps the old behaviour). `Runner` passes down the marker-based kill script it already had for Stop; when an SSH run times out, the local `ssh.exe` is terminated and the stop command goes out over a separate connection. The message distinguishes three cases honestly: no stop command available / sent (which does not mean confirmed stopped) / could not be sent, with the reason.
+- **The UI is no longer frozen by blocking process work**: the Stop button's remote kill, the interactive process start and the terminal-window launch moved to background threads (new `OffEdt`), while the status bar and log still update on the event thread. A process that comes up after the user pressed Stop is rejected and destroyed instead of being adopted.
+- **Two silent failures**: `EnvRunner` now quotes the conda prefix as a proper Python literal (a prefix containing a single quote no longer makes the dependency analysis return an empty set silently), keeps stderr and reports a failure once; `KeyInstaller` shell-quotes the public key (a key comment with a single quote no longer breaks the remote command) and bounds the wait on ssh, with distinct Chinese outcomes for timeout and interruption.
+- **Two panel instances no longer overwrite each other's configuration**: tool notes, type corrections and custom options now merge on save — re-read the file, apply this instance's changes and deletions (tombstones), write atomically. A deletion cannot be resurrected by another instance's stale snapshot, and a failed write keeps the pending changes for the next retry.
+- **The API-key file is restricted to its owner**: after a successful save of `ai-models.properties`, permissions are narrowed to POSIX `rw-------` or a Windows ACL with only the owner (verified by re-reading). Filesystems that cannot do it leave the file alone and report at most once per process; saving is never affected.
+- **AI panel**: the page→Java requests are taken atomically in one `evalString` (an export/settings click can no longer be lost, and the same request cannot be handled twice); a single answer is capped at 1,000,000 rendered characters — the stream is still read to the end, but accumulation stops and a truncation note is shown, and history/export store the capped text.
+- **Tests**: `RunKillTest`, `OffEdtTest`, `EnvRunnerQuoteTest`, `ConfigMergeTest` and `KeyInstallScriptTest` added and wired into the `build.ps1` gate.
+
 ## v1.0.1 — 2026-10-23
 
 - **Timeouts are no longer dead code (P0)**: probing and running read stdout to EOF before `waitFor(timeout)`, so any child that kept stdout open made the timeout unreachable and the UI sat on "detecting". Each stream now gets a pump thread and the wait comes first: the WSL probe's 25 s and the SSH run's 300 s really fire, the process is killed, and the message says it timed out. The scanner scripts (`find /` for conda, `conda env list`) get `timeout 20`. On an SSH timeout the message says the local ssh client was terminated but the remote process tree may still be running — the marker is not part of the transport contract, so it is not claimed.

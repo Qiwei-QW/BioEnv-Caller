@@ -244,11 +244,52 @@ public final class SshTransport {
      *
      * <p>本方法阻塞到进程结束，调用方应在后台线程调用它。
      *
+     * <p>本重载等价于「调用方没有可用的结束方式」：转调三参数版本并传 null，
+     * 因此超时时的措辞会如实说明远端可能仍在运行。需要「超时顺便让远端停下」的
+     * 调用方请用 {@link #runBashStreaming(String, LineSink, String)}。
+     *
      * @param script bash 脚本内容
      * @param sink   行回调，可为 null（此时只收集不回调）
      * @return 结果
      */
     public Result runBashStreaming(String script, final LineSink sink) {
+        return runBashStreaming(script, sink, null);
+    }
+
+    /**
+     * 执行一段 bash 脚本，逐行回调输出，并在<b>超时</b>时把远端进程树也停掉。
+     *
+     * <p>为什么要多这一个参数：超时之后 {@code destroyForcibly} 杀的是本机的
+     * {@code ssh.exe}，而真正干活的是另一台机器上的进程树，两者不在一个进程树里。
+     * 要让远端停下，必须<b>另开一条连接</b>把一条结束命令送过去——也就是用户点
+     * 「停止」时用的那套机制。
+     *
+     * <h2>为什么传的是脚本文本，不是标记</h2>
+     *
+     * <p>结束命令必须按「本次运行」的标记来匹配进程，而生成它的
+     * {@code CommandBuilder.killScript(marker)} 属于插件模块（bioenv）。
+     * 模块只允许单向依赖：根目录 build.ps1 先编译 vmadapt，编译它时 classpath 是空的，
+     * 本模块 import 插件代码会直接让构建失败。把生成好的脚本文本传下来，
+     * 既保住了依赖方向，也把「标记是什么」留在它该在的那一层。
+     *
+     * <h2>超时时的三种措辞（都不宣称远端已死）</h2>
+     *
+     * <ul>
+     *   <li>{@code killScript} 为 null/空：本机客户端已终止，<b>没有</b>送出停止命令，
+     *       远端进程树可能仍在运行；</li>
+     *   <li>停止命令已送出（{@code runDetached} 返回了进程）：只说「已把停止命令
+     *       发到某主机」，并说明<b>是否停下来没有得到确认</b>——这条命令不等结果、
+     *       也不读输出；</li>
+     *   <li>停止命令送不出去（返回 null 或抛异常）：说明远端进程树可能仍在运行，
+     *       并给出原因。</li>
+     * </ul>
+     *
+     * @param script     bash 脚本内容
+     * @param sink       行回调，可为 null
+     * @param killScript 结束本次运行的远端命令；null 或空串表示调用方没有可用的方式
+     * @return 结果
+     */
+    public Result runBashStreaming(String script, final LineSink sink, String killScript) {
         Result r = new Result();
         String invalid = validateForRun();
         if (invalid != null) {
@@ -300,7 +341,7 @@ public final class SshTransport {
 
             if (o.timedOut) {
                 r.timedOut = true;
-                String msg = timeoutMessage(runTimeoutSeconds);
+                String msg = stopRemoteAndDescribe(runTimeoutSeconds, killScript);
                 r.stderr.add(msg);
                 if (sink != null) {
                     sink.line(msg, true);
@@ -318,27 +359,47 @@ public final class SshTransport {
     }
 
     /**
-     * 超时时给用户看的一句话。
+     * 超时之后的收尾：本机客户端已经被杀，再按需要把结束命令送到远端，
+     * 并把<b>实际发生了什么</b>翻译成一句给用户看的话。
      *
-     * <h2>为什么只说「本地 ssh 客户端被终止」</h2>
+     * <h2>为什么措辞要分三种</h2>
      *
-     * <p>超时后 {@code destroyForcibly} 杀的是本机的 {@code ssh.exe}。远端那条
+     * <p>{@code destroyForcibly} 只杀了本机的 {@code ssh.exe}；远端那条
      * {@code conda run} 进程树会不会跟着结束，取决于远端的 sshd 与终端语义，
-     * 这里<b>没有</b>把它杀掉——所以不能写「远端已终止」。
+     * 所以任何情况下都不能写「远端已终止」。三种情形能确认的事情不同：
+     * 没有结束方式、已把结束命令送出、送不出去——用户接下来该做的事也不同
+     * （分别对应：手动去远端处理、稍等确认、检查连接）。
      *
-     * <p>为什么不顺手把远端也杀掉：本次运行的 marker（{@code BIOENV_JOB}）不在
-     * {@code runBashStreaming(script, sink)} 的契约里，而生成 kill 脚本的
-     * {@code CommandBuilder.killScript(marker)} 属于插件模块（bioenv）。
-     * 模块只允许单向依赖（插件依赖 vmadapt，编译顺序见根目录 build.ps1：先编
-     * vmadapt、且不带任何 classpath），所以这里拿不到——更不该去猜 script 的文本。
-     * 真要杀掉远端，需要把 marker 提到通道接口并一路传下来，那是另一处设计改动。
-     * 在那之前，措辞必须如实说明远端可能还在跑。
+     * <p>「已送出」也只说「已把停止命令发到某主机」：{@link #runDetached} 只负责
+     * 把命令写进一条新连接的 stdin，即不等它执行完、也不读它的输出，所以
+     * <b>是否真的停下来没有得到确认</b>。
+     *
+     * @param seconds    这次运行的超时秒数
+     * @param killScript 调用方给的结束命令；null 或空表示没有
+     * @return 给用户看的一句话（英文，与界面其它运行期消息一致）
      */
-    private String timeoutMessage(int seconds) {
-        return "The remote command did not finish within " + seconds + " seconds. "
-                + "The local ssh client was terminated, but the remote process tree may "
-                + "still be running on " + safeHost() + ". If the task is genuinely long, "
-                + "raise the timeout.";
+    private String stopRemoteAndDescribe(int seconds, String killScript) {
+        String head = "The remote command did not finish within " + seconds
+                + " seconds. The local ssh client was terminated";
+        if (killScript == null || killScript.trim().isEmpty()) {
+            return head + "; no stop command was available, so the remote process tree may "
+                    + "still be running on " + safeHost() + ". If the task is genuinely long, "
+                    + "raise the timeout.";
+        }
+        try {
+            Process p = runDetached(killScript);
+            if (p != null) {
+                return head + ", and a stop command was sent to " + safeHost()
+                        + ". Whether the remote processes have stopped is not confirmed "
+                        + "(the command is not waited for).";
+            }
+            return head + ", but a stop command could not be sent to " + safeHost()
+                    + " (the connection parameters are incomplete, or ssh.exe is missing), "
+                    + "so the remote process tree may still be running.";
+        } catch (Exception e) {
+            return head + ", but sending a stop command to " + safeHost() + " failed ("
+                    + e + "), so the remote process tree may still be running.";
+        }
     }
 
     /**
@@ -513,7 +574,9 @@ public final class SshTransport {
             r.stderr.addAll(err.lines());
             if (o.timedOut) {
                 r.timedOut = true;
-                r.stderr.add(timeoutMessage(t));
+                // 捕获/探测路径没有 per-run 结束命令（它不属于一次"运行"），
+                // 所以只能如实说远端可能仍在跑。
+                r.stderr.add(stopRemoteAndDescribe(t, null));
             } else {
                 r.exitCode = o.exitCode;
             }

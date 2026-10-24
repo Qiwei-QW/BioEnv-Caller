@@ -3232,10 +3232,20 @@ public final class MainPanel extends JPanel {
                 // 交互运行不走 Runner.Job，所以原来的实现点了停止对它是空操作：
                 // 进程继续跑，用户以为停了。两种运行都要停。
                 boolean stoppedInteractive = stopInteractiveRun();
-                Runner.Job job = currentJob;
+                final Runner.Job job = currentJob;
                 if (job != null) {
-                    job.cancel();
+                    // 状态栏留在事件线程上写，用户立刻就看见"正在请求取消"。
                     setStatusKey(Strings.STATUS_CANCELLING);
+                    // cancel() 会去远端起一个 kill 进程（Transport.runDetached 里是
+                    // ProcessBuilder.start + 管道读写）。WSL 或 ssh 卡住时这一步能
+                    // 停上好几秒，放在事件线程上就是整个窗口冻住 —— 挪到后台线程。
+                    // 取消语义不变：Job.cancel() 自己标记 cancelled 并杀本地客户端。
+                    OffEdt.run(new Runnable() {
+                        @Override
+                        public void run() {
+                            job.cancel();
+                        }
+                    });
                 } else if (stoppedInteractive) {
                     setStatusKey(Strings.STATUS_CANCELLED);
                 }
@@ -4416,22 +4426,57 @@ public final class MainPanel extends JPanel {
                 pumpInteractive(ssh
                         ? bioenv.core.TerminalLaunch.sshInteractiveArgv(target, port,
                                 keyPath, scriptFile)
-                        : bioenv.core.TerminalLaunch.wslInteractiveArgv(target, scriptFile));
+                        : bioenv.core.TerminalLaunch.wslInteractiveArgv(target, scriptFile),
+                        mine);
             }
         }.execute();
     }
 
     /** 起进程、把它的输出一路喂进面板，并在它退出时收尾。 */
-    private void pumpInteractive(final java.util.List<String> argv) {
-        final Process proc;
-        try {
-            ProcessBuilder pb = new ProcessBuilder(argv);
-            // 错误流并进输出流：工具的报错和它的提问混在一起才读得懂顺序，
-            // 分两路反而看不出"为什么它停下了"。
-            pb.redirectErrorStream(true);
-            proc = pb.start();
-        } catch (Exception ex) {
-            appendLog(I18n.t(Strings.LOG_INTERACTIVE_FAILED, String.valueOf(ex)));
+    private void pumpInteractive(final java.util.List<String> argv, final int generation) {
+        // ProcessBuilder.start() 创建的是真进程：系统忙、被安全软件拦、WSL 没起来时
+        // 它可能很久不返回。事件线程上等它，窗口就冻住了 —— 所以放后台线程，
+        // 进程起来之后再回到事件线程接线（见 adoptInteractiveProcess）。
+        OffEdt.run(new Runnable() {
+            @Override
+            public void run() {
+                final Process proc;
+                try {
+                    ProcessBuilder pb = new ProcessBuilder(argv);
+                    // 错误流并进输出流：工具的报错和它的提问混在一起才读得懂顺序，
+                    // 分两路反而看不出"为什么它停下了"。
+                    pb.redirectErrorStream(true);
+                    proc = pb.start();
+                } catch (Exception ex) {
+                    appendLog(I18n.t(Strings.LOG_INTERACTIVE_FAILED, String.valueOf(ex)));
+                    return;
+                }
+                FileDialogs.onEdt(new Runnable() {
+                    @Override
+                    public void run() {
+                        adoptInteractiveProcess(proc, generation);
+                    }
+                });
+            }
+        });
+    }
+
+    /**
+     * 进程已经起来了：把它接进界面。
+     *
+     * <p>启动期间用户可能点了停止，或者又起了下一轮交互运行。那时这个进程已经不属于
+     * 界面，直接结束掉 —— 否则它会在后台一直挂着，也会把新一轮的引用盖掉。
+     */
+    private void adoptInteractiveProcess(final Process proc, int generation) {
+        if (generation != interactiveGeneration) {
+            try {
+                proc.destroy();
+                if (proc.isAlive()) {
+                    proc.destroyForcibly();
+                }
+            } catch (Throwable ignored) {
+                // 进程可能已经自己退出了。
+            }
             return;
         }
         interactiveProcess = proc;
@@ -4441,8 +4486,11 @@ public final class MainPanel extends JPanel {
         interactiveInput.requestFocusInWindow();
         appendLog("");
         appendLog(I18n.t(Strings.LOG_INTERACTIVE_STARTED));
+        startInteractiveReader(proc);
+    }
 
-        // 读在一个单独的线程上：进程一直活着，输出随时会来，不能占住事件线程。
+    /** 读线程：进程一直活着，输出随时会来，不能占住事件线程。 */
+    private void startInteractiveReader(final Process proc) {
         Thread reader = new Thread(new Runnable() {
             @Override
             public void run() {
@@ -4580,7 +4628,15 @@ public final class MainPanel extends JPanel {
         }
     }
 
-    /** 把输入行里的内容发给那个还活着的进程；回车触发。 */
+    /**
+     * 把输入行里的内容发给那个还活着的进程；回车触发。
+     *
+     * <p>这一步<b>留在事件线程上</b>，是权衡后的选择：写的是用户刚敲的一行（几十字节），
+     * 而管道的缓冲区是 4KB 级 —— 一次写本身写不满它；真正会卡住的是"对端一直不读，
+     * 缓冲区早就满了"。为这个少见的场景把每次回车丢到独立线程，代价是两次快速回车
+     * 可能乱序到达（每行一个线程，谁先跑不确定），那就改变了用户看得见的行为。
+     * 会冻住窗口的进程创建和远端 kill 已经挪出事件线程，这里保留输入顺序。
+     */
     private void sendInteractiveLine() {
         Process p = interactiveProcess;
         if (p == null) {
@@ -4689,6 +4745,23 @@ public final class MainPanel extends JPanel {
 
     /** 真正启动终端窗口的那一步；三层，从好到保底。 */
     private void launchTerminal(final java.util.List<String> inner, final String log) {
+        // 这一步会创建真进程（wt.exe / cmd /c start），两条路都起不来时还要读剪贴板；
+        // 系统忙、安全软件拦截、或剪贴板被别的程序占着时都可能卡住。事件线程不能等它。
+        OffEdt.run(new Runnable() {
+            @Override
+            public void run() {
+                launchTerminalOffEdt(inner, log);
+            }
+        });
+    }
+
+    /**
+     * {@link #launchTerminal} 的后台部分。
+     *
+     * <p>日志由 appendLog 自己排回事件线程，顺序与改动前一致；{@link #pollTranscript}
+     * 也在这里发起（SwingWorker 可以从任意线程 {@code execute()}）。
+     */
+    private void launchTerminalOffEdt(final java.util.List<String> inner, final String log) {
 
         boolean started = false;
         for (bioenv.core.TerminalLaunch.Layer layer : new bioenv.core.TerminalLaunch.Layer[]{

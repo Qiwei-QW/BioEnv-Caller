@@ -38,7 +38,7 @@ vmadapt\src\vmadapt\
 powershell -ExecutionPolicy Bypass -File .\build.ps1
 ```
 
-产物在 `vmadapt\build\classes`，测试由 `build.ps1` 统一跑（16 条，含实时 SSH 用例的自动跳过逻辑）。
+产物在 `vmadapt\build\classes`，测试由 `build.ps1` 统一跑（17 条，含实时 SSH 用例的自动跳过逻辑）。
 
 ## 设计上的三条边界
 

@@ -64,8 +64,10 @@ public final class ConfigWarnings {
     public static void writeFailed(java.io.File file, Throwable why) {
         String path = file == null ? "(unknown path)" : file.getAbsolutePath();
         String reason = why == null ? "" : String.valueOf(why.getMessage());
+        // 不说"改动不会保留"：三个合并式 store 失败后会把待写内容留着、下次重试，
+        // 那句话对它们不成立；能确定的事实只有"这一次没写进去"。
         reportOnce("无法写入配置 " + path + (reason.isEmpty() ? "" : "：" + reason)
-                + "（本次改动不会保留）");
+                + "（这次没有写进去，稍后会再试）");
     }
 
     /** 文件存在但读不出来时的统一措辞：已经备份成 .bak，让用户知道原文件还在。 */

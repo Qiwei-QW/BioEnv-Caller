@@ -101,11 +101,7 @@ public final class KeyInstaller {
         // 用 grep -qxF 而不是 grep -q：-x 要求整行相等，-F 按字面匹配，
         // 否则公钥里的正则元字符会被当成模式，`+` `/` 这类字符在 base64 里很常见。
         String key = publicKey.trim();
-        String remote = "mkdir -p ~/.ssh && chmod 700 ~/.ssh && "
-                + "touch ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys && "
-                + "{ grep -qxF '" + key + "' ~/.ssh/authorized_keys || "
-                + "echo '" + key + "' >> ~/.ssh/authorized_keys; } && "
-                + "echo " + MARKER;
+        String remote = remoteScript(key);
 
         List<String> cmd = new ArrayList<String>();
         cmd.add(sshExe);
@@ -138,17 +134,92 @@ public final class KeyInstaller {
             pb.redirectErrorStream(true);
 
             Process p = pb.start();
-            String out = drain(p.getInputStream());
-            p.waitFor();
-            int code = p.exitValue();
-
-            if (out.contains(MARKER)) {
-                return new Outcome(Kind.OK, null, out);
+            // 原来是把输出读到 EOF 再 waitFor()：ssh 一旦卡住（半开连接、等输入），
+            // read 永远不返回，waitFor 根本轮不到，向导就永远停在「正在安装」。
+            // 交给 ProcessCapture：两个流各一个读取线程，等待有上限，超时强制结束。
+            final ProcessCapture.CappedOutput out = new ProcessCapture.CappedOutput();
+            ProcessCapture.Outcome wait = ProcessCapture.run(
+                    p, waitLimitSeconds(timeoutSec),
+                    new ProcessCapture.LineSink() {
+                        @Override
+                        public void line(String text, boolean isError) {
+                            out.add(text);
+                        }
+                    }, null);
+            String text = joinLines(out.lines());
+            if (wait.timedOut) {
+                return new Outcome(Kind.NETWORK,
+                        "等待 ssh 超过 " + waitLimitSeconds(timeoutSec)
+                                + " 秒仍无响应（连接可能已半开）。"
+                                + "无法确认公钥是否已装上，请检查网络后重试。",
+                        text);
             }
-            return new Outcome(classify(out, code), explain(out, code), out);
+            if (wait.interrupted) {
+                return new Outcome(Kind.LOCAL,
+                        "安装公钥的操作被中断，未确认公钥是否已装上。", text);
+            }
+            int code = wait.exitCode;
+
+            if (text.contains(MARKER)) {
+                return new Outcome(Kind.OK, null, text);
+            }
+            return new Outcome(classify(text, code), explain(text, code), text);
         } catch (Exception e) {
             return new Outcome(Kind.LOCAL, "无法启动 ssh：" + e, String.valueOf(e));
         }
+    }
+
+    /** 等 ssh 结束时，在连接超时之外额外给的时间（秒）。 */
+    public static final int WAIT_MARGIN_S = 5;
+
+    /**
+     * 等待 ssh 进程结束的上限：连接超时加上余量。
+     *
+     * <p>公开是为了让测试能钉住「等待有上限」这件事——本类原来的写法是把输出读到
+     * EOF 再 {@code waitFor()}，超时永远不会生效。真正连上之后还要做一次认证并跑
+     * 一段远端脚本，所以上限不能恰好等于连接超时。
+     *
+     * @param timeoutSec 连接超时（秒）
+     * @return 等待上限（秒），至少 1 秒
+     */
+    public static int waitLimitSeconds(int timeoutSec) {
+        return Math.max(1, timeoutSec) + WAIT_MARGIN_S;
+    }
+
+    /**
+     * 组一条远端安装公钥的脚本。
+     *
+     * <p>公钥正文里可能有单引号（{@code ssh-keygen -C "Alice's laptop"}）或
+     * {@code $} 这类字符：直接塞进单引号会让引号提前闭合，远端 bash 报语法错误。
+     * 以前的表现是密码明明正确、安装却失败，界面上只有一句笼统的原因。所以两处
+     * 出现公钥的地方都走 {@link Shell#quote}。
+     *
+     * <p>公开是为了能用一条普通测试钉住「引号一定闭合」。把命令的构造放在 core
+     * 里，理由和 {@link #verifyCommand} 一样：测试要验的是真正执行的那份脚本，
+     * 而不是抄一遍的另一份。
+     *
+     * @param key 公钥正文（一行）
+     * @return 可直接交给 ssh 在远端执行的脚本
+     */
+    public static String remoteScript(String key) {
+        String q = Shell.quote(key);
+        return "mkdir -p ~/.ssh && chmod 700 ~/.ssh && "
+                + "touch ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys && "
+                + "{ grep -qxF " + q + " ~/.ssh/authorized_keys || "
+                + "echo " + q + " >> ~/.ssh/authorized_keys; } && "
+                + "echo " + MARKER;
+    }
+
+    /** 把逐行收集的输出拼回一段文本。 */
+    private static String joinLines(List<String> lines) {
+        StringBuilder sb = new StringBuilder();
+        for (String line : lines) {
+            if (sb.length() > 0) {
+                sb.append('\n');
+            }
+            sb.append(line);
+        }
+        return sb.toString();
     }
 
     /**

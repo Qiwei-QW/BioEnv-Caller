@@ -324,24 +324,72 @@ public final class EnvRunner {
         // conda writes a dependency as "name version build" or with a constraint, so
         // only the name is kept. Done in one call over all the manifests, which can
         // number in the hundreds.
+        //
+        // 环境前缀不能直接拼进 Python 源码：路径里只要有一个单引号
+        // （/home/o'brien/...）整段脚本就是语法错误。以前 stderr 被 2>/dev/null
+        // 丢掉，于是错误看不见、结果永远是空集，所有依赖包都被当成用户要的
+        // 工具列出来。这里照 facts() 的做法用 quoteForPython 转义。
         String script = "import json,glob,collections\n"
                 + "d=collections.Counter()\n"
-                + "for f in glob.glob('" + envPrefix + "/conda-meta/*.json'):\n"
+                + "for f in glob.glob(" + quoteForPython(envPrefix)
+                + " + '/conda-meta/*.json'):\n"
                 + "    try: j=json.load(open(f))\n"
                 + "    except Exception: continue\n"
                 + "    for x in (j.get('depends') or []):\n"
                 + "        d[x.split()[0].split('=')[0].split('>')[0]"
                 + ".split('<')[0].split('!')[0]] += 1\n"
                 + "print('\\n'.join(d.keys()))\n";
-        String cmd = "python3 -c " + WslBridge.quote(script) + " 2>/dev/null";
+        // 不再把 stderr 丢进 /dev/null：读失败要能被看见，而不是伪装成「没有依赖」。
+        String cmd = "python3 -c " + WslBridge.quote(script);
+        Transport.Result r = wsl.runBashCapture(cmdOf(cmd));
         java.util.Set<String> out = new java.util.HashSet<String>();
-        for (String line : wsl.runBashCapture(cmdOf(cmd)).stdout()) {
+        for (String line : r.stdout()) {
             String t = line.trim();
             if (!t.isEmpty()) {
                 out.add(t);
             }
         }
+        // 空结果 + 非空 stderr 说明脚本根本没跑起来（python3 缺失、前缀拼坏了、
+        // 依赖记录读不了……），不是「这个环境没有依赖」。静默返回空集会让每个
+        // 依赖包都被当成工具列出来，而用户没有任何线索，所以必须说出来。
+        // 走 ConfigWarnings 而不是界面调用：这里仍是 core 层，同一问题只报一次。
+        String err = r.stderrText() == null ? "" : r.stderrText().trim();
+        if (out.isEmpty() && !err.isEmpty()) {
+            ConfigWarnings.reportOnce("读不出环境的依赖关系，依赖包可能被当成工具列出来："
+                    + envPrefix + "（" + errorSummary(err) + "）");
+        }
         return out;
+    }
+
+    /**
+     * 把多行错误压成一句：留第一行和最后一行。
+     *
+     * <p>Python 的 traceback 第一行往往只是 {@code File "<string>", line 1}，
+     * 真正说明问题的是最后一行（{@code SyntaxError: ...}），所以两行都要留。
+     */
+    private static String errorSummary(String s) {
+        if (s == null) {
+            return "";
+        }
+        java.util.List<String> kept = new java.util.ArrayList<String>();
+        for (String line : s.trim().split("\\r?\\n")) {
+            String t = line.trim();
+            if (!t.isEmpty()) {
+                kept.add(cap(t));
+            }
+        }
+        if (kept.isEmpty()) {
+            return "";
+        }
+        if (kept.size() == 1) {
+            return kept.get(0);
+        }
+        return kept.get(0) + " … " + kept.get(kept.size() - 1);
+    }
+
+    /** 提示里的一行文字最多留这么长，免得一段几百行的报错刷满输出面板。 */
+    private static String cap(String t) {
+        return t.length() > 120 ? t.substring(0, 120) + "…" : t;
     }
 
     /**

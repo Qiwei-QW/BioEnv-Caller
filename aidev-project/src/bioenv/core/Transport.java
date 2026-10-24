@@ -170,6 +170,37 @@ public interface Transport {
     Result runBashStreaming(String script, LineSink sink);
 
     /**
+     * 同 {@link #runBashStreaming(String, LineSink)}，多带一段「结束这次运行的远端命令」。
+     *
+     * <h2>为什么要有它</h2>
+     *
+     * <p>超时之后光把本机的客户端进程杀掉是不够的：WSL/SSH 那一侧真正干活的是
+     * 另一台机器上的进程树，杀客户端不会碰到它。要让远端停下，得<b>再开一条通道</b>
+     * 把一条远程命令送过去（与「用户点停止」用的是同一套机制）。
+     *
+     * <p>这条命令由调用方生成，不是传输层拼的：它必须按「本次运行」的标记来匹配
+     * 进程（{@code CommandBuilder.killScript(marker)}），而标记属于调用方，
+     * 传输层既不知道也不该知道它长什么样。所以这里传的是<b>脚本文本</b>，
+     * 不是标记：vmadapt 模块不允许反向依赖插件模块（根目录 build.ps1 先编译
+     * vmadapt，编译它时 classpath 是空的），传字符串是唯一不破坏这条依赖的方向。
+     *
+     * <h2>默认实现：什么都不做</h2>
+     *
+     * <p>默认实现忽略 {@code killScript}，原样转调两参数版本。这样所有既有实现
+     * （{@link WslBridge}、测试里的假传输）一行都不用改，而「到不了远端、
+     * 或者本来就不需要」的通道仍然保持原来的行为——它们只要如实说明远端可能还在跑。
+     *
+     * @param script     要在远端执行的 bash 脚本
+     * @param sink       行回调；允许为 null
+     * @param killScript 结束本次运行的远端命令；null 或空串表示调用方没有可用的
+     *                   结束方式（此时实现必须按「远端可能仍在运行」措辞）
+     * @return 结果快照，永不为 null
+     */
+    default Result runBashStreaming(String script, LineSink sink, String killScript) {
+        return runBashStreaming(script, sink);
+    }
+
+    /**
      * 当前执行通道的人类可读标签，用于界面显示与错误提示。
      *
      * <h2>为什么这个方法必须存在，尽管它「不属于」传输语义</h2>

@@ -291,7 +291,7 @@ There is one entry point:
 powershell -ExecutionPolicy Bypass -File .\build.ps1
 ```
 
-It compiles `vmadapt` and the plugin sources, checks every class is Java 11, runs **83 regression tests plus 16 vmadapt tests**, and produces `BioEnvCaller.plugin`. The gate has to be green before a commit. Design notes live in [DESIGN.en.md](DESIGN.en.md); contribution rules in [CONTRIBUTING.en.md](CONTRIBUTING.en.md).
+It compiles `vmadapt` and the plugin sources, checks every class is Java 11, runs **87 regression tests plus 17 vmadapt tests**, and produces `BioEnvCaller.plugin`. The gate has to be green before a commit. Design notes live in [DESIGN.en.md](DESIGN.en.md); contribution rules in [CONTRIBUTING.en.md](CONTRIBUTING.en.md).
 
 > The script looks for **JDK 11** in `TBTOOLS_HOME`, then `JAVA_HOME`, then the usual install locations (`D:\TBtools`, `C:\Program Files\*\jdk-11*`). If TBtools lives somewhere else, run `setx TBTOOLS_HOME "E:\TBtools"` first.
 
