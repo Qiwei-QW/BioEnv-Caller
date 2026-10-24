@@ -368,6 +368,7 @@ var T = {
     busyHint: "正在回答…按 Esc 停止",
     idleTimeout: "%s 秒没有收到任何数据，已停止 — 可重试",
     stoppedNote: "（已停止）",
+    cappedNote: "（回答过长，已截断显示前 %n 个字符）",
     trimNotice: "已省略最早的 %n 轮对话（仍保留在面板与导出中）",
     urlBad: "接口地址要以 http:// 或 https:// 开头（例如 https://api.deepseek.com/v1）。当前填的是：%u",
     netFail: "连不上 %h（或连接中途断了）。可能是：离线、跨域(CORS)被拦、证书(TLS)不对，或地址写错了。",
@@ -417,6 +418,7 @@ var T = {
     busyHint: "Answering… press Esc to stop",
     idleTimeout: "No data received for %s s; stopped — retry available",
     stoppedNote: "(stopped)",
+    cappedNote: "(answer too long; only the first %n characters are shown)",
     trimNotice: "Omitted the oldest %n round(s) from this request (kept in the panel and in the export)",
     urlBad: "The endpoint must start with http:// or https:// (e.g. https://api.deepseek.com/v1). Currently: %u",
     netFail: "Cannot reach %h (or the connection dropped). Likely: offline, blocked by CORS, a TLS/certificate problem, or a wrong address.",
@@ -691,6 +693,16 @@ var IDLE_TIMEOUT_MS = 60000;
 
 /** 桥那一路的消息上限：AiContext.java:19 记录的实测值约 20 条。 */
 var BRIDGE_MAX_MESSAGES = 20;
+
+/**
+ * 单条回答最多显示/保存多少字符。
+ *
+ * <p>模型跑飞时流是停不下来的（我们只能等它结束，好拿到 usage、也让连接正常收尾），
+ * 但不能把几十 MB 的文字堆在 acc/base 里、更不能整段塞进 DOM：那会把页面内存
+ * 吃光。到上限之后继续解析流，只是不再往气泡和历史上追加。
+ * 自检会临时把这个数改小，见 window.tbvAi.answerCap。
+ */
+var ANSWER_MAX_CHARS = 1000000;
 
 /* ================================================================
  * Markdown 渲染
@@ -1132,6 +1144,9 @@ function buildMarkdown() {
     rows.push("");
     rows.push(questionOf(x));
     // 被停下的一轮：导出里也要写明白，别让半截回答看起来是完整的。
+    if (x.role === "assistant" && x.truncated) {
+      rows.push(""); rows.push("> " + cappedNoteText());
+    }
     if (x.role === "assistant" && x.stopped) { rows.push(""); rows.push("> " + t("stoppedNote")); }
     rows.push("");
   }
@@ -1306,21 +1321,42 @@ function bubble(kind, text) {
 }
 
 /**
- * 画一条回答：正文 + （如果被用户停掉）一行"（已停止）"。
+ * 把一段已有的文本压到 {@link ANSWER_MAX_CHARS} 以内。返回 {text, truncated}。
+ *
+ * <p>只在这一处切片：调用方拿到的永远是不超过上限的字符串，历史里也就不会
+ * 出现一个几十 MB 的 content。已经在上限内时原样返回（不复制）。
+ */
+function capAnswer(text) {
+  var s = String(text == null ? "" : text);
+  if (s.length <= ANSWER_MAX_CHARS) { return { text: s, truncated: false }; }
+  return { text: s.slice(0, ANSWER_MAX_CHARS), truncated: true };
+}
+
+/** 截断说明那一行的字（上限值跟着 ANSWER_MAX_CHARS 走，自检改了也对得上）。 */
+function cappedNoteText() {
+  return t("cappedNote").replace("%n", ANSWER_MAX_CHARS);
+}
+
+/**
+ * 画一条回答：正文 + 截断说明 / 已停止说明。
  *
  * <p>实时路径和整体重绘都走这里 —— 两处画法必须一样，否则"收起再展开"之后，
- * 被停掉的那条会看起来像一条完整的回答。
+ * 被停掉或截断过的那条会看起来像一条完整的回答。
  */
 function renderAnswer(box, m) {
   box.innerHTML = md(m && m.content);
   wireCopy(box);
-  if (m && m.stopped) {
-    var note = document.createElement("div");
-    note.className = "m s";
-    note.textContent = t("stoppedNote");
-    box.appendChild(note);
-  }
+  if (m && m.truncated) { answerNote(box, cappedNoteText()); }
+  if (m && m.stopped) { answerNote(box, t("stoppedNote")); }
   return box;
+}
+
+/** 往回答气泡里加一行灰色说明。 */
+function answerNote(box, text) {
+  var note = document.createElement("div");
+  note.className = "m s";
+  note.textContent = text;
+  box.appendChild(note);
 }
 
 /** 在对话区插一条灰色系统提示；给了 before 就插在它前面。 */
@@ -1481,6 +1517,14 @@ window.tbvAi = {
    */
   idleTimeout: function (ms) {
     IDLE_TIMEOUT_MS = (typeof ms === "number" && ms > 0) ? ms : 60000;
+  },
+  /**
+   * 给自检用：把单条回答的字符上限改小（不传就恢复默认 1000000）。
+   * 生产代码不会调它；只为了让自检不用真的灌 1 MB 文字去验截断。
+   */
+  answerCap: function (chars) {
+    ANSWER_MAX_CHARS = (typeof chars === "number" && chars > 0)
+      ? Math.floor(chars) : 1000000;
   }
 };
 
@@ -1742,6 +1786,42 @@ function fitBridgeMessages(msgs) {
     if (idleTimer) { clearTimeout(idleTimer); idleTimer = 0; }
   }
 
+  /* ---------------- 单条回答的字符上限 ----------------
+   * 到了上限之后不再往 acc / 气泡里追加，但<b>继续解析流</b>：
+   * 服务端该正常收尾，usage 也照旧拿得到。截断只发生在展示与历史这一侧。
+   */
+  var truncated = false;
+  var capShown = false;
+
+  /** 把新的增量并进 acc，超过上限就只留前 ANSWER_MAX_CHARS 个字符。 */
+  function appendCapped(s) {
+    s = String(s == null ? "" : s);
+    if (acc.length >= ANSWER_MAX_CHARS) {
+      if (s.length) { truncated = true; }
+      return;
+    }
+    var room = ANSWER_MAX_CHARS - acc.length;
+    if (s.length <= room) {
+      acc += s;
+    } else {
+      acc += s.slice(0, room);
+      truncated = true;
+    }
+  }
+
+  /** 气泡跟着 acc 走；第一次截断时把说明一起写进去，之后就不再重绘了。 */
+  function paintAnswer() {
+    if (truncated) {
+      if (!capShown) {
+        capShown = true;
+        box.textContent = acc + "\n\n" + cappedNoteText();
+      }
+    } else {
+      box.textContent = acc;
+    }
+    el("log").scrollTop = el("log").scrollHeight;
+  }
+
   /**
    * 服务端回来的真实用量。
    *
@@ -1774,11 +1854,12 @@ function fitBridgeMessages(msgs) {
         var ch = j.choices && j.choices[0];
         var d = ch && (ch.delta || ch.message);
         if (d && d.content) {
-          acc += d.content;
-          // 每 300ms 刷一次速度就够（见 noteRate）。
-          if (noteRate(estTokens(acc))) { updateStats([]); }
-          box.textContent = acc;
-          el("log").scrollTop = el("log").scrollHeight;
+          appendCapped(d.content);
+          // 每 300ms 刷一次速度就够（见 noteRate）；截断之后 acc 不再变，
+          // 也就没必要再对越来越长的字符串重算 token。
+          if (!truncated && Date.now() - lastNoteAt >= 300
+                  && noteRate(estTokens(acc))) { updateStats([]); }
+          paintAnswer();
         }
       } catch (e) {
         // 一个坏帧不能把整次回答带歪。
@@ -1828,12 +1909,17 @@ function fitBridgeMessages(msgs) {
   function consume(res) {
     if (!res.body || !res.body.getReader) {
       return res.text().then(function (txt) {
+        var whole = txt;
         try {
           var j = JSON.parse(txt);
           if (j && j.usage) { takeUsage(j.usage); }
           var m = j.choices && j.choices[0] && j.choices[0].message;
-          acc = (m && m.content) ? m.content : txt;
-        } catch (e) { acc = txt; }
+          whole = (m && m.content) ? m.content : txt;
+        } catch (e) { /* 不是 JSON：原样当回答 */ }
+        // 非流式也可能一次回来很长：同样只留前 ANSWER_MAX_CHARS 个字符。
+        var capped = capAnswer(whole);
+        acc = capped.text;
+        if (capped.truncated) { truncated = true; }
         box.textContent = acc;
         return acc;
       });
@@ -1914,6 +2000,8 @@ function fitBridgeMessages(msgs) {
     disarmIdle();
     try { ctrl.abort(); } catch (e) {}
   };
+  // send() 收尾时要问一句"这次被截断了吗"，好在气泡和历史里标出来。
+  out.truncated = function () { return truncated; };
   return out;
 }
 
@@ -2011,6 +2099,9 @@ loadSel();
   if (img) { box.textContent = t("imgNoStream"); }
 
   var base = "";
+  /** 内置桥那一路被截断了吗（自定义模型那条在 p.truncated 里）。 */
+  var bridgeTruncated = false;
+  var bridgeCapShown = false;
   var p;
   try {
     var cur = currentModel();
@@ -2058,15 +2149,31 @@ loadSel();
         // 而 > 会把它们归到 else 里去做 base += s ——
         // 于是每发生一次，已经显示的内容就被重反一遍，越滚越长。
         // 结束时用最终文本重绘，所以看不出来 —— 故障自己把自己藏了。
+        var next = base;
         if (s.length >= base.length && s.indexOf(base) === 0) {
-          base = s;
+          next = s;                       // 全文（可能超过上限）
         } else if (s.length < base.length && base.indexOf(s) === 0) {
           // 又收到一条更短的，是旧状态，忽略。
+        } else if (base.length >= ANSWER_MAX_CHARS) {
+          // 已经到上限：不再拼接，别为每次回调造一个 1 MB 的字符串。
+          bridgeTruncated = true;
         } else {
-          base += s;
+          next = base + s;
         }
-        box.textContent = base;
-        if (noteRate(estTokens(base))) { updateStats([]); }
+        var capped = capAnswer(next);
+        if (capped.truncated) { bridgeTruncated = true; }
+        base = capped.text;
+        if (bridgeTruncated) {
+          // 第一次截断时把说明写进气泡；之后不再重绘（内容也不会再涨）。
+          if (!bridgeCapShown) {
+            bridgeCapShown = true;
+            box.textContent = base + "\n\n" + cappedNoteText();
+          }
+        } else {
+          box.textContent = base;
+          if (Date.now() - lastNoteAt >= 300
+                  && noteRate(estTokens(base))) { updateStats([]); }
+        }
         el("log").scrollTop = el("log").scrollHeight;
       }
     });
@@ -2095,13 +2202,15 @@ loadSel();
    * 把它当历史再发一遍；半截回答也被当成完整的存下来、导出去。
    * 现在被停掉的一轮标记 stopped，不再进模型历史，但面板和导出里都留着。
    */
-  function stoppedTurn(text) {
+  function stoppedTurn(text, truncated) {
     if (text) {
       box.className = "m a";
-      renderAnswer(box, { content: text, stopped: true });
+      renderAnswer(box, { content: text, stopped: true, truncated: truncated });
       addActions(box, q, text);
       turns.push({ role: "user", content: q, q: q, stopped: true });
-      turns.push({ role: "assistant", content: text, stopped: true });
+      var asst = { role: "assistant", content: text, stopped: true };
+      if (truncated) { asst.truncated = true; }
+      turns.push(asst);
     } else {
       // 一个字都没来：连一条空的 assistant 都不要 push。
       // 这一轮同时算"停下的"和"失败的"：stopped 说明为什么没有回答，
@@ -2115,11 +2224,20 @@ loadSel();
     touchTitle();
   }
 
+  /** 这一轮到底有没有被截断：内置桥记在 bridgeTruncated，自定义模型在 p.truncated 里。 */
+  function wasTruncated() {
+    if (bridgeTruncated) { return true; }
+    return !!(p && typeof p.truncated === "function" && p.truncated());
+  }
+
   Promise.resolve(p).then(function (r) {
     var text = (typeof r === "string" && r) ? r : base;
-    if (stoppedByUser) { stoppedTurn(text); return; }
-    box.innerHTML = md(text);
-      wireCopy(box);
+    if (stoppedByUser) { stoppedTurn(text, wasTruncated()); return; }
+    // 最后兜一次上限：非流式 / 图片那一路可能一次回来很长（流式那边追加时就截过了）。
+    var capped = capAnswer(text);
+    text = capped.text;
+    var truncated = capped.truncated || wasTruncated();
+    renderAnswer(box, { content: text, truncated: truncated });
     // 结束时用<b>整段平均</b>收尾：窗口里最后一小段常常偏低，收尾的数字会难看。
     var secs = (Date.now() - streamT0) / 1000;
     if (secs >= 0.3) { lastRate = estTokens(text) / secs; }
@@ -2129,14 +2247,19 @@ loadSel();
     // 历史里只存<b>问题</b>：上下文在发送时单独带一次（见上面 msgs 那段），
     // 存进历史只会让它跟着每一条记录一起重发。
     turns.push({ role: "user", content: q, q: q });
-    turns.push({ role: "assistant", content: text });
+    var asst = { role: "assistant", content: text };
+    if (truncated) { asst.truncated = true; }
+    turns.push(asst);
     // 历史在这里<b>不再</b>裁：面板、存盘和导出都应该保留完整对话。
     // 请求装不下时只裁"发出去的那一份"（内置走 fitBridgeMessages，自定义走 trimToBudget）。
     touchTitle();
   }).catch(function (e) {
     // 如果这一轮是被用户停下的：把还看得见的半截文字留下（内置桥在 base 里，
     // 自定义模型在 acc 里；自定义这条路出错时把 acc 挂在 e.partial 上带过来）。
-    if (stoppedByUser) { stoppedTurn(base || (e && e.partial) || ""); return; }
+    if (stoppedByUser) {
+      stoppedTurn(base || (e && e.partial) || "", wasTruncated());
+      return;
+    }
     // 失败的那一轮要留在<b>对话里</b> —— 以前什么都不存，于是一收起面板，
     // 这个问题和错误提示就一起消失了。但标成 failed：它不会被当成上下文
     // 再发给模型（见 msgs 那段），"失败的问题"对模型没有意义。

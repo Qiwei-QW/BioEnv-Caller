@@ -319,6 +319,14 @@ function firstOption() {
 
 function enc(s) { return new TextEncoder().encode(s); }
 
+/** n 个 "A" —— 用来喂"超长回答"。 */
+function bigText(n) { return new Array(n + 1).join("A"); }
+
+/** 一段 SSE 帧，内容是 n 个 "A"（给超长回答用）。 */
+function bigSseFrame(n) {
+  return 'data: {"choices":[{"delta":{"content":"' + bigText(n) + '"}}]}\n\n';
+}
+
 /** 桩元素的文字：textContent + 子节点的文字（"（已停止）"是子节点）。 */
 function nodeText(n) {
   var s = String((n && n.textContent) || "");
@@ -913,6 +921,108 @@ function runHardening() {
       want("导出里仍保留最早一问",
           doc !== null && String(doc.text || "").indexOf("桥问题1") >= 0,
           doc ? doc.name : "(没有)");
+    });
+  });
+
+  // ---------- 回答上限：真的灌超过 1000000 字 ----------
+  p = p.then(function () {
+    console.log("");
+    console.log("=== 回答上限：超过 1000000 字符 ===");
+    byId["sessNew"].onclick();
+    windowStub.tbvAi.setModels(MODEL_JSON);
+    // 两个 SSE 帧合计 1000100 字，刚好超过默认上限。
+    global.fetch = function () {
+      return Promise.resolve(sseResponse([
+        bigSseFrame(600000),
+        bigSseFrame(400100),
+        "data: [DONE]\n\n"
+      ]));
+    };
+    sendOnce("超长回答");
+    return wait(1200).then(function () {
+      var html = lastAnswerHtml();
+      want("气泡正文被截到上限", html.length <= 1000000 + 64, "len=" + html.length);
+      want("显示了截断说明", lastAnswerText().indexOf("回答过长") >= 0,
+          lastAnswerText().slice(-60));
+      want("截断之后 busy 清掉", !isBusy(), byId["go"].className);
+      want("截断没有变成错误气泡", lastErrorText() === "", lastErrorText());
+      // 收起再展开（Java 重推语言）走的是整块重绘：说明和上限都要保持。
+      windowStub.tbvAi.setLang("zh");
+      want("重绘后截断说明还在", lastAnswerText().indexOf("回答过长") >= 0,
+          lastAnswerText().slice(-60));
+      want("重绘后正文仍在上限内", lastAnswerHtml().length <= 1000000 + 64,
+          "len=" + lastAnswerHtml().length);
+      // 历史里也不能留一个更大的字符串：下一问的请求体里看它有多大。
+      requests = [];
+      global.fetch = function (url, opts) {
+        requests.push({ url: String(url), body: String((opts && opts.body) || "") });
+        return Promise.resolve(sseResponse([
+          'data: {"choices":[{"delta":{"content":"ok"}}]}\n\n',
+          "data: [DONE]\n\n"
+        ]));
+      };
+      sendOnce("上限之后");
+      return wait(200);
+    }).then(function () {
+      var msgs = sentMessages();
+      var asst = null;
+      for (var i = 0; i < msgs.length; i++) {
+        if (msgs[i].role === "assistant") { asst = msgs[i]; }
+      }
+      want("历史里的回答也是截断后的",
+          asst !== null && String(asst.content || "").length === 1000000,
+          asst ? "len=" + String(asst.content || "").length : "(没有)");
+    });
+  });
+
+  // ---------- 回答上限 + 停止 ----------
+  p = p.then(function () {
+    console.log("");
+    console.log("=== 回答上限：截断之后停止 ===");
+    byId["sessNew"].onclick();
+    windowStub.tbvAi.setModels(MODEL_JSON);
+    windowStub.tbvAi.answerCap(500);     // 自检里把上限改小
+    global.fetch = stuckFetch([bigSseFrame(700)]);
+    sendOnce("截断后停止");
+    return wait(100).then(function () {
+      want("截断说明先出现", lastAnswerText().indexOf("回答过长") >= 0,
+          lastAnswerText().slice(-40));
+      byId["go"].onclick();
+      return wait(150);
+    }).then(function () {
+      want("停止后 busy 清掉", !isBusy(), byId["go"].className);
+      var t = lastAnswerText();
+      want("半截回答还在", t.indexOf("A") >= 0, t.slice(0, 20));
+      want("截断说明还在", t.indexOf("回答过长") >= 0, t.slice(-80));
+      want("截断说明写出了上限", t.indexOf("前 500 个字符") >= 0, t.slice(-80));
+      want("已停止说明还在", t.indexOf("已停止") >= 0, t.slice(-40));
+      windowStub.tbvAi.setLang("zh");    // 整块重绘
+      var redraw = lastAnswerText();
+      want("重绘后两条说明都在",
+          redraw.indexOf("回答过长") >= 0 && redraw.indexOf("已停止") >= 0,
+          redraw.slice(-80));
+      windowStub.tbvAi.answerCap();      // 恢复默认 1000000
+    });
+  });
+
+  // ---------- 回答上限 + 超时 ----------
+  p = p.then(function () {
+    console.log("");
+    console.log("=== 回答上限：截断之后超时 ===");
+    byId["sessNew"].onclick();
+    windowStub.tbvAi.setModels(MODEL_JSON);
+    windowStub.tbvAi.answerCap(500);
+    windowStub.tbvAi.idleTimeout(80);
+    global.fetch = stuckFetch([bigSseFrame(700)]);
+    sendOnce("截断后超时");
+    return wait(400).then(function () {
+      windowStub.tbvAi.idleTimeout();
+      windowStub.tbvAi.answerCap();
+      want("超时后 busy 清掉", !isBusy(), byId["go"].className);
+      want("超时说明照旧", lastErrorText().indexOf("没有收到任何数据") >= 0,
+          lastErrorText());
+      want("截断没有把超时变成错误", lastErrorText().indexOf("脚本错误") < 0,
+          lastErrorText());
     });
   });
 

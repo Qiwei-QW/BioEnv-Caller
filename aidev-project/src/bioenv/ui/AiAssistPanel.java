@@ -380,16 +380,28 @@ public final class AiAssistPanel extends JPanel {
     }
 
     /**
-     * 读一个 key，<b>读到就立刻清掉</b>。
+     * 取走一个 key：<b>读和删在同一次脚本执行里</b>完成。
      *
-     * <p>不清的话下一轮会把同一份数据再处理一遍 —— 导出会第二次弹出保存对话框。
+     * <p>以前是 {@code evalString(get)} 再 {@code run(remove)} 两次往返。网页的事件
+     * 循环完全可能插在两次调用之间：那一瞬间写进来的新值会被删掉、却没人处理
+     * （导出/打开设置的点击就这么静默丢了）；而删那一趟一旦失败（文件框开着时
+     * {@link AiWebView#run} 会直接返回 false）或抛异常，同一个值下一跳又会被处理
+     * 一遍（保存对话框弹两次）。
+     *
+     * <p>现在一次执行内读完就删，返回值就是取到的内容；key 不存在返回空串，
+     * 脚本本身失败（{@code evalString} 返回 null）当作"没有待处理的东西"，
+     * 而且不会误删任何值。
      */
     private String take(AiWebView v, String key) {
-        String raw = v.evalString("localStorage.getItem('" + key + "') || ''");
+        String js = "(function(){var v='';try{"
+                + "v=localStorage.getItem('" + key + "');"
+                + "if(v===null){v='';}"
+                + "localStorage.removeItem('" + key + "');"
+                + "}catch(e){return '';}return v;})()";
+        String raw = v.evalString(js);
         if (raw == null || raw.trim().length() == 0) {
             return null;
         }
-        v.run("try{localStorage.removeItem('" + key + "')}catch(e){}");
         return raw;
     }
 
