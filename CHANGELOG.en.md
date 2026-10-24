@@ -2,7 +2,7 @@
 
 [中文](CHANGELOG.md) ｜ **English**
 
-## Unreleased
+## v1.0.2 — 2026-10-24
 
 - **An SSH timeout now asks the remote process tree to stop**: the transport contract gained a far-side "stop command" argument (`runBashStreaming(script, sink, killScript)`, with a default that keeps the old behaviour). `Runner` passes down the marker-based kill script it already had for Stop; when an SSH run times out, the local `ssh.exe` is terminated and the stop command goes out over a separate connection. The message distinguishes three cases honestly: no stop command available / sent (which does not mean confirmed stopped) / could not be sent, with the reason.
 - **The UI is no longer frozen by blocking process work**: the Stop button's remote kill, the interactive process start and the terminal-window launch moved to background threads (new `OffEdt`), while the status bar and log still update on the event thread. A process that comes up after the user pressed Stop is rejected and destroyed instead of being adopted.
