@@ -377,7 +377,23 @@ try {
         'bioenv.test.OutputCapTest',
         'bioenv.test.ScannerTimeoutTest',
         'bioenv.test.AiContextTest',
-        'bioenv.test.EndpointUrlTest'
+        'bioenv.test.EndpointUrlTest',
+
+        # --- v1.0.2: remote kill, EDT, quoting, config merge --------------
+        #   RunKillTest        - a timeout hands the transport the marker-
+        #                        based kill script, so the far side can be
+        #                        stopped; the 2-arg contract still works.
+        #   OffEdtTest         - process spawning must not block the EDT.
+        #   EnvRunnerQuoteTest - a conda prefix with a quote must not break
+        #                        the Python literal, and stderr is no longer
+        #                        discarded.
+        #   ConfigMergeTest    - two panel instances must not erase each
+        #                        other's notes/corrections/options, and the
+        #                        model file is restricted to its owner.
+        'bioenv.test.RunKillTest',
+        'bioenv.test.OffEdtTest',
+        'bioenv.test.EnvRunnerQuoteTest',
+        'bioenv.test.ConfigMergeTest'
     )
 
     foreach ($t in $regression) {
@@ -515,7 +531,11 @@ if ($vmTestSources.Count -gt 0) {
         # The transport layer's收尾: one pump thread per stream, waitFor before
         # the join, so a timeout can actually be reached. This case starts a
         # 30-second child and asserts it is killed within ~2 seconds.
-        'vmadapt.test.ProcessCaptureTest'
+        'vmadapt.test.ProcessCaptureTest',
+
+        # 公钥装到远端时的引号与等待上限：注释里带单引号的 key 以前会把
+        # 远端 shell 的引号弄断，而 waitFor 没有上限。
+        'vmadapt.test.KeyInstallScriptTest'
     )
     $vmPassed = @()
     $vmFailed = @()

@@ -25,7 +25,7 @@ powershell -ExecutionPolicy Bypass -File .\build.ps1
 1. 编译 `vmadapt\src`（SSH 传输模块）
 2. 编译 `aidev-project\src`（插件本体）
 3. 校验所有 class 都是 **major 55**（Java 11）
-4. 跑**回归测试**（当前 83 条）和 **vmadapt 测试**（当前 16 条）
+4. 跑**回归测试**（当前 87 条）和 **vmadapt 测试**（当前 17 条）
 5. 打包出 `BioEnvCaller.plugin`
 
 **提交前门禁必须全绿**：日志末尾要有
